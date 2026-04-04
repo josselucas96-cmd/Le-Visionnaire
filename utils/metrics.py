@@ -81,19 +81,26 @@ def beta_vs_spy(port_returns: pd.Series, spy_returns: pd.Series) -> float | None
     return round(cov[0][1] / cov[1][1], 2)
 
 
-def monthly_returns_table(port_index: pd.Series, spy_index: pd.Series) -> pd.DataFrame:
-    """Month-by-month returns for portfolio and SPY, sorted newest first."""
-    def to_monthly(s):
-        monthly = s.resample("ME").last()
-        return monthly.pct_change().dropna() * 100
-
-    port_m = to_monthly(port_index).rename("Portfolio")
-    spy_m  = to_monthly(spy_index).rename("S&P 500") if spy_index is not None and not spy_index.empty else pd.Series(name="S&P 500")
-
-    df = pd.concat([port_m, spy_m], axis=1).dropna(how="all")
-    df.index = df.index.strftime("%b %Y")
-    df["Alpha"] = df["Portfolio"] - df["S&P 500"]
-    return df.iloc[::-1]  # newest first
+def monthly_returns_table(port_index: pd.Series) -> pd.DataFrame:
+    """Monthly returns pivoted: years as rows, months Jan-Dec as columns."""
+    MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    monthly = port_index.resample("ME").last().pct_change().dropna() * 100
+    monthly.index = pd.to_datetime(monthly.index)
+    df = pd.DataFrame({
+        "year":  monthly.index.year,
+        "month": monthly.index.month,
+        "ret":   monthly.values,
+    })
+    pivot = df.pivot(index="year", columns="month", values="ret")
+    pivot.columns = [MONTHS[m - 1] for m in pivot.columns]
+    # Ensure all 12 months present
+    for m in MONTHS:
+        if m not in pivot.columns:
+            pivot[m] = float("nan")
+    pivot = pivot[MONTHS]
+    pivot.index.name = None
+    return pivot.iloc[::-1]  # newest year first
 
 
 def annualized_volatility(returns: pd.Series) -> float | None:

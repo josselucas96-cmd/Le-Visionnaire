@@ -24,7 +24,13 @@ st.markdown("""
 <style>
     [data-testid="stSidebar"] { display: none; }
     .block-container { padding-top: 3.5rem; padding-bottom: 2rem; }
-    .portfolio-title { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 0; }
+    .portfolio-title { font-size: 3rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0; }
+    .section-header { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px; }
+    [data-testid="stExpander"] summary p {
+        font-size: 1.35rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.3px !important;
+    }
     .disclaimer { font-size: 0.72rem; color: #666; margin-top: 3rem;
                   border-top: 1px solid #222; padding-top: 1rem; line-height: 1.5; }
 </style>
@@ -164,21 +170,18 @@ with st.expander("Performance", expanded=True):
 
         # Monthly returns table
         st.write("")
-        st.markdown("**Monthly Returns**")
-        mrt = monthly_returns_table(port_index, spy_index)
+        st.markdown("**Monthly Returns (%)**")
+        mrt = monthly_returns_table(port_index)
         if not mrt.empty:
             def color_monthly(col):
                 return [
-                    "color: #00D09C" if isinstance(v, float) and v > 0
-                    else "color: #FF4B4B" if isinstance(v, float) and v < 0
+                    "color: #00D09C" if pd.notna(v) and v > 0
+                    else "color: #FF4B4B" if pd.notna(v) and v < 0
                     else "" for v in col
                 ]
-            styled_mrt = mrt.style.format({
-                "Portfolio": lambda v: f"{v:+.2f}%" if pd.notna(v) else "—",
-                "S&P 500":   lambda v: f"{v:+.2f}%" if pd.notna(v) else "—",
-                "Alpha":     lambda v: f"{v:+.2f}%" if pd.notna(v) else "—",
-            }).apply(color_monthly, subset=["Portfolio", "S&P 500", "Alpha"])
-            st.dataframe(styled_mrt, use_container_width=True, height=38 + min(len(mrt), 24) * 35)
+            fmt = {m: lambda v: f"{v:+.1f}" if pd.notna(v) else "" for m in mrt.columns}
+            styled_mrt = mrt.style.format(fmt).apply(color_monthly)
+            st.dataframe(styled_mrt, use_container_width=True, height=38 + min(len(mrt), 10) * 35)
 
 st.divider()
 
