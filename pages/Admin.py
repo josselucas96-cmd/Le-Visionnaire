@@ -91,9 +91,32 @@ tab_add, tab_close, tab_switch, tab_history = st.tabs([
 ])
 
 # ── ADD ───────────────────────────────────────────────────────────────────────
-EXCHANGE_SUFFIXES = [
+# Exchange label → Yahoo Finance suffix (empty = US)
+EXCHANGES = {
+    "Auto-detect":          None,
+    "NYSE / NASDAQ (US)":   "",
+    "Paris (FR)":           ".PA",
+    "Milan (IT)":           ".MI",
+    "London (UK)":          ".L",
+    "Frankfurt (DE)":       ".DE",
+    "Amsterdam (NL)":       ".AS",
+    "Zurich (CH)":          ".SW",
+    "Stockholm (SE)":       ".ST",
+    "Oslo (NO)":            ".OL",
+    "Madrid (ES)":          ".MC",
+    "Brussels (BE)":        ".BR",
+    "Lisbon (PT)":          ".LS",
+    "Helsinki (FI)":        ".HE",
+    "Copenhagen (DK)":      ".CO",
+    "Tokyo (JP)":           ".T",
+    "Hong Kong":            ".HK",
+    "Toronto (CA)":         ".TO",
+    "Sydney (AU)":          ".AX",
+}
+EXCHANGE_AUTODETECT_SUFFIXES = [
     "", ".PA", ".MI", ".L", ".DE", ".AS", ".SW",
     ".ST", ".OL", ".CO", ".HE", ".BR", ".LS", ".MC", ".AT",
+    ".T", ".HK", ".TO", ".AX",
 ]
 
 def _valid_info(info):
@@ -101,10 +124,14 @@ def _valid_info(info):
     price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
     return bool(name) and not name.strip().isdigit() and float(price) > 0
 
-def resolve_ticker(raw):
-    """Try raw ticker then common exchange suffixes; return (resolved_ticker, info)."""
-    for suffix in EXCHANGE_SUFFIXES:
+def resolve_ticker(raw, suffix):
+    """If suffix is given, use it directly. Otherwise auto-detect."""
+    if suffix is not None:
         t    = raw + suffix
+        info = yf.Ticker(t).info
+        return t, info
+    for s in EXCHANGE_AUTODETECT_SUFFIXES:
+        t    = raw + s
         info = yf.Ticker(t).info
         if _valid_info(info):
             return t, info
@@ -135,28 +162,33 @@ with tab_add:
     st.caption(f"Invested: **{existing_w:.1f}%** · Available (cash): **{remaining:.1f}%**")
 
     # Ticker lookup (outside the form so it can trigger a rerun)
-    lk1, lk2 = st.columns([3, 1])
+    lk1, lk2, lk3 = st.columns([2, 2, 1])
     with lk1:
-        lookup_ticker = st.text_input("Ticker (e.g. TSLA)", key="lookup_ticker",
-                                      help="For European stocks with ambiguous tickers, add the exchange suffix: MC.PA (LVMH), ENI.MI, AIR.PA, SAP.DE…").strip().upper()
+        lookup_ticker = st.text_input("Ticker", key="lookup_ticker",
+                                      placeholder="e.g. TSLA, MC, ENI").strip().upper()
     with lk2:
+        exchange_label = st.selectbox("Exchange (optional)", list(EXCHANGES.keys()), key="lookup_exchange")
+    with lk3:
         st.write("")
         st.write("")
-        if st.button("Lookup", type="secondary"):
-            if lookup_ticker:
-                with st.spinner(f"Fetching {lookup_ticker}…"):
-                    resolved, info = resolve_ticker(lookup_ticker)
-                if _valid_info(info):
-                    st.session_state["af_ticker"]   = resolved
-                    st.session_state["af_name"]     = info.get("longName") or info.get("shortName") or ""
-                    st.session_state["af_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
-                    st.session_state["af_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
-                    price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                    st.session_state["af_price"]    = float(price)
-                    if resolved != lookup_ticker:
-                        st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
-                else:
-                    st.warning(f"Ticker '{lookup_ticker}' not found. Try a more specific format (e.g. ENI.MI, MC.PA).")
+        do_lookup = st.button("Lookup", type="secondary")
+
+    if do_lookup:
+        if lookup_ticker:
+            suffix = EXCHANGES[exchange_label]
+            with st.spinner(f"Fetching {lookup_ticker}…"):
+                resolved, info = resolve_ticker(lookup_ticker, suffix)
+            if _valid_info(info):
+                st.session_state["af_ticker"]   = resolved
+                st.session_state["af_name"]     = info.get("longName") or info.get("shortName") or ""
+                st.session_state["af_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
+                st.session_state["af_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
+                price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                st.session_state["af_price"]    = float(price)
+                if resolved != lookup_ticker:
+                    st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
+            else:
+                st.warning(f"'{lookup_ticker}' not found on this exchange. Try a different exchange or check the ticker.")
 
     af = {
         "ticker":  st.session_state.get("af_ticker", ""),
