@@ -321,16 +321,18 @@ with tab_close:
     if not positions:
         st.info("No active positions.")
     else:
+        # Selectbox outside form so max_value updates dynamically
+        selected_label = st.selectbox("Position to close", list(pos_options.keys()), key="close_select")
+        selected_pos   = pos_options[selected_label]
+
+        live_price = selected_pos.get("current_price") or 0.01
+        st.caption(
+            f"Entry: **{selected_pos['entry_price']}** · "
+            f"Date: **{selected_pos['entry_date']}** · "
+            f"Weight: **{selected_pos['weight']}%**"
+        )
+
         with st.form("close_form", clear_on_submit=True):
-            selected_label = st.selectbox("Position to close", list(pos_options.keys()))
-            selected_pos   = pos_options[selected_label]
-
-            st.caption(
-                f"Entry: **{selected_pos['entry_price']}** · "
-                f"Date: **{selected_pos['entry_date']}** · "
-                f"Weight: **{selected_pos['weight']}%**"
-            )
-
             c1, c2, c3 = st.columns(3)
             with c1:
                 weight_sold = st.number_input(
@@ -342,7 +344,8 @@ with tab_close:
                     help="Equal to full weight = full close. Less = partial trim.",
                 )
             with c2:
-                exit_p = st.number_input("Exit Price", min_value=0.01, step=0.01)
+                exit_p = st.number_input("Exit Price", min_value=0.01, step=0.01,
+                                         value=float(max(0.01, live_price)))
             with c3:
                 exit_d = st.date_input("Exit Date", value=date.today())
             reason = st.text_area("Reason", height=80)
@@ -353,6 +356,8 @@ with tab_close:
             if st.form_submit_button(btn_label, type="primary"):
                 if exit_p <= 0:
                     st.error("Enter a valid exit price.")
+                elif weight_sold > selected_pos["weight"]:
+                    st.error(f"Cannot sell {weight_sold}% — position is only {selected_pos['weight']}%.")
                 else:
                     perf = round((exit_p - selected_pos["entry_price"]) / selected_pos["entry_price"] * 100, 2)
                     sign = "+" if perf >= 0 else ""
