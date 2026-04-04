@@ -137,7 +137,8 @@ with tab_add:
     # Ticker lookup (outside the form so it can trigger a rerun)
     lk1, lk2 = st.columns([3, 1])
     with lk1:
-        lookup_ticker = st.text_input("Ticker (e.g. TSLA)", key="lookup_ticker").strip().upper()
+        lookup_ticker = st.text_input("Ticker (e.g. TSLA)", key="lookup_ticker",
+                                      help="For European stocks with ambiguous tickers, add the exchange suffix: MC.PA (LVMH), ENI.MI, AIR.PA, SAP.DE…").strip().upper()
     with lk2:
         st.write("")
         st.write("")
