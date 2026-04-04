@@ -8,6 +8,7 @@ from utils.market import get_prices, get_history
 from utils.metrics import (
     build_portfolio_index, daily_returns,
     sharpe_ratio, max_drawdown, beta_vs_spy,
+    annualized_volatility, var_95, correlation_matrix,
 )
 
 st.set_page_config(
@@ -251,6 +252,62 @@ for col_name, title, container in [
     if col_name in display_alloc.columns:
         with container:
             st.plotly_chart(donut_chart(display_alloc, col_name, title), use_container_width=True)
+
+# ── Risk Analysis ─────────────────────────────────────────────────────────────
+st.divider()
+st.subheader("Risk Analysis")
+
+if port_index is not None and not port_index.empty:
+    port_ret = daily_returns(port_index)
+    spy_ret  = daily_returns(spy_index) if spy_index is not None else pd.Series()
+
+    # Row 1 — scalar metrics
+    ra1, ra2, ra3, ra4 = st.columns(4)
+    with ra1:
+        pv = annualized_volatility(port_ret)
+        st.metric("Portfolio Volatility (ann.)", f"{pv:.1f}%" if pv is not None else "—",
+                  help="Annualized standard deviation of daily returns")
+    with ra2:
+        sv = annualized_volatility(spy_ret)
+        st.metric("S&P 500 Volatility (ann.)", f"{sv:.1f}%" if sv is not None else "—")
+    with ra3:
+        v = var_95(port_ret)
+        st.metric("VaR 95% (1-day)", f"{v:.2f}%" if v is not None else "—",
+                  help="Historical VaR: worst daily loss in 95% of scenarios")
+    with ra4:
+        # Top concentration
+        top3 = display.nlargest(3, "Weight %")[["Ticker", "Weight %"]]
+        top3_pct = top3["Weight %"].sum()
+        st.metric("Top 3 Concentration", f"{top3_pct:.1f}%",
+                  help=" · ".join(top3["Ticker"].tolist()))
+
+    # Row 2 — Correlation heatmap
+    corr = correlation_matrix(history, positions)
+    if not corr.empty:
+        st.markdown("**Correlation Matrix** (daily returns, inception to date)")
+        fig_corr = go.Figure(data=go.Heatmap(
+            z=corr.values,
+            x=corr.columns.tolist(),
+            y=corr.index.tolist(),
+            colorscale=[
+                [0.0,  "#FF4B4B"],
+                [0.5,  "#0E1117"],
+                [1.0,  "#00D09C"],
+            ],
+            zmin=-1, zmax=1,
+            text=corr.values.round(2),
+            texttemplate="%{text}",
+            textfont=dict(size=11),
+            hovertemplate="%{y} / %{x}: %{z:.2f}<extra></extra>",
+        ))
+        fig_corr.update_layout(
+            plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
+            font=dict(color="#CCC"),
+            height=380,
+            margin=dict(l=0, r=0, t=10, b=0),
+            xaxis=dict(side="bottom"),
+        )
+        st.plotly_chart(fig_corr, use_container_width=True)
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
 st.markdown("""

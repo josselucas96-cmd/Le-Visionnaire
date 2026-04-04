@@ -79,3 +79,25 @@ def beta_vs_spy(port_returns: pd.Series, spy_returns: pd.Series) -> float | None
         return None
     cov = np.cov(aligned.iloc[:, 0], aligned.iloc[:, 1])
     return round(cov[0][1] / cov[1][1], 2)
+
+
+def annualized_volatility(returns: pd.Series) -> float | None:
+    if returns.empty or len(returns) < 5:
+        return None
+    return round(returns.std() * np.sqrt(252) * 100, 2)
+
+
+def var_95(returns: pd.Series) -> float | None:
+    """Historical VaR 95% — worst daily loss at 5th percentile."""
+    if returns.empty or len(returns) < 20:
+        return None
+    return round(np.percentile(returns, 5) * 100, 2)
+
+
+def correlation_matrix(history: pd.DataFrame, positions: list) -> pd.DataFrame:
+    """Daily return correlation between all positions with sufficient history."""
+    tickers = [p["ticker"] for p in positions if p["ticker"] in history.columns]
+    if len(tickers) < 2:
+        return pd.DataFrame()
+    returns = history[tickers].pct_change().dropna(how="all")
+    return returns.corr().round(2)
