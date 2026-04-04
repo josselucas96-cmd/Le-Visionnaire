@@ -4,6 +4,7 @@ Only you should access this page. It lets you add/close positions and manage set
 """
 import streamlit as st
 import pandas as pd
+import yfinance as yf
 from datetime import date
 
 from utils.data import (
@@ -90,24 +91,74 @@ tab_add, tab_close, tab_switch, tab_history = st.tabs([
 ])
 
 # ── ADD ───────────────────────────────────────────────────────────────────────
+SECTOR_MAP = {
+    "Technology": "Tech", "Consumer Cyclical": "Consumer",
+    "Consumer Defensive": "Consumer", "Healthcare": "Healthcare",
+    "Financial Services": "Finance", "Communication Services": "Communication",
+    "Industrials": "Industrials", "Energy": "Energy",
+    "Basic Materials": "Materials", "Real Estate": "Real Estate",
+    "Utilities": "Utilities",
+}
+GEO_MAP = {
+    "United States": "USA", "Japan": "Japan",
+    "United Kingdom": "Europe", "France": "Europe", "Germany": "Europe",
+    "Netherlands": "Europe", "Sweden": "Europe", "Switzerland": "Europe",
+    "Italy": "Europe", "Spain": "Europe", "Norway": "Europe",
+    "China": "Asia ex-Japan", "Hong Kong": "Asia ex-Japan",
+    "South Korea": "Asia ex-Japan", "Taiwan": "Asia ex-Japan",
+    "India": "Asia ex-Japan", "Singapore": "Asia ex-Japan",
+    "Brazil": "LatAm", "Mexico": "LatAm", "Argentina": "LatAm",
+}
+
 with tab_add:
     existing_w = sum(p["weight"] for p in positions)
     remaining  = round(max(0, 100 - existing_w), 1)
     st.caption(f"Invested: **{existing_w:.1f}%** · Available (cash): **{remaining:.1f}%**")
 
+    # Ticker lookup (outside the form so it can trigger a rerun)
+    lk1, lk2 = st.columns([3, 1])
+    with lk1:
+        lookup_ticker = st.text_input("Ticker (e.g. TSLA)", key="lookup_ticker").strip().upper()
+    with lk2:
+        st.write("")
+        st.write("")
+        if st.button("Lookup", type="secondary"):
+            if lookup_ticker:
+                with st.spinner(f"Fetching {lookup_ticker}…"):
+                    info = yf.Ticker(lookup_ticker).info
+                st.session_state["af_ticker"]  = lookup_ticker
+                st.session_state["af_name"]    = info.get("longName") or info.get("shortName") or ""
+                raw_sector  = info.get("sector", "")
+                raw_country = info.get("country", "")
+                st.session_state["af_sector"]  = SECTOR_MAP.get(raw_sector, "")
+                st.session_state["af_geo"]     = GEO_MAP.get(raw_country, "Other")
+                price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                st.session_state["af_price"]   = float(price)
+
+    af = {
+        "ticker":  st.session_state.get("af_ticker", ""),
+        "name":    st.session_state.get("af_name", ""),
+        "sector":  st.session_state.get("af_sector", SECTORS[0]),
+        "geo":     st.session_state.get("af_geo", GEOS[0]),
+        "price":   st.session_state.get("af_price", 0.01),
+    }
+
     with st.form("add_form", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         with c1:
-            ticker  = st.text_input("Ticker  (e.g. TSLA)").strip().upper()
-            name    = st.text_input("Company Name")
+            ticker  = st.text_input("Ticker", value=af["ticker"]).strip().upper()
+            name    = st.text_input("Company Name", value=af["name"])
         with c2:
             weight  = st.number_input("Weight (%)", min_value=0.1, max_value=50.0,
                                       step=0.5, value=min(9.5, remaining))
-            entry_p = st.number_input("Entry Price", min_value=0.01, step=0.01)
+            entry_p = st.number_input("Entry Price", min_value=0.01, step=0.01,
+                                      value=max(0.01, af["price"]))
             entry_d = st.date_input("Entry Date", value=date.today())
         with c3:
-            sector    = st.selectbox("Sector",    SECTORS)
-            geography = st.selectbox("Geography", GEOS)
+            sec_idx = SECTORS.index(af["sector"]) if af["sector"] in SECTORS else 0
+            geo_idx = GEOS.index(af["geo"]) if af["geo"] in GEOS else 0
+            sector    = st.selectbox("Sector",    SECTORS, index=sec_idx)
+            geography = st.selectbox("Geography", GEOS,    index=geo_idx)
             thematic  = st.selectbox("Thematic",  THEMATICS)
         thesis = st.text_area("Thesis (1-2 sentences)", height=80)
 
@@ -127,6 +178,8 @@ with tab_add:
                     "thesis_short": thesis, "is_active": True,
                 })
                 st.success(f"✓ {ticker} added.")
+                for k in ["af_ticker", "af_name", "af_sector", "af_geo", "af_price"]:
+                    st.session_state.pop(k, None)
                 st.cache_data.clear()
                 st.rerun()
 
