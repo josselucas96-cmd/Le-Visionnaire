@@ -85,13 +85,6 @@ if positions:
         "sector", "geography", "thematic", "thesis_short"
     ] if c in df_pos.columns]
 
-    def color_signed(col):
-        return [
-            "color: #00D09C" if isinstance(v, (int, float)) and v > 0
-            else "color: #FF4B4B" if isinstance(v, (int, float)) and v < 0
-            else "" for v in col
-        ]
-
     display_admin = df_pos[display_cols].rename(columns={
         "ticker": "Ticker", "name": "Name", "weight": "Weight %",
         "entry_price": "Entry", "current_price": "Price",
@@ -116,12 +109,25 @@ if positions:
     )
     na = len(display_admin)
 
-    def style_rows_admin(row):
-        if row.name == na - 2:
-            return ["color: transparent"] * len(row)
-        if row.name == na - 1:
-            return [f"color: {cash_color}; font-weight: 600;"] * len(row)
-        return [""] * len(row)
+    def style_cell_admin(row):
+        styles = []
+        for col in row.index:
+            if row.name == na - 2:     # invisible separator
+                styles.append("color: transparent")
+            elif row.name == na - 1:   # cash row
+                styles.append(f"color: {cash_color}; font-weight: 600;")
+            else:                       # normal position row
+                val = row[col]
+                if col in ("Perf %", "Today %"):
+                    if isinstance(val, (int, float)) and val > 0:
+                        styles.append("color: #00D09C")
+                    elif isinstance(val, (int, float)) and val < 0:
+                        styles.append("color: #FF4B4B")
+                    else:
+                        styles.append("")
+                else:
+                    styles.append("")
+        return styles
 
     styled = display_admin.style.format({
         "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
@@ -129,7 +135,7 @@ if positions:
         "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
         "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
         "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-    }).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_rows_admin, axis=1)
+    }).apply(style_cell_admin, axis=1)
 
     st.dataframe(styled, use_container_width=True, hide_index=True)
 else:
