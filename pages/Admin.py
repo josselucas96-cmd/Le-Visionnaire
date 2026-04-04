@@ -212,13 +212,15 @@ with tab_add:
     st.caption(f"Invested: **{existing_w:.1f}%** · Available (cash): **{remaining:.1f}%**")
 
     # Ticker lookup (outside the form so it can trigger a rerun)
-    lk1, lk2, lk3 = st.columns([2, 2, 1])
+    lk1, lk2, lk3, lk4 = st.columns([2, 2, 1.5, 1])
     with lk1:
         lookup_ticker = st.text_input("Ticker", key="lookup_ticker",
                                       placeholder="e.g. TSLA, MC, ENI").strip().upper()
     with lk2:
         exchange_label = st.selectbox("Exchange (optional)", list(EXCHANGES.keys()), key="lookup_exchange")
     with lk3:
+        lookup_date = st.date_input("★ Entry Date", value=date.today(), key="lookup_date")
+    with lk4:
         st.write("")
         st.write("")
         do_lookup = st.button("Lookup", type="secondary")
@@ -230,12 +232,25 @@ with tab_add:
                 with st.spinner(f"Fetching {lookup_ticker}…"):
                     resolved, info = resolve_ticker(lookup_ticker, suffix)
                 if _valid_info(info):
-                    st.session_state["af_ticker"]   = resolved
-                    st.session_state["af_name"]     = info.get("longName") or info.get("shortName") or ""
-                    st.session_state["af_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
-                    st.session_state["af_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
-                    price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                    st.session_state["af_price"]    = float(price)
+                    st.session_state["af_ticker"] = resolved
+                    st.session_state["af_name"]   = info.get("longName") or info.get("shortName") or ""
+                    st.session_state["af_sector"] = SECTOR_MAP.get(info.get("sector", ""), "")
+                    st.session_state["af_geo"]    = GEO_MAP.get(info.get("country", ""), "Other")
+                    # Try historical close for the selected date; fall back to live price
+                    try:
+                        from datetime import timedelta
+                        hist = yf.Ticker(resolved).history(
+                            start=lookup_date,
+                            end=lookup_date + timedelta(days=4),
+                        )
+                        hist_price = float(hist["Close"].iloc[0]) if not hist.empty else None
+                    except Exception:
+                        hist_price = None
+                    if hist_price:
+                        st.session_state["af_price"] = round(hist_price, 2)
+                    else:
+                        live = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                        st.session_state["af_price"] = float(live)
                     if resolved != lookup_ticker:
                         st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
                 else:
@@ -267,7 +282,7 @@ with tab_add:
                                       step=0.5, value=float(max(0.1, min(9.5, remaining))))
             entry_p = st.number_input("★ Entry Price", min_value=0.01, step=0.01,
                                       value=float(max(0.01, af["price"])))
-            entry_d = st.date_input("★ Entry Date", value=date.today())
+            entry_d = st.date_input("Entry Date", value=lookup_date)
         with c3:
             sec_idx = SECTORS.index(af["sector"]) if af["sector"] in SECTORS else 0
             geo_idx = GEOS.index(af["geo"]) if af["geo"] in GEOS else 0
@@ -367,13 +382,15 @@ with tab_switch:
         st.markdown("---")
 
         # Lookup for the IN position (outside form)
-        sw1, sw2, sw3 = st.columns([2, 2, 1])
+        sw1, sw2, sw3, sw4 = st.columns([2, 2, 1.5, 1])
         with sw1:
             sw_lookup_ticker = st.text_input("New Ticker (IN)", key="sw_lookup_ticker",
                                              placeholder="e.g. MSTR, MC, ENI").strip().upper()
         with sw2:
             sw_exchange_label = st.selectbox("Exchange (optional)", list(EXCHANGES.keys()), key="sw_lookup_exchange")
         with sw3:
+            sw_lookup_date = st.date_input("★ Switch Date", value=date.today(), key="sw_lookup_date")
+        with sw4:
             st.write("")
             st.write("")
             sw_do_lookup = st.button("Lookup", type="secondary", key="sw_lookup_btn")
@@ -385,12 +402,24 @@ with tab_switch:
                     with st.spinner(f"Fetching {sw_lookup_ticker}…"):
                         resolved, info = resolve_ticker(sw_lookup_ticker, suffix)
                     if _valid_info(info):
-                        st.session_state["sw_ticker"]   = resolved
-                        st.session_state["sw_name"]     = info.get("longName") or info.get("shortName") or ""
-                        st.session_state["sw_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
-                        st.session_state["sw_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
-                        price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                        st.session_state["sw_price"]    = float(price)
+                        st.session_state["sw_ticker"]  = resolved
+                        st.session_state["sw_name"]    = info.get("longName") or info.get("shortName") or ""
+                        st.session_state["sw_sector"]  = SECTOR_MAP.get(info.get("sector", ""), "")
+                        st.session_state["sw_geo"]     = GEO_MAP.get(info.get("country", ""), "Other")
+                        try:
+                            from datetime import timedelta
+                            hist = yf.Ticker(resolved).history(
+                                start=sw_lookup_date,
+                                end=sw_lookup_date + timedelta(days=4),
+                            )
+                            hist_price = float(hist["Close"].iloc[0]) if not hist.empty else None
+                        except Exception:
+                            hist_price = None
+                        if hist_price:
+                            st.session_state["sw_price"] = round(hist_price, 2)
+                        else:
+                            live = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                            st.session_state["sw_price"] = float(live)
                         if resolved != sw_lookup_ticker:
                             st.info(f"Resolved as **{resolved}** — {st.session_state['sw_name']}")
                     else:
@@ -421,7 +450,6 @@ with tab_switch:
                 )
                 in_p    = st.number_input("★ Entry Price (IN)", min_value=0.01, step=0.01,
                                           value=float(max(0.01, sw_af["price"])))
-                sw_date = st.date_input("★ Switch Date", value=date.today())
             with c3:
                 sw_sec_idx = SECTORS.index(sw_af["sector"]) if sw_af["sector"] in SECTORS else 0
                 sw_geo_idx = GEOS.index(sw_af["geo"]) if sw_af["geo"] in GEOS else 0
@@ -440,11 +468,11 @@ with tab_switch:
                         in_data={
                             "ticker": in_ticker, "name": in_name, "isin": None,
                             "weight": in_weight, "entry_price": in_p,
-                            "entry_date": str(sw_date), "sector": in_sector,
+                            "entry_date": str(sw_lookup_date), "sector": in_sector,
                             "geography": in_geo, "thematic": in_thematic,
                             "thesis_short": in_thesis, "is_active": True,
                         },
-                        date=str(sw_date), reason=sw_reason,
+                        date=str(sw_lookup_date), reason=sw_reason,
                     )
                     st.success(f"✓ {sw_out_pos['ticker']} → {in_ticker} switched.")
                     for k in ["sw_ticker", "sw_name", "sw_sector", "sw_geo", "sw_price"]:
