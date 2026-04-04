@@ -199,6 +199,29 @@ styled = display.style.format({
 
 st.dataframe(styled, use_container_width=True, hide_index=True)
 
+cash_pct_pub = round(max(0.0, 100.0 - display["Weight %"].sum()), 1)
+if cash_pct_pub > 0:
+    pa, pb, pc = st.columns([2.2, 0.9, 6.9])
+    with pa:
+        st.markdown(
+            "<div style='padding:6px 12px; border-top:1px solid #333; background:#1a1f2e;"
+            "border-radius:0 0 0 6px; color:#aaa; font-size:0.88rem;'>"
+            "<span style='color:#5a8a6a; font-weight:600;'>CASH</span>&nbsp;&nbsp;Cash (USD)</div>",
+            unsafe_allow_html=True,
+        )
+    with pb:
+        st.markdown(
+            f"<div style='padding:6px 4px; border-top:1px solid #333; background:#1a1f2e;"
+            f"font-size:0.88rem; font-weight:700; color:#aaa;'>{cash_pct_pub:.1f}%</div>",
+            unsafe_allow_html=True,
+        )
+    with pc:
+        st.markdown(
+            "<div style='padding:6px 0; border-top:1px solid #333; background:#1a1f2e;"
+            "border-radius:0 0 6px 0;'>&nbsp;</div>",
+            unsafe_allow_html=True,
+        )
+
 st.divider()
 
 # ── Allocation donut charts ───────────────────────────────────────────────────
