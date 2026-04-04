@@ -231,24 +231,30 @@ with tab_add:
         "price":   st.session_state.get("af_price", 0.01),
     }
 
+    st.markdown(
+        "<p style='font-size:0.78rem; color:#888; margin-bottom:4px;'>"
+        "<span style='color:#00D09C; font-weight:700;'>■</span> Required &nbsp;·&nbsp;"
+        "Company info is auto-kept on add-to-existing</p>",
+        unsafe_allow_html=True,
+    )
     with st.form("add_form", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         with c1:
-            ticker  = st.text_input("Ticker", value=af["ticker"]).strip().upper()
-            name    = st.text_input("Company Name", value=af["name"])
+            ticker  = st.text_input("★ Ticker", value=af["ticker"]).strip().upper()
+            name    = st.text_input("Company Name  (kept if exists)", value=af["name"])
         with c2:
-            weight  = st.number_input("Weight (%)", min_value=0.1, max_value=50.0,
+            weight  = st.number_input("★ Weight (%)", min_value=0.1, max_value=50.0,
                                       step=0.5, value=float(max(0.1, min(9.5, remaining))))
-            entry_p = st.number_input("Entry Price", min_value=0.01, step=0.01,
+            entry_p = st.number_input("★ Entry Price", min_value=0.01, step=0.01,
                                       value=float(max(0.01, af["price"])))
-            entry_d = st.date_input("Entry Date", value=date.today())
+            entry_d = st.date_input("★ Entry Date", value=date.today())
         with c3:
             sec_idx = SECTORS.index(af["sector"]) if af["sector"] in SECTORS else 0
             geo_idx = GEOS.index(af["geo"]) if af["geo"] in GEOS else 0
-            sector    = st.selectbox("Sector",    SECTORS, index=sec_idx)
-            geography = st.selectbox("Geography", GEOS,    index=geo_idx)
-            thematic  = st.selectbox("Thematic",  THEMATICS)
-        thesis = st.text_area("Thesis (1-2 sentences)", height=80)
+            sector    = st.selectbox("Sector  (kept if exists)",    SECTORS, index=sec_idx)
+            geography = st.selectbox("Geography  (kept if exists)", GEOS,    index=geo_idx)
+            thematic  = st.selectbox("Thematic  (kept if exists)",  THEMATICS)
+        thesis = st.text_area("Thesis  (overwrites only if filled)", height=80)
 
         new_total = existing_w + weight
         if new_total > 100.5:

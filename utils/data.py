@@ -47,10 +47,13 @@ def add_position(data: dict):
         new_w  = float(data["weight"])
         total_w = old_w + new_w
         pru = round((old_w * float(ex["entry_price"]) + new_w * float(data["entry_price"])) / total_w, 4)
-        sb.table("positions").update({
-            "weight": total_w,
-            "entry_price": pru,
-        }).eq("id", ex["id"]).execute()
+        update_data = {"weight": total_w, "entry_price": pru}
+        # Only update thesis if a new one was explicitly provided
+        new_thesis = (data.get("thesis_short") or "").strip()
+        if new_thesis:
+            update_data["thesis_short"] = new_thesis
+        # name, sector, geography, thematic: always keep existing
+        sb.table("positions").update(update_data).eq("id", ex["id"]).execute()
         sb.table("transactions").insert({
             "date": data.get("entry_date"),
             "action": "IN",
