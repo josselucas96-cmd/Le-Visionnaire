@@ -352,50 +352,103 @@ with tab_close:
 
 # ── SWITCH ────────────────────────────────────────────────────────────────────
 with tab_switch:
-    st.caption("Sell one position and immediately buy another. The new position inherits the same weight.")
+    st.caption("Sell one position and immediately buy another.")
     if not positions:
         st.info("No active positions.")
     else:
-        with st.form("switch_form", clear_on_submit=True):
-            out_label = st.selectbox("Exit this position", list(pos_options.keys()))
-            out_pos   = pos_options[out_label]
-            st.caption(
-                f"Entry: **{out_pos['entry_price']}** · "
-                f"Weight: **{out_pos['weight']}%** → will be inherited by new position"
-            )
+        # OUT position selector (outside form so caption updates)
+        sw_out_label = st.selectbox("Exit this position", list(pos_options.keys()), key="sw_out_label")
+        sw_out_pos   = pos_options[sw_out_label]
+        st.caption(
+            f"Entry: **{sw_out_pos['entry_price']}** · "
+            f"Weight: **{sw_out_pos['weight']}%**"
+        )
 
-            st.markdown("---")
+        st.markdown("---")
+
+        # Lookup for the IN position (outside form)
+        sw1, sw2, sw3 = st.columns([2, 2, 1])
+        with sw1:
+            sw_lookup_ticker = st.text_input("New Ticker (IN)", key="sw_lookup_ticker",
+                                             placeholder="e.g. MSTR, MC, ENI").strip().upper()
+        with sw2:
+            sw_exchange_label = st.selectbox("Exchange (optional)", list(EXCHANGES.keys()), key="sw_lookup_exchange")
+        with sw3:
+            st.write("")
+            st.write("")
+            sw_do_lookup = st.button("Lookup", type="secondary", key="sw_lookup_btn")
+
+        if sw_do_lookup:
+            if sw_lookup_ticker:
+                suffix = EXCHANGES[sw_exchange_label]
+                try:
+                    with st.spinner(f"Fetching {sw_lookup_ticker}…"):
+                        resolved, info = resolve_ticker(sw_lookup_ticker, suffix)
+                    if _valid_info(info):
+                        st.session_state["sw_ticker"]   = resolved
+                        st.session_state["sw_name"]     = info.get("longName") or info.get("shortName") or ""
+                        st.session_state["sw_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
+                        st.session_state["sw_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
+                        price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                        st.session_state["sw_price"]    = float(price)
+                        if resolved != sw_lookup_ticker:
+                            st.info(f"Resolved as **{resolved}** — {st.session_state['sw_name']}")
+                    else:
+                        st.warning(f"'{sw_lookup_ticker}' not found. Try specifying the exchange.")
+                except Exception:
+                    st.warning("Yahoo Finance rate limit hit — wait a few seconds and try again.")
+
+        sw_af = {
+            "ticker":  st.session_state.get("sw_ticker", ""),
+            "name":    st.session_state.get("sw_name", ""),
+            "sector":  st.session_state.get("sw_sector", SECTORS[0]),
+            "geo":     st.session_state.get("sw_geo", GEOS[0]),
+            "price":   st.session_state.get("sw_price", 0.01),
+        }
+
+        with st.form("switch_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             with c1:
-                out_p     = st.number_input("Exit Price (OUT)", min_value=0.01, step=0.01)
-                in_ticker = st.text_input("New Ticker (IN)").strip().upper()
-                in_name   = st.text_input("New Company Name")
+                out_p     = st.number_input("★ Exit Price (OUT)", min_value=0.01, step=0.01)
+                in_ticker = st.text_input("★ Ticker (IN)", value=sw_af["ticker"]).strip().upper()
+                in_name   = st.text_input("Company Name", value=sw_af["name"])
             with c2:
-                in_p    = st.number_input("Entry Price (IN)", min_value=0.01, step=0.01)
-                sw_date = st.date_input("Switch Date", value=date.today())
+                in_weight = st.number_input(
+                    "★ Weight IN (%)",
+                    min_value=0.1, max_value=float(sw_out_pos["weight"]),
+                    value=float(sw_out_pos["weight"]), step=0.5,
+                    help="Defaults to full OUT weight. Can be less (leaves cash).",
+                )
+                in_p    = st.number_input("★ Entry Price (IN)", min_value=0.01, step=0.01,
+                                          value=float(max(0.01, sw_af["price"])))
+                sw_date = st.date_input("★ Switch Date", value=date.today())
             with c3:
-                in_sector   = st.selectbox("Sector",    SECTORS)
-                in_geo      = st.selectbox("Geography", GEOS)
+                sw_sec_idx = SECTORS.index(sw_af["sector"]) if sw_af["sector"] in SECTORS else 0
+                sw_geo_idx = GEOS.index(sw_af["geo"]) if sw_af["geo"] in GEOS else 0
+                in_sector   = st.selectbox("Sector",    SECTORS, index=sw_sec_idx)
+                in_geo      = st.selectbox("Geography", GEOS,    index=sw_geo_idx)
                 in_thematic = st.selectbox("Thematic",  THEMATICS)
             in_thesis  = st.text_area("New Thesis", height=80)
             sw_reason  = st.text_area("Reason for switch", height=60)
 
             if st.form_submit_button("Confirm Switch", type="primary"):
                 if not in_ticker or not in_name or out_p <= 0 or in_p <= 0:
-                    st.error("All fields are required.")
+                    st.error("All ★ fields are required.")
                 else:
                     switch_position(
-                        out_id=out_pos["id"], out_price=out_p,
+                        out_id=sw_out_pos["id"], out_price=out_p,
                         in_data={
                             "ticker": in_ticker, "name": in_name, "isin": None,
-                            "weight": out_pos["weight"], "entry_price": in_p,
+                            "weight": in_weight, "entry_price": in_p,
                             "entry_date": str(sw_date), "sector": in_sector,
                             "geography": in_geo, "thematic": in_thematic,
                             "thesis_short": in_thesis, "is_active": True,
                         },
                         date=str(sw_date), reason=sw_reason,
                     )
-                    st.success(f"✓ {out_pos['ticker']} → {in_ticker} switched.")
+                    st.success(f"✓ {sw_out_pos['ticker']} → {in_ticker} switched.")
+                    for k in ["sw_ticker", "sw_name", "sw_sector", "sw_geo", "sw_price"]:
+                        st.session_state.pop(k, None)
                     st.cache_data.clear()
                     st.rerun()
 
