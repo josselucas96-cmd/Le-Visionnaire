@@ -329,6 +329,17 @@ if port_index is not None and not port_index.empty:
         )
         st.plotly_chart(fig_corr, use_container_width=True)
 
+# ── Research CTA ──────────────────────────────────────────────────────────────
+st.divider()
+st.markdown(
+    "<p style='font-size:1.2rem; font-weight:700; margin-bottom:0.3rem;'>Stock Papers</p>"
+    "<p style='color:#888; font-size:0.88rem; margin-bottom:1rem;'>"
+    "In-depth analysis on portfolio positions and market themes.</p>",
+    unsafe_allow_html=True,
+)
+st.page_link("pages/Research.py", label="Read the papers →", icon="📄")
+st.write("")
+
 # ── Disclaimer ────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="disclaimer">

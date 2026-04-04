@@ -13,6 +13,7 @@ from utils.data import (
     get_setting, upsert_setting,
 )
 from utils.market import get_prices
+from utils.research import get_research, upsert_research, delete_research, upload_pdf
 
 st.set_page_config(page_title="Cockpit | Admin", layout="wide")
 
@@ -136,8 +137,8 @@ THEMATICS  = ["AI / Semi", "DAT / Bitcoin", "Biotech / Genomics", "Space / Defen
 
 pos_options = {f"{p['ticker']}  —  {p['name']}": p for p in positions}
 
-tab_add, tab_close, tab_switch, tab_history = st.tabs([
-    "➕  Add", "✖  Close", "🔄  Switch", "📋  History"
+tab_add, tab_close, tab_switch, tab_history, tab_research = st.tabs([
+    "➕  Add", "✖  Close", "🔄  Switch", "📋  History", "📄  Research"
 ])
 
 # ── ADD ───────────────────────────────────────────────────────────────────────
@@ -491,3 +492,73 @@ with tab_history:
         ] if c in df_txn.columns]], use_container_width=True, hide_index=True)
     else:
         st.info("No transactions yet.")
+
+# ── RESEARCH ──────────────────────────────────────────────────────────────────
+with tab_research:
+    st.subheader("Stock Papers")
+
+    # ── Upload new paper ──
+    with st.expander("➕  Add new paper", expanded=False):
+        with st.form("research_form", clear_on_submit=True):
+            r1, r2 = st.columns([3, 1])
+            with r1:
+                r_title = st.text_input("★ Title")
+            with r2:
+                r_ticker = st.text_input("Ticker (optional)").strip().upper()
+            r_summary = st.text_area("Summary (shown on the public page)", height=80)
+            r3, r4 = st.columns(2)
+            with r3:
+                r_date = st.date_input("Publication Date", value=date.today())
+            with r4:
+                r_status = st.selectbox("Status", ["hidden", "published", "locked"])
+            r_file = st.file_uploader("PDF file", type=["pdf"])
+
+            if st.form_submit_button("Upload & Save", type="primary"):
+                if not r_title:
+                    st.error("Title is required.")
+                elif not r_file:
+                    st.error("Please attach a PDF file.")
+                else:
+                    with st.spinner("Uploading…"):
+                        import re, unicodedata
+                        slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", r_title).encode("ascii", "ignore").decode().lower()).strip("-")
+                        filename = f"{r_date}_{slug}.pdf"
+                        url = upload_pdf(r_file.read(), filename)
+                    upsert_research({
+                        "title": r_title,
+                        "ticker": r_ticker or None,
+                        "summary": r_summary,
+                        "file_url": url,
+                        "status": r_status,
+                        "published_at": str(r_date),
+                    })
+                    st.success(f"✓ '{r_title}' saved as {r_status}.")
+                    st.rerun()
+
+    # ── Existing papers ──
+    papers = get_research()
+    if not papers:
+        st.info("No papers yet.")
+    else:
+        STATUS_COLORS = {"published": "#00D09C", "locked": "#FFA500", "hidden": "#666"}
+        for p in papers:
+            col_info, col_status, col_del = st.columns([6, 2, 1])
+            with col_info:
+                ticker_tag = f"**{p['ticker']}** — " if p.get("ticker") else ""
+                st.markdown(f"{ticker_tag}{p['title']}  \n"
+                            f"<span style='font-size:0.78rem; color:#666;'>{p.get('published_at','')}</span>",
+                            unsafe_allow_html=True)
+            with col_status:
+                new_status = st.selectbox(
+                    "Status", ["published", "locked", "hidden"],
+                    index=["published", "locked", "hidden"].index(p["status"]),
+                    key=f"status_{p['id']}",
+                    label_visibility="collapsed",
+                )
+                if new_status != p["status"]:
+                    upsert_research({"id": p["id"], "status": new_status})
+                    st.rerun()
+            with col_del:
+                if st.button("🗑", key=f"del_{p['id']}", help="Delete"):
+                    delete_research(p["id"])
+                    st.rerun()
