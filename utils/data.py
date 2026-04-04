@@ -72,6 +72,23 @@ def add_position(data: dict):
         }).execute()
 
 
+def trim_position(position_id: int, weight_sold: float, exit_price: float, exit_date: str, reason: str):
+    sb = get_client()
+    pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
+    perf = round((exit_price - pos["entry_price"]) / pos["entry_price"] * 100, 2)
+    new_weight = round(pos["weight"] - weight_sold, 4)
+    sb.table("positions").update({"weight": new_weight}).eq("id", position_id).execute()
+    sb.table("transactions").insert({
+        "date": exit_date,
+        "action": "TRIM",
+        "ticker_out": pos["ticker"],
+        "price_out": exit_price,
+        "entry_price_out": pos["entry_price"],
+        "perf_pct": perf,
+        "reason": reason,
+    }).execute()
+
+
 def close_position(position_id: int, exit_price: float, exit_date: str, reason: str):
     sb = get_client()
     pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]

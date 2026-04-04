@@ -9,7 +9,7 @@ from datetime import date
 
 from utils.data import (
     get_positions, get_transactions,
-    add_position, close_position, switch_position,
+    add_position, close_position, trim_position, switch_position,
     get_setting, upsert_setting,
 )
 from utils.market import get_prices
@@ -305,28 +305,44 @@ with tab_close:
             selected_label = st.selectbox("Position to close", list(pos_options.keys()))
             selected_pos   = pos_options[selected_label]
 
-            # Show current info
             st.caption(
                 f"Entry: **{selected_pos['entry_price']}** · "
                 f"Date: **{selected_pos['entry_date']}** · "
                 f"Weight: **{selected_pos['weight']}%**"
             )
 
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             with c1:
-                exit_p = st.number_input("Exit Price", min_value=0.01, step=0.01)
+                weight_sold = st.number_input(
+                    "Weight to sell (%)",
+                    min_value=0.1,
+                    max_value=float(selected_pos["weight"]),
+                    value=float(selected_pos["weight"]),
+                    step=0.5,
+                    help="Equal to full weight = full close. Less = partial trim.",
+                )
             with c2:
+                exit_p = st.number_input("Exit Price", min_value=0.01, step=0.01)
+            with c3:
                 exit_d = st.date_input("Exit Date", value=date.today())
-            reason = st.text_area("Reason for closing", height=80)
+            reason = st.text_area("Reason", height=80)
 
-            if st.form_submit_button("Confirm Close", type="primary"):
+            is_full_close = weight_sold >= selected_pos["weight"]
+            btn_label = "Confirm Close" if is_full_close else f"Confirm Trim (−{weight_sold}%)"
+
+            if st.form_submit_button(btn_label, type="primary"):
                 if exit_p <= 0:
                     st.error("Enter a valid exit price.")
                 else:
                     perf = round((exit_p - selected_pos["entry_price"]) / selected_pos["entry_price"] * 100, 2)
                     sign = "+" if perf >= 0 else ""
-                    close_position(selected_pos["id"], exit_p, str(exit_d), reason)
-                    st.success(f"✓ {selected_pos['ticker']} closed at {exit_p} ({sign}{perf}%)")
+                    if is_full_close:
+                        close_position(selected_pos["id"], exit_p, str(exit_d), reason)
+                        st.success(f"✓ {selected_pos['ticker']} closed at {exit_p} ({sign}{perf}%)")
+                    else:
+                        trim_position(selected_pos["id"], weight_sold, exit_p, str(exit_d), reason)
+                        remaining = round(selected_pos["weight"] - weight_sold, 1)
+                        st.success(f"✓ {selected_pos['ticker']} trimmed by {weight_sold}% at {exit_p} ({sign}{perf}%) — {remaining}% remaining")
                     st.cache_data.clear()
                     st.rerun()
 
