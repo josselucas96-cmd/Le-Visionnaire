@@ -74,14 +74,34 @@ if positions:
     )
 
     cash_pct = round(max(0.0, 100.0 - total_weight), 1)
-    st.markdown(
-        f"<div style='margin-top:2px; padding:8px 12px; border-top:1px solid #333; "
-        f"background:#1a1f2e; border-radius:0 0 6px 6px; color:#aaa; font-size:0.88rem;'>"
-        f"<span style='color:#5a8a6a; font-weight:600;'>CASH</span>"
-        f"&nbsp;&nbsp;Cash (USD)"
-        f"<span style='float:right; font-weight:700; color:#00D09C;'>{cash_pct:.1f}%</span></div>",
-        unsafe_allow_html=True,
-    )
+    if cash_pct <= 0 or cash_pct >= 10:
+        cash_color = "#FF4B4B"   # red — danger zone
+    elif cash_pct <= 2 or cash_pct >= 8:
+        cash_color = "#FFA500"   # orange — watch out
+    else:
+        cash_color = "#00D09C"   # green — target zone (3-7%)
+
+    ca, cb, cc = st.columns([3.5, 0.9, 5.6])
+    with ca:
+        st.markdown(
+            f"<div style='padding:6px 12px; border-top:1px solid #333; background:#1a1f2e;"
+            f"border-radius:0 0 0 6px; color:#aaa; font-size:0.88rem; margin-top:0px;'>"
+            f"<span style='color:#5a8a6a; font-weight:600;'>CASH</span>&nbsp;&nbsp;Cash (USD)</div>",
+            unsafe_allow_html=True,
+        )
+    with cb:
+        st.markdown(
+            f"<div style='padding:6px 4px; border-top:1px solid #333; background:#1a1f2e;"
+            f"font-size:0.88rem; margin-top:0px; font-weight:700; color:{cash_color};'>"
+            f"{cash_pct:.1f}%</div>",
+            unsafe_allow_html=True,
+        )
+    with cc:
+        st.markdown(
+            f"<div style='padding:6px 0; border-top:1px solid #333; background:#1a1f2e;"
+            f"border-radius:0 0 6px 0; margin-top:0px;'>&nbsp;</div>",
+            unsafe_allow_html=True,
+        )
 else:
     st.info("No active positions.")
 
