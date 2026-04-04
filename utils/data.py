@@ -34,6 +34,13 @@ def upsert_setting(key, value):
 def add_position(data: dict):
     sb = get_client()
     sb.table("positions").insert(data).execute()
+    sb.table("transactions").insert({
+        "date": data.get("entry_date"),
+        "action": "IN",
+        "ticker_in": data.get("ticker"),
+        "price_in": data.get("entry_price"),
+        "reason": "New position",
+    }).execute()
 
 
 def close_position(position_id: int, exit_price: float, exit_date: str, reason: str):

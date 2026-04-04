@@ -72,6 +72,13 @@ if positions:
         ] if c in df_pos.columns]],
         use_container_width=True, hide_index=True,
     )
+
+    cash_pct = round(max(0.0, 100.0 - total_weight), 1)
+    st.markdown(
+        f"<div style='margin-top:4px; padding:6px 12px; color:#888; font-size:0.85rem;'>"
+        f"Cash (USD) &nbsp;·&nbsp; <strong>{cash_pct:.1f}%</strong></div>",
+        unsafe_allow_html=True,
+    )
 else:
     st.info("No active positions.")
 
