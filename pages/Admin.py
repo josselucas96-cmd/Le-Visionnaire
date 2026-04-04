@@ -12,6 +12,7 @@ from utils.data import (
     add_position, close_position, switch_position,
     get_setting, upsert_setting,
 )
+from utils.market import get_prices
 
 st.set_page_config(page_title="Cockpit | Admin", layout="wide")
 
@@ -61,17 +62,51 @@ positions = get_positions()
 st.subheader(f"Active Positions ({len(positions)})")
 
 if positions:
+    tickers_live = tuple(p["ticker"] for p in positions)
+    prices_live  = get_prices(tickers_live)
+    for p in positions:
+        live = prices_live.get(p["ticker"], {})
+        p["current_price"] = live.get("price")
+        p["change_today"]  = live.get("change_pct")
+        if p["current_price"] and p["entry_price"]:
+            p["perf_pct"] = round(
+                (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100, 2
+            )
+        else:
+            p["perf_pct"] = None
+
     df_pos = pd.DataFrame(positions)
     total_weight = df_pos["weight"].sum()
     st.caption(f"Total weight: **{total_weight:.1f}%** (target: 100%)")
 
-    st.dataframe(
-        df_pos[[c for c in [
-            "id", "ticker", "name", "weight", "entry_price",
-            "entry_date", "sector", "geography", "thematic", "thesis_short"
-        ] if c in df_pos.columns]],
-        use_container_width=True, hide_index=True,
-    )
+    display_cols = [c for c in [
+        "ticker", "name", "weight", "entry_price", "current_price",
+        "perf_pct", "change_today", "entry_date",
+        "sector", "geography", "thematic", "thesis_short"
+    ] if c in df_pos.columns]
+
+    def color_signed(col):
+        return [
+            "color: #00D09C" if isinstance(v, (int, float)) and v > 0
+            else "color: #FF4B4B" if isinstance(v, (int, float)) and v < 0
+            else "" for v in col
+        ]
+
+    styled = df_pos[display_cols].rename(columns={
+        "ticker": "Ticker", "name": "Name", "weight": "Weight %",
+        "entry_price": "Entry", "current_price": "Price",
+        "perf_pct": "Perf %", "change_today": "Today %",
+        "entry_date": "Entry Date", "sector": "Sector",
+        "geography": "Geography", "thematic": "Thematic", "thesis_short": "Thesis",
+    }).style.format({
+        "Weight %": "{:.1f}%",
+        "Entry":    "{:.2f}",
+        "Price":    lambda v: f"{v:.2f}" if v else "—",
+        "Perf %":   lambda v: f"{v:+.2f}%" if v is not None else "—",
+        "Today %":  lambda v: f"{v:+.2f}%" if v is not None else "—",
+    }).apply(color_signed, subset=["Perf %", "Today %"])
+
+    st.dataframe(styled, use_container_width=True, hide_index=True)
 
     cash_pct = round(max(0.0, 100.0 - total_weight), 1)
     if cash_pct <= 0 or cash_pct >= 10:
