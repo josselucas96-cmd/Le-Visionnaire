@@ -356,7 +356,6 @@ st.markdown("""
     </div>
     <div style="font-size:0.88rem; color:#888; line-height:1.65; max-width:480px;">
         In-depth equity analysis on portfolio positions and market themes.
-        Independent research — no conflicts, no fluff.
     </div>
 </div>
 """, unsafe_allow_html=True)

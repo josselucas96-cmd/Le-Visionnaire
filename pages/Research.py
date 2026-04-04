@@ -104,7 +104,6 @@ st.markdown("""
     <div class="hero-title">Stock Papers</div>
     <div class="hero-sub">
         In-depth equity analysis on portfolio positions and market themes.
-        Independent research — no conflicts, no fluff.
     </div>
 </div>
 """, unsafe_allow_html=True)
