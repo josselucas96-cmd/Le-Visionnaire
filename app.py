@@ -294,7 +294,12 @@ if port_index is not None and not port_index.empty:
         st.markdown(
             f"**Avg Pairwise Correlation** &nbsp; "
             f"<span style='font-size:1.6rem; font-weight:800;'>{avg_corr}</span>"
-            f"&nbsp; <span style='color:{corr_color}; font-size:0.85rem;'>{corr_label}</span>",
+            f"&nbsp; <span style='color:{corr_color}; font-size:0.85rem;'>{corr_label}</span>"
+            f"<br><span style='font-size:0.75rem; color:#666;'>"
+            f"Average correlation between all position pairs. "
+            f"Closer to 0 = positions move independently (better diversification). "
+            f"Closer to 1 = positions move together (concentrated risk)."
+            f"</span>",
             unsafe_allow_html=True,
         )
 
