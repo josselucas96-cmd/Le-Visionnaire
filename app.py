@@ -203,21 +203,21 @@ cash_row  = {**empty_row, "Ticker": "CASH", "Name": "Cash (USD)", "Weight %": ca
 display_with_cash = pd.concat([display, pd.DataFrame([empty_row]), pd.DataFrame([cash_row])], ignore_index=True)
 
 n = len(display_with_cash)
-def style_cash_rows(df):
-    styles = [[""] * len(df.columns)] * n
-    # empty separator row
-    styles[n - 2] = ["color: transparent; border: none;"] * len(df.columns)
-    # cash row
-    styles[n - 1] = ["color: #666;"] * len(df.columns)
-    return pd.DataFrame(styles, columns=df.columns)
+
+def style_rows_pub(row):
+    if row.name == n - 2:
+        return ["color: transparent"] * len(row)
+    if row.name == n - 1:
+        return ["color: #888; font-style: italic;"] * len(row)
+    return [""] * len(row)
 
 styled = display_with_cash.style.format({
     "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
     "Entry":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
-    "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+    "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
     "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
     "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-}).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_cash_rows, axis=None)
+}).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_rows_pub, axis=1)
 
 st.dataframe(styled, use_container_width=True, hide_index=True)
 

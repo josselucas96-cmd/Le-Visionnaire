@@ -116,11 +116,12 @@ if positions:
     )
     na = len(display_admin)
 
-    def style_cash_admin(df):
-        styles = [[""] * len(df.columns)] * na
-        styles[na - 2] = ["color: transparent; border: none;"] * len(df.columns)
-        styles[na - 1] = [f"color: {cash_color};"] * len(df.columns)
-        return pd.DataFrame(styles, columns=df.columns)
+    def style_rows_admin(row):
+        if row.name == na - 2:
+            return ["color: transparent"] * len(row)
+        if row.name == na - 1:
+            return [f"color: {cash_color}; font-weight: 600;"] * len(row)
+        return [""] * len(row)
 
     styled = display_admin.style.format({
         "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
@@ -128,7 +129,7 @@ if positions:
         "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
         "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
         "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-    }).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_cash_admin, axis=None)
+    }).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_rows_admin, axis=1)
 
     st.dataframe(styled, use_container_width=True, hide_index=True)
 else:
