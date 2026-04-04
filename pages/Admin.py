@@ -101,33 +101,12 @@ if positions:
     else:
         cash_color = "#00D09C"
 
-    empty_row_a = {c: "" for c in display_admin.columns}
-    cash_row_a  = {**empty_row_a, "Ticker": "CASH", "Name": "Cash (USD)", "Weight %": cash_pct}
-    display_admin = pd.concat(
-        [display_admin, pd.DataFrame([empty_row_a]), pd.DataFrame([cash_row_a])],
-        ignore_index=True,
-    )
-    na = len(display_admin)
-
-    def style_cell_admin(row):
-        styles = []
-        for col in row.index:
-            if row.name == na - 2:     # invisible separator
-                styles.append("color: transparent")
-            elif row.name == na - 1:   # cash row
-                styles.append(f"color: {cash_color}; font-weight: 600;")
-            else:                       # normal position row
-                val = row[col]
-                if col in ("Perf %", "Today %"):
-                    if isinstance(val, (int, float)) and val > 0:
-                        styles.append("color: #00D09C")
-                    elif isinstance(val, (int, float)) and val < 0:
-                        styles.append("color: #FF4B4B")
-                    else:
-                        styles.append("")
-                else:
-                    styles.append("")
-        return styles
+    def color_signed_admin(col):
+        return [
+            "color: #00D09C" if isinstance(v, (int, float)) and v > 0
+            else "color: #FF4B4B" if isinstance(v, (int, float)) and v < 0
+            else "" for v in col
+        ]
 
     styled = display_admin.style.format({
         "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
@@ -135,9 +114,13 @@ if positions:
         "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
         "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
         "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-    }).apply(style_cell_admin, axis=1)
+    }).apply(color_signed_admin, subset=["Perf %", "Today %"])
 
     st.dataframe(styled, use_container_width=True, hide_index=True)
+    st.markdown(
+        f"<span style='color:{cash_color}; font-weight:600;'>CASH (USD) — {cash_pct:.1f}%</span>",
+        unsafe_allow_html=True,
+    )
 else:
     st.info("No active positions.")
 
