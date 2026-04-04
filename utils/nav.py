@@ -7,7 +7,7 @@ def render_nav(current: str):
     current: one of 'app', 'research', 'about'
     """
     pages = [
-        ("Portfolio",     "/app",      "app"),
+        ("Portfolio",     "/",         "app"),
         ("Stock Papers",  "/Research", "research"),
         ("About",         "/About",    "about"),
     ]

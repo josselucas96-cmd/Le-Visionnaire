@@ -2,6 +2,7 @@ import streamlit as st
 from utils.data import get_client
 
 
+@st.cache_data(ttl=300)
 def get_research(status_filter=None):
     sb = get_client()
     query = sb.table("research").select("*").order("published_at", desc=True)
