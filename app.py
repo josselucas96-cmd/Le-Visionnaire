@@ -13,6 +13,9 @@ from utils.metrics import (
 )
 from utils.research import get_research
 
+_published_count = len([p for p in get_research() if p["status"] == "published"])
+papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} published" if _published_count else "Coming soon"
+
 st.set_page_config(
     page_title="Le Visionnaire",
     page_icon="📡",
@@ -226,6 +229,48 @@ with st.expander("Positions", expanded=True):
     cash_pct_pub = round(max(0.0, 100.0 - display["Weight %"].sum()), 1)
     st.caption(f"CASH (USD) — {cash_pct_pub:.1f}%")
 
+    st.write("")
+    st.markdown(f"""
+<div style="
+    background: linear-gradient(135deg, #0D1F2D 0%, #0E1117 70%);
+    border: 1px solid #1C2E3D;
+    border-radius: 14px;
+    padding: 2.2rem 2.4rem;
+    margin: 1rem 0 0.5rem 0;
+    position: relative;
+    overflow: hidden;
+">
+    <div style="
+        position: absolute; top: -50px; right: -50px;
+        width: 220px; height: 220px;
+        background: radial-gradient(circle, rgba(0,208,156,0.07) 0%, transparent 70%);
+        border-radius: 50%;
+    "></div>
+    <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
+                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
+        Research · {papers_label}
+    </div>
+    <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
+        Stock Papers
+    </div>
+    <div style="font-size:0.88rem; color:#888; line-height:1.65; max-width:480px;">
+        In-depth equity analysis on portfolio positions and market themes.
+    </div>
+</div>
+<a href="/Research" target="_self" style="
+    display: inline-block;
+    background: #00D09C;
+    color: #0E1117;
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 0.65rem 1.6rem;
+    border-radius: 8px;
+    text-decoration: none;
+    letter-spacing: 0.2px;
+    margin-bottom: 0.5rem;
+">Read the papers →</a>
+""", unsafe_allow_html=True)
+
 st.divider()
 
 # ── Allocation ────────────────────────────────────────────────────────────────
@@ -345,56 +390,6 @@ with st.expander("Risk Analysis", expanded=True):
                 xaxis=dict(side="bottom"),
             )
             st.plotly_chart(fig_corr, use_container_width=True)
-
-# ── Research CTA ──────────────────────────────────────────────────────────────
-st.divider()
-published_count = len([p for p in get_research() if p["status"] == "published"])
-papers_label = f"{published_count} paper{'s' if published_count != 1 else ''} published" if published_count else "Coming soon"
-
-st.markdown(f"""
-<div style="
-    background: linear-gradient(135deg, #0D1F2D 0%, #0E1117 70%);
-    border: 1px solid #1C2E3D;
-    border-radius: 14px;
-    padding: 2.2rem 2.4rem;
-    margin-bottom: 1.5rem;
-    position: relative;
-    overflow: hidden;
-">
-    <div style="
-        position: absolute; top: -50px; right: -50px;
-        width: 220px; height: 220px;
-        background: radial-gradient(circle, rgba(0,208,156,0.07) 0%, transparent 70%);
-        border-radius: 50%;
-    "></div>
-    <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
-                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
-        Research · {papers_label}
-    </div>
-    <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
-        Stock Papers
-    </div>
-    <div style="font-size:0.88rem; color:#888; line-height:1.65; max-width:480px;">
-        In-depth equity analysis on portfolio positions and market themes.
-    </div>
-</div>
-""", unsafe_allow_html=True)
-research_url = "Research"
-st.markdown("""
-<a href="/Research" target="_self" style="
-    display: inline-block;
-    background: #00D09C;
-    color: #0E1117;
-    font-weight: 800;
-    font-size: 0.95rem;
-    padding: 0.65rem 1.6rem;
-    border-radius: 8px;
-    text-decoration: none;
-    letter-spacing: 0.2px;
-    margin-bottom: 1.5rem;
-">Read the papers →</a>
-""", unsafe_allow_html=True)
-st.write("")
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
 st.markdown("""
