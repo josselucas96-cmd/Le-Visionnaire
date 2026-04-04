@@ -379,7 +379,21 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
-st.page_link("pages/Research.py", label="Read the papers →", icon="📄")
+research_url = "Research"
+st.markdown("""
+<a href="/Research" target="_self" style="
+    display: inline-block;
+    background: #00D09C;
+    color: #0E1117;
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 0.65rem 1.6rem;
+    border-radius: 8px;
+    text-decoration: none;
+    letter-spacing: 0.2px;
+    margin-bottom: 1.5rem;
+">Read the papers →</a>
+""", unsafe_allow_html=True)
 st.write("")
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
