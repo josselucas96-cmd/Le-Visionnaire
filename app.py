@@ -12,6 +12,7 @@ from utils.metrics import (
     monthly_returns_table,
 )
 from utils.research import get_research
+from utils.nav import render_nav
 
 _published_count = len([p for p in get_research() if p["status"] == "published"])
 papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} published" if _published_count else "Coming soon"
@@ -22,6 +23,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+render_nav("app")
 
 st.markdown("""
 <style>
@@ -101,7 +104,6 @@ with hcol2:
         f"<span style='font-size:0.82rem; color:#888;'>{last_updated}</span></div>",
         unsafe_allow_html=True,
     )
-    st.page_link("pages/About.py", label="About")
 
 st.write("")
 metric_cols = st.columns(4)

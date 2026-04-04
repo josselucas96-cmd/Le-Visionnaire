@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.research import get_research
+from utils.nav import render_nav
 
 st.set_page_config(
     page_title="Stock Papers | Le Visionnaire",
@@ -97,6 +98,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+render_nav("research")
+
 # ── Hero ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="research-hero">
@@ -108,7 +111,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.page_link("app.py", label="← Back to portfolio")
 st.write("")
 
 # ── Papers ────────────────────────────────────────────────────────────────────

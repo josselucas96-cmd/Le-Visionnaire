@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.nav import render_nav
 
 st.set_page_config(
     page_title="About | Le Visionnaire",
@@ -34,7 +35,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.page_link("app.py", label="← Back to portfolio")
+render_nav("about")
 st.write("")
 
 st.markdown('<div class="about-label">Le Visionnaire</div>', unsafe_allow_html=True)
