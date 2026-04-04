@@ -197,30 +197,29 @@ styled = display.style.format({
     "Today %":  lambda v: f"{v:+.2f}%" if v is not None else "—",
 }).apply(color_signed, subset=["Perf %", "Today %"])
 
-st.dataframe(styled, use_container_width=True, hide_index=True)
-
 cash_pct_pub = round(max(0.0, 100.0 - display["Weight %"].sum()), 1)
-if cash_pct_pub > 0:
-    pa, pb, pc = st.columns([2.2, 0.9, 6.9])
-    with pa:
-        st.markdown(
-            "<div style='padding:6px 12px; border-top:1px solid #333; background:#1a1f2e;"
-            "border-radius:0 0 0 6px; color:#aaa; font-size:0.88rem;'>"
-            "<span style='color:#5a8a6a; font-weight:600;'>CASH</span>&nbsp;&nbsp;Cash (USD)</div>",
-            unsafe_allow_html=True,
-        )
-    with pb:
-        st.markdown(
-            f"<div style='padding:6px 4px; border-top:1px solid #333; background:#1a1f2e;"
-            f"font-size:0.88rem; font-weight:700; color:#aaa;'>{cash_pct_pub:.1f}%</div>",
-            unsafe_allow_html=True,
-        )
-    with pc:
-        st.markdown(
-            "<div style='padding:6px 0; border-top:1px solid #333; background:#1a1f2e;"
-            "border-radius:0 0 6px 0;'>&nbsp;</div>",
-            unsafe_allow_html=True,
-        )
+empty_row = {c: "" for c in display.columns}
+cash_row  = {**empty_row, "Ticker": "CASH", "Name": "Cash (USD)", "Weight %": cash_pct_pub}
+display_with_cash = pd.concat([display, pd.DataFrame([empty_row]), pd.DataFrame([cash_row])], ignore_index=True)
+
+n = len(display_with_cash)
+def style_cash_rows(df):
+    styles = [[""] * len(df.columns)] * n
+    # empty separator row
+    styles[n - 2] = ["color: transparent; border: none;"] * len(df.columns)
+    # cash row
+    styles[n - 1] = ["color: #666;"] * len(df.columns)
+    return pd.DataFrame(styles, columns=df.columns)
+
+styled = display_with_cash.style.format({
+    "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
+    "Entry":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+    "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+    "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+    "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+}).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_cash_rows, axis=None)
+
+st.dataframe(styled, use_container_width=True, hide_index=True)
 
 st.divider()
 

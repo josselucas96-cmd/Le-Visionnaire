@@ -92,51 +92,45 @@ if positions:
             else "" for v in col
         ]
 
-    styled = df_pos[display_cols].rename(columns={
+    display_admin = df_pos[display_cols].rename(columns={
         "ticker": "Ticker", "name": "Name", "weight": "Weight %",
         "entry_price": "Entry", "current_price": "Price",
         "perf_pct": "Perf %", "change_today": "Today %",
         "entry_date": "Entry Date", "sector": "Sector",
         "geography": "Geography", "thematic": "Thematic", "thesis_short": "Thesis",
-    }).style.format({
-        "Weight %": "{:.1f}%",
-        "Entry":    "{:.2f}",
-        "Price":    lambda v: f"{v:.2f}" if v else "—",
-        "Perf %":   lambda v: f"{v:+.2f}%" if v is not None else "—",
-        "Today %":  lambda v: f"{v:+.2f}%" if v is not None else "—",
-    }).apply(color_signed, subset=["Perf %", "Today %"])
-
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    })
 
     cash_pct = round(max(0.0, 100.0 - total_weight), 1)
     if cash_pct <= 0 or cash_pct >= 10:
-        cash_color = "#FF4B4B"   # red — danger zone
+        cash_color = "#FF4B4B"
     elif cash_pct <= 2 or cash_pct >= 8:
-        cash_color = "#FFA500"   # orange — watch out
+        cash_color = "#FFA500"
     else:
-        cash_color = "#00D09C"   # green — target zone (3-7%)
+        cash_color = "#00D09C"
 
-    ca, cb, cc = st.columns([2.2, 0.9, 6.9])
-    with ca:
-        st.markdown(
-            f"<div style='padding:6px 12px; border-top:1px solid #333; background:#1a1f2e;"
-            f"border-radius:0 0 0 6px; color:#aaa; font-size:0.88rem; margin-top:0px;'>"
-            f"<span style='color:#5a8a6a; font-weight:600;'>CASH</span>&nbsp;&nbsp;Cash (USD)</div>",
-            unsafe_allow_html=True,
-        )
-    with cb:
-        st.markdown(
-            f"<div style='padding:6px 4px; border-top:1px solid #333; background:#1a1f2e;"
-            f"font-size:0.88rem; margin-top:0px; font-weight:700; color:{cash_color};'>"
-            f"{cash_pct:.1f}%</div>",
-            unsafe_allow_html=True,
-        )
-    with cc:
-        st.markdown(
-            f"<div style='padding:6px 0; border-top:1px solid #333; background:#1a1f2e;"
-            f"border-radius:0 0 6px 0; margin-top:0px;'>&nbsp;</div>",
-            unsafe_allow_html=True,
-        )
+    empty_row_a = {c: "" for c in display_admin.columns}
+    cash_row_a  = {**empty_row_a, "Ticker": "CASH", "Name": "Cash (USD)", "Weight %": cash_pct}
+    display_admin = pd.concat(
+        [display_admin, pd.DataFrame([empty_row_a]), pd.DataFrame([cash_row_a])],
+        ignore_index=True,
+    )
+    na = len(display_admin)
+
+    def style_cash_admin(df):
+        styles = [[""] * len(df.columns)] * na
+        styles[na - 2] = ["color: transparent; border: none;"] * len(df.columns)
+        styles[na - 1] = [f"color: {cash_color};"] * len(df.columns)
+        return pd.DataFrame(styles, columns=df.columns)
+
+    styled = display_admin.style.format({
+        "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
+        "Entry":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+        "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+        "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+        "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+    }).apply(color_signed, subset=["Perf %", "Today %"]).apply(style_cash_admin, axis=None)
+
+    st.dataframe(styled, use_container_width=True, hide_index=True)
 else:
     st.info("No active positions.")
 
