@@ -75,8 +75,11 @@ if positions:
 
     cash_pct = round(max(0.0, 100.0 - total_weight), 1)
     st.markdown(
-        f"<div style='margin-top:4px; padding:6px 12px; color:#888; font-size:0.85rem;'>"
-        f"Cash (USD) &nbsp;·&nbsp; <strong>{cash_pct:.1f}%</strong></div>",
+        f"<div style='margin-top:2px; padding:8px 12px; border-top:1px solid #333; "
+        f"background:#1a1f2e; border-radius:0 0 6px 6px; color:#aaa; font-size:0.88rem;'>"
+        f"<span style='color:#5a8a6a; font-weight:600;'>CASH</span>"
+        f"&nbsp;&nbsp;Cash (USD)"
+        f"<span style='float:right; font-weight:700; color:#00D09C;'>{cash_pct:.1f}%</span></div>",
         unsafe_allow_html=True,
     )
 else:
@@ -183,19 +186,22 @@ with tab_add:
     if do_lookup:
         if lookup_ticker:
             suffix = EXCHANGES[exchange_label]
-            with st.spinner(f"Fetching {lookup_ticker}…"):
-                resolved, info = resolve_ticker(lookup_ticker, suffix)
-            if _valid_info(info):
-                st.session_state["af_ticker"]   = resolved
-                st.session_state["af_name"]     = info.get("longName") or info.get("shortName") or ""
-                st.session_state["af_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
-                st.session_state["af_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
-                price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                st.session_state["af_price"]    = float(price)
-                if resolved != lookup_ticker:
-                    st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
-            else:
-                st.warning(f"'{lookup_ticker}' not found on this exchange. Try a different exchange or check the ticker.")
+            try:
+                with st.spinner(f"Fetching {lookup_ticker}…"):
+                    resolved, info = resolve_ticker(lookup_ticker, suffix)
+                if _valid_info(info):
+                    st.session_state["af_ticker"]   = resolved
+                    st.session_state["af_name"]     = info.get("longName") or info.get("shortName") or ""
+                    st.session_state["af_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
+                    st.session_state["af_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
+                    price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                    st.session_state["af_price"]    = float(price)
+                    if resolved != lookup_ticker:
+                        st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
+                else:
+                    st.warning(f"'{lookup_ticker}' not found. Try specifying the exchange or check the ticker.")
+            except Exception:
+                st.warning("Yahoo Finance rate limit hit — wait a few seconds and try again.")
 
     af = {
         "ticker":  st.session_state.get("af_ticker", ""),
