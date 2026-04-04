@@ -33,14 +33,40 @@ def upsert_setting(key, value):
 
 def add_position(data: dict):
     sb = get_client()
-    sb.table("positions").insert(data).execute()
-    sb.table("transactions").insert({
-        "date": data.get("entry_date"),
-        "action": "IN",
-        "ticker_in": data.get("ticker"),
-        "price_in": data.get("entry_price"),
-        "reason": "New position",
-    }).execute()
+    existing = (
+        sb.table("positions")
+        .select("id, weight, entry_price")
+        .eq("ticker", data["ticker"])
+        .eq("is_active", True)
+        .execute()
+        .data
+    )
+    if existing:
+        ex = existing[0]
+        old_w  = float(ex["weight"])
+        new_w  = float(data["weight"])
+        total_w = old_w + new_w
+        pru = round((old_w * float(ex["entry_price"]) + new_w * float(data["entry_price"])) / total_w, 4)
+        sb.table("positions").update({
+            "weight": total_w,
+            "entry_price": pru,
+        }).eq("id", ex["id"]).execute()
+        sb.table("transactions").insert({
+            "date": data.get("entry_date"),
+            "action": "IN",
+            "ticker_in": data["ticker"],
+            "price_in": data.get("entry_price"),
+            "reason": f"Added {new_w}% to existing position (new PRU: {pru})",
+        }).execute()
+    else:
+        sb.table("positions").insert(data).execute()
+        sb.table("transactions").insert({
+            "date": data.get("entry_date"),
+            "action": "IN",
+            "ticker_in": data.get("ticker"),
+            "price_in": data.get("entry_price"),
+            "reason": "New position",
+        }).execute()
 
 
 def close_position(position_id: int, exit_price: float, exit_date: str, reason: str):
