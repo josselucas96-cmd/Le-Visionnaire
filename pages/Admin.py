@@ -116,7 +116,8 @@ if positions:
         "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
     }).apply(color_signed_admin, subset=["Perf %", "Today %"])
 
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    table_height = 38 + min(len(positions), 20) * 35
+    st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
     st.markdown(
         f"<span style='color:{cash_color}; font-weight:600;'>CASH (USD) — {cash_pct:.1f}%</span>",
         unsafe_allow_html=True,
@@ -276,12 +277,15 @@ with tab_add:
         thesis = st.text_area("Thesis  (overwrites only if filled)", height=80)
 
         new_total = existing_w + weight
-        if new_total > 100.5:
-            st.warning(f"Total would reach {new_total:.1f}% — exceeds 100%.")
+        over_limit = new_total > 100.0
+        if over_limit:
+            st.error(f"Total would reach {new_total:.1f}% — no leverage allowed. Reduce weight.")
 
         if st.form_submit_button("Add Position", type="primary"):
             if not ticker or not name or entry_p <= 0:
                 st.error("Ticker, Name and Entry Price are required.")
+            elif over_limit:
+                st.error(f"Cannot add: total weight {new_total:.1f}% exceeds 100%.")
             else:
                 add_position({
                     "ticker": ticker, "name": name, "isin": None,

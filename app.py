@@ -196,7 +196,8 @@ styled = display.style.format({
     "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
 }).apply(color_signed, subset=["Perf %", "Today %"])
 
-st.dataframe(styled, use_container_width=True, hide_index=True)
+table_height = 38 + min(len(positions), 20) * 35
+st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
 cash_pct_pub = round(max(0.0, 100.0 - display["Weight %"].sum()), 1)
 st.caption(f"CASH (USD) — {cash_pct_pub:.1f}%")
