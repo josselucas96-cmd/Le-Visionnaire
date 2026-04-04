@@ -81,7 +81,7 @@ if positions:
     else:
         cash_color = "#00D09C"   # green — target zone (3-7%)
 
-    ca, cb, cc = st.columns([3.5, 0.9, 5.6])
+    ca, cb, cc = st.columns([2.2, 0.9, 6.9])
     with ca:
         st.markdown(
             f"<div style='padding:6px 12px; border-top:1px solid #333; background:#1a1f2e;"
