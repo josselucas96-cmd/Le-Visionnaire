@@ -59,6 +59,7 @@ def add_position(data: dict):
             "action": "IN",
             "ticker_in": data["ticker"],
             "price_in": data.get("entry_price"),
+            "weight_in": new_w,
             "reason": f"Added {new_w}% to existing position (new PRU: {pru})",
         }).execute()
     else:
@@ -68,6 +69,7 @@ def add_position(data: dict):
             "action": "IN",
             "ticker_in": data.get("ticker"),
             "price_in": data.get("entry_price"),
+            "weight_in": data.get("weight"),
             "reason": "New position",
         }).execute()
 
@@ -84,6 +86,7 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float, exit_
         "ticker_out": pos["ticker"],
         "price_out": exit_price,
         "entry_price_out": pos["entry_price"],
+        "weight_out": weight_sold,
         "perf_pct": perf,
         "reason": reason,
     }).execute()
@@ -99,6 +102,7 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
         "ticker_out": pos["ticker"],
         "price_out": exit_price,
         "entry_price_out": pos["entry_price"],
+        "weight_out": pos["weight"],
         "perf_pct": perf,
         "reason": reason,
     }).execute()
@@ -118,8 +122,10 @@ def switch_position(out_id: int, out_price: float, in_data: dict, date: str, rea
         "action": "SWITCH",
         "ticker_out": pos_out["ticker"],
         "price_out": out_price,
+        "weight_out": pos_out["weight"],
         "ticker_in": in_data["ticker"],
         "price_in": in_data["entry_price"],
+        "weight_in": in_data["weight"],
         "entry_price_out": pos_out["entry_price"],
         "perf_pct": perf,
         "reason": reason,

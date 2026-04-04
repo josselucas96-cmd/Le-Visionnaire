@@ -491,10 +491,40 @@ with tab_history:
     txns = get_transactions()
     if txns:
         df_txn = pd.DataFrame(txns)
-        st.dataframe(df_txn[[c for c in [
-            "date", "action", "ticker_out", "entry_price_out", "price_out",
-            "perf_pct", "ticker_in", "price_in", "reason"
-        ] if c in df_txn.columns]], use_container_width=True, hide_index=True)
+        cols = [c for c in [
+            "date", "action",
+            "ticker_out", "weight_out", "entry_price_out", "price_out", "perf_pct",
+            "ticker_in",  "weight_in",  "price_in",
+            "reason"
+        ] if c in df_txn.columns]
+        df_display = df_txn[cols].rename(columns={
+            "ticker_out":       "Out",
+            "weight_out":       "W.Out %",
+            "entry_price_out":  "Entry",
+            "price_out":        "Exit Price",
+            "perf_pct":         "Perf %",
+            "ticker_in":        "In",
+            "weight_in":        "W.In %",
+            "price_in":         "In Price",
+        })
+        def color_perf(col):
+            return [
+                "color: #00D09C" if isinstance(v, (int, float)) and v > 0
+                else "color: #FF4B4B" if isinstance(v, (int, float)) and v < 0
+                else "" for v in col
+            ]
+        fmt = {}
+        if "Perf %" in df_display.columns:
+            fmt["Perf %"] = lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—"
+        if "W.Out %" in df_display.columns:
+            fmt["W.Out %"] = lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "—"
+        if "W.In %" in df_display.columns:
+            fmt["W.In %"] = lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "—"
+        styled_txn = df_display.style.format(fmt)
+        if "Perf %" in df_display.columns:
+            styled_txn = styled_txn.apply(color_perf, subset=["Perf %"])
+        h = 38 + min(len(df_display), 20) * 35
+        st.dataframe(styled_txn, use_container_width=True, hide_index=True, height=h)
     else:
         st.info("No transactions yet.")
 
