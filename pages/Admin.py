@@ -498,42 +498,48 @@ with tab_research:
     st.subheader("Stock Papers")
 
     # ── Upload new paper ──
-    with st.expander("➕  Add new paper", expanded=False):
-        with st.form("research_form", clear_on_submit=True):
-            r1, r2 = st.columns([3, 1])
-            with r1:
-                r_title = st.text_input("★ Title")
-            with r2:
-                r_ticker = st.text_input("Ticker (optional)").strip().upper()
-            r_summary = st.text_area("Summary (shown on the public page)", height=80)
-            r3, r4 = st.columns(2)
-            with r3:
-                r_date = st.date_input("Publication Date", value=date.today())
-            with r4:
-                r_status = st.selectbox("Status", ["hidden", "published", "locked"])
-            r_file = st.file_uploader("PDF file", type=["pdf"])
+    st.markdown("#### New Paper")
+    r_file = st.file_uploader(
+        "Drop your PDF here or click to browse",
+        type=["pdf"],
+        help="PDF only. Max 200MB.",
+    )
+    with st.form("research_form", clear_on_submit=True):
+        r1, r2 = st.columns([3, 1])
+        with r1:
+            r_title = st.text_input("★ Title")
+        with r2:
+            r_ticker = st.text_input("Ticker (optional)").strip().upper()
+        r_summary = st.text_area("Summary (shown on the public page)", height=80)
+        r3, r4 = st.columns(2)
+        with r3:
+            r_date = st.date_input("Publication Date", value=date.today())
+        with r4:
+            r_status = st.selectbox("Status", ["hidden", "published", "locked"])
 
-            if st.form_submit_button("Upload & Save", type="primary"):
-                if not r_title:
-                    st.error("Title is required.")
-                elif not r_file:
-                    st.error("Please attach a PDF file.")
-                else:
-                    with st.spinner("Uploading…"):
-                        import re, unicodedata
-                        slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", r_title).encode("ascii", "ignore").decode().lower()).strip("-")
-                        filename = f"{r_date}_{slug}.pdf"
-                        url = upload_pdf(r_file.read(), filename)
-                    upsert_research({
-                        "title": r_title,
-                        "ticker": r_ticker or None,
-                        "summary": r_summary,
-                        "file_url": url,
-                        "status": r_status,
-                        "published_at": str(r_date),
-                    })
-                    st.success(f"✓ '{r_title}' saved as {r_status}.")
-                    st.rerun()
+        if st.form_submit_button("Upload & Save", type="primary"):
+            if not r_title:
+                st.error("Title is required.")
+            elif not r_file:
+                st.error("Please drop or select a PDF file above.")
+            else:
+                with st.spinner("Uploading…"):
+                    import re, unicodedata
+                    slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", r_title).encode("ascii", "ignore").decode().lower()).strip("-")
+                    filename = f"{r_date}_{slug}.pdf"
+                    url = upload_pdf(r_file.read(), filename)
+                upsert_research({
+                    "title": r_title,
+                    "ticker": r_ticker or None,
+                    "summary": r_summary,
+                    "file_url": url,
+                    "status": r_status,
+                    "published_at": str(r_date),
+                })
+                st.success(f"✓ '{r_title}' saved as {r_status}.")
+                st.rerun()
+
+    st.divider()
 
     # ── Existing papers ──
     papers = get_research()

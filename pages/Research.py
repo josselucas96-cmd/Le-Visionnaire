@@ -12,67 +12,149 @@ st.markdown("""
 <style>
     [data-testid="stSidebar"] { display: none; }
     .block-container { padding-top: 3.5rem; padding-bottom: 2rem; }
-    .paper-card {
-        background: #161B22;
-        border: 1px solid #21262D;
-        border-radius: 10px;
-        padding: 1.4rem 1.6rem;
-        margin-bottom: 1.2rem;
-        transition: border-color 0.2s;
+
+    .research-hero {
+        background: linear-gradient(135deg, #0D1F2D 0%, #0E1117 60%);
+        border: 1px solid #1C2E3D;
+        border-radius: 14px;
+        padding: 2.8rem 3rem;
+        margin-bottom: 2.5rem;
+        position: relative;
+        overflow: hidden;
     }
-    .paper-card:hover { border-color: #444; }
+    .research-hero::before {
+        content: "";
+        position: absolute;
+        top: -60px; right: -60px;
+        width: 280px; height: 280px;
+        background: radial-gradient(circle, rgba(0,208,156,0.08) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    .hero-label {
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 2px;
+        color: #00D09C; text-transform: uppercase; margin-bottom: 0.6rem;
+    }
+    .hero-title {
+        font-size: 2.4rem; font-weight: 800; letter-spacing: -1px;
+        line-height: 1.15; margin-bottom: 0.8rem;
+    }
+    .hero-sub {
+        font-size: 0.95rem; color: #888; max-width: 520px; line-height: 1.7;
+    }
+
+    .paper-card {
+        background: #13181F;
+        border: 1px solid #1E2530;
+        border-radius: 12px;
+        padding: 1.6rem 1.8rem;
+        margin-bottom: 1.1rem;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s, background 0.2s;
+    }
+    .paper-card:hover { border-color: #2A3A4A; background: #161D26; }
+    .paper-card-locked {
+        background: #111418;
+        border: 1px solid #1A1F26;
+        opacity: 0.75;
+    }
+    .paper-accent {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, #00D09C, #0097B2);
+        border-radius: 3px 0 0 3px;
+    }
+    .paper-accent-locked {
+        background: #2A2A2A;
+    }
     .paper-ticker {
-        font-size: 0.75rem; font-weight: 700; letter-spacing: 1px;
-        color: #00D09C; margin-bottom: 0.3rem;
+        font-size: 0.7rem; font-weight: 800; letter-spacing: 1.5px;
+        color: #00D09C; text-transform: uppercase; margin-bottom: 0.4rem;
     }
     .paper-title {
-        font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem;
+        font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; line-height: 1.35;
     }
     .paper-summary {
-        font-size: 0.88rem; color: #AAA; line-height: 1.6; margin-bottom: 1rem;
+        font-size: 0.86rem; color: #7A8595; line-height: 1.65; margin-bottom: 0.9rem;
     }
     .paper-meta {
-        font-size: 0.75rem; color: #555;
+        font-size: 0.72rem; color: #3A4555; letter-spacing: 0.3px;
     }
-    .locked-badge {
-        display: inline-block; font-size: 0.72rem; color: #888;
-        border: 1px solid #333; border-radius: 4px;
-        padding: 2px 8px; margin-left: 8px; vertical-align: middle;
+    .locked-tag {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 0.7rem; color: #555; background: #1A1F26;
+        border: 1px solid #252B35; border-radius: 20px;
+        padding: 3px 10px; margin-bottom: 1rem;
+    }
+    .section-divider {
+        border: none; border-top: 1px solid #1A1F26; margin: 2rem 0;
+    }
+    .disclaimer {
+        font-size: 0.72rem; color: #333; margin-top: 3rem;
+        border-top: 1px solid #1A1F26; padding-top: 1rem; line-height: 1.5;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p style="font-size:1.9rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0;">Stock Papers</p>', unsafe_allow_html=True)
-st.caption("In-depth analysis on equity positions and market themes.")
+# ── Hero ──────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="research-hero">
+    <div class="hero-label">Le Visionnaire · Research</div>
+    <div class="hero-title">Stock Papers</div>
+    <div class="hero-sub">
+        In-depth equity analysis on portfolio positions and market themes.
+        Independent research — no conflicts, no fluff.
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.page_link("app.py", label="← Back to portfolio")
 st.write("")
 
+# ── Papers ────────────────────────────────────────────────────────────────────
 papers = [p for p in get_research() if p["status"] in ("published", "locked")]
 
 if not papers:
-    st.info("No papers published yet. Check back soon.")
+    st.markdown(
+        "<div style='color:#444; font-size:0.9rem; padding: 2rem 0;'>"
+        "No papers published yet — check back soon.</div>",
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 for p in papers:
-    ticker_tag = f'<div class="paper-ticker">{p["ticker"]}</div>' if p.get("ticker") else ""
-    lock_badge = '<span class="locked-badge">🔒 Access restricted</span>' if p["status"] == "locked" else ""
-    date_str = p.get("published_at") or ""
+    is_locked = p["status"] == "locked"
+    card_class = "paper-card paper-card-locked" if is_locked else "paper-card"
+    accent_class = "paper-accent paper-accent-locked" if is_locked else "paper-accent"
+
+    ticker_html = f'<div class="paper-ticker">{p["ticker"]}</div>' if p.get("ticker") else ""
+    date_html   = f'<div class="paper-meta">{p.get("published_at", "")}</div>' if p.get("published_at") else ""
+    summary_html = f'<div class="paper-summary">{p.get("summary", "")}</div>' if p.get("summary") else ""
+
+    locked_html = """
+        <div class="locked-tag">🔒 &nbsp;Full access restricted</div>
+    """ if is_locked else ""
 
     st.markdown(f"""
-    <div class="paper-card">
-        {ticker_tag}
-        <div class="paper-title">{p["title"]}{lock_badge}</div>
-        <div class="paper-summary">{p.get("summary") or ""}</div>
-        <div class="paper-meta">{date_str}</div>
+    <div class="{card_class}">
+        <div class="{accent_class}"></div>
+        {ticker_html}
+        <div class="paper-title">{p["title"]}</div>
+        {summary_html}
+        {locked_html}
+        {date_html}
     </div>
     """, unsafe_allow_html=True)
 
-    if p["status"] == "published" and p.get("file_url"):
-        st.link_button("Read PDF →", p["file_url"])
+    if not is_locked and p.get("file_url"):
+        st.link_button("Read the full paper →", p["file_url"])
+        st.write("")
 
+# ── Disclaimer ────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="font-size:0.72rem; color:#444; margin-top:3rem; border-top:1px solid #222;
-padding-top:1rem; line-height:1.5;">
-These papers are published for informational purposes only and do not constitute
-financial or investment advice.
+<div class="disclaimer">
+These papers are published for informational and educational purposes only
+and do not constitute financial or investment advice.
 </div>
 """, unsafe_allow_html=True)

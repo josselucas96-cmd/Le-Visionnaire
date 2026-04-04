@@ -331,12 +331,35 @@ if port_index is not None and not port_index.empty:
 
 # ── Research CTA ──────────────────────────────────────────────────────────────
 st.divider()
-st.markdown(
-    "<p style='font-size:1.2rem; font-weight:700; margin-bottom:0.3rem;'>Stock Papers</p>"
-    "<p style='color:#888; font-size:0.88rem; margin-bottom:1rem;'>"
-    "In-depth analysis on portfolio positions and market themes.</p>",
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<div style="
+    background: linear-gradient(135deg, #0D1F2D 0%, #0E1117 70%);
+    border: 1px solid #1C2E3D;
+    border-radius: 14px;
+    padding: 2.2rem 2.4rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+">
+    <div style="
+        position: absolute; top: -50px; right: -50px;
+        width: 220px; height: 220px;
+        background: radial-gradient(circle, rgba(0,208,156,0.07) 0%, transparent 70%);
+        border-radius: 50%;
+    "></div>
+    <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
+                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
+        Research
+    </div>
+    <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
+        Stock Papers
+    </div>
+    <div style="font-size:0.88rem; color:#888; line-height:1.65; max-width:480px;">
+        In-depth equity analysis on portfolio positions and market themes.
+        Independent research — no conflicts, no fluff.
+    </div>
+</div>
+""", unsafe_allow_html=True)
 st.page_link("pages/Research.py", label="Read the papers →", icon="📄")
 st.write("")
 
