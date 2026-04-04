@@ -91,6 +91,25 @@ tab_add, tab_close, tab_switch, tab_history = st.tabs([
 ])
 
 # ── ADD ───────────────────────────────────────────────────────────────────────
+EXCHANGE_SUFFIXES = [
+    "", ".PA", ".MI", ".L", ".DE", ".AS", ".SW",
+    ".ST", ".OL", ".CO", ".HE", ".BR", ".LS", ".MC", ".AT",
+]
+
+def _valid_info(info):
+    name  = info.get("longName") or info.get("shortName") or ""
+    price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+    return bool(name) and not name.strip().isdigit() and float(price) > 0
+
+def resolve_ticker(raw):
+    """Try raw ticker then common exchange suffixes; return (resolved_ticker, info)."""
+    for suffix in EXCHANGE_SUFFIXES:
+        t    = raw + suffix
+        info = yf.Ticker(t).info
+        if _valid_info(info):
+            return t, info
+    return raw, {}
+
 SECTOR_MAP = {
     "Technology": "Tech", "Consumer Cyclical": "Consumer",
     "Consumer Defensive": "Consumer", "Healthcare": "Healthcare",
@@ -125,15 +144,18 @@ with tab_add:
         if st.button("Lookup", type="secondary"):
             if lookup_ticker:
                 with st.spinner(f"Fetching {lookup_ticker}…"):
-                    info = yf.Ticker(lookup_ticker).info
-                st.session_state["af_ticker"]  = lookup_ticker
-                st.session_state["af_name"]    = info.get("longName") or info.get("shortName") or ""
-                raw_sector  = info.get("sector", "")
-                raw_country = info.get("country", "")
-                st.session_state["af_sector"]  = SECTOR_MAP.get(raw_sector, "")
-                st.session_state["af_geo"]     = GEO_MAP.get(raw_country, "Other")
-                price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                st.session_state["af_price"]   = float(price)
+                    resolved, info = resolve_ticker(lookup_ticker)
+                if _valid_info(info):
+                    st.session_state["af_ticker"]   = resolved
+                    st.session_state["af_name"]     = info.get("longName") or info.get("shortName") or ""
+                    st.session_state["af_sector"]   = SECTOR_MAP.get(info.get("sector", ""), "")
+                    st.session_state["af_geo"]      = GEO_MAP.get(info.get("country", ""), "Other")
+                    price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+                    st.session_state["af_price"]    = float(price)
+                    if resolved != lookup_ticker:
+                        st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
+                else:
+                    st.warning(f"Ticker '{lookup_ticker}' not found. Try a more specific format (e.g. ENI.MI, MC.PA).")
 
     af = {
         "ticker":  st.session_state.get("af_ticker", ""),
