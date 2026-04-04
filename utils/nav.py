@@ -19,11 +19,14 @@ def render_nav(current: str):
 
     st.markdown(f"""
 <style>
+    /* Hide Streamlit's own header bar */
+    [data-testid="stHeader"] {{ display: none !important; }}
+
     .nav-bar {{
         position: fixed;
         top: 0; left: 0; right: 0;
-        z-index: 999;
-        background: rgba(14, 17, 23, 0.92);
+        z-index: 999999;
+        background: rgba(14, 17, 23, 0.97);
         backdrop-filter: blur(8px);
         border-bottom: 1px solid #1E2530;
         padding: 0 2rem;
@@ -47,7 +50,6 @@ def render_nav(current: str):
         text-decoration: none;
         padding: 0.25rem 0.75rem;
         border-radius: 6px;
-        transition: color 0.15s, background 0.15s;
     }}
     .nav-link:hover {{
         color: #EEE;
@@ -57,8 +59,7 @@ def render_nav(current: str):
         color: #00D09C !important;
         background: rgba(0, 208, 156, 0.08) !important;
     }}
-    /* Push content below the fixed navbar */
-    .block-container {{ padding-top: 4.5rem !important; }}
+    .block-container {{ padding-top: 4rem !important; }}
 </style>
 <div class="nav-bar">
     <a href="/app" target="_self" class="nav-logo">Le Visionnaire</a>
