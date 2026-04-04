@@ -205,9 +205,9 @@ with tab_add:
             name    = st.text_input("Company Name", value=af["name"])
         with c2:
             weight  = st.number_input("Weight (%)", min_value=0.1, max_value=50.0,
-                                      step=0.5, value=min(9.5, remaining))
+                                      step=0.5, value=float(min(9.5, remaining)))
             entry_p = st.number_input("Entry Price", min_value=0.01, step=0.01,
-                                      value=max(0.01, af["price"]))
+                                      value=float(max(0.01, af["price"])))
             entry_d = st.date_input("Entry Date", value=date.today())
         with c3:
             sec_idx = SECTORS.index(af["sector"]) if af["sector"] in SECTORS else 0
