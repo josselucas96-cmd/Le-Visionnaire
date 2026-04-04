@@ -8,7 +8,7 @@ from utils.market import get_prices, get_history
 from utils.metrics import (
     build_portfolio_index, daily_returns,
     sharpe_ratio, max_drawdown, beta_vs_spy,
-    annualized_volatility, var_95, correlation_matrix,
+    annualized_volatility, var_95, correlation_matrix, avg_pairwise_correlation,
 )
 
 st.set_page_config(
@@ -281,8 +281,23 @@ if port_index is not None and not port_index.empty:
         st.metric("Top 3 Concentration", f"{top3_pct:.1f}%",
                   help=" · ".join(top3["Ticker"].tolist()))
 
-    # Row 2 — Correlation heatmap
+    # Row 2 — Avg pairwise correlation
     corr = correlation_matrix(history, positions)
+    avg_corr = avg_pairwise_correlation(history, positions)
+    if avg_corr is not None:
+        if avg_corr < 0.3:
+            corr_label, corr_color = "Low — well diversified", "#00D09C"
+        elif avg_corr < 0.6:
+            corr_label, corr_color = "Moderate", "#FFA500"
+        else:
+            corr_label, corr_color = "High — concentrated risk", "#FF4B4B"
+        st.markdown(
+            f"**Avg Pairwise Correlation** &nbsp; "
+            f"<span style='font-size:1.6rem; font-weight:800;'>{avg_corr}</span>"
+            f"&nbsp; <span style='color:{corr_color}; font-size:0.85rem;'>{corr_label}</span>",
+            unsafe_allow_html=True,
+        )
+
     if not corr.empty:
         st.markdown("**Correlation Matrix** (daily returns, inception to date)")
         fig_corr = go.Figure(data=go.Heatmap(
