@@ -163,6 +163,13 @@ with st.expander("Performance & Moves", expanded=True):
         fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
         layout = chart_layout(height=420)
         layout["yaxis"]["title"] = "Base 100"
+        layout["legend"] = dict(
+            orientation="h",
+            yanchor="top", y=-0.08,
+            xanchor="center", x=0.5,
+            font=dict(size=10),
+            bgcolor="rgba(0,0,0,0)",
+        )
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True)
     else:
