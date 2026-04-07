@@ -76,18 +76,21 @@ GEO_COLORS = {
 
 # Thematic
 THEMATIC_COLORS = {
-    "AI / Semi":            "#6366F1",   # same as Tech
-    "DAT / Bitcoin":        "#F97316",   # bitcoin orange
-    "Biotech / Genomics":   "#34D399",   # same as Healthcare
-    "Space / Defense":      "#6B7280",   # gray
-    "Consumer Growth":      "#FCD34D",   # yellow
-    "Robotics / Automation":"#C084FC",   # purple
-    "Fintech / Payments":   "#60A5FA",   # sky blue
-    "Energy Transition":    "#FB923C",   # warm orange
-    "Software / SaaS":      "#818CF8",   # soft indigo
-    "Communication":        "#93C5FD",   # light blue
-    "Other":                "#94A3B8",   # slate
-    "Cash":                 "#374151",   # dark gray
+    "AI / Semi":              "#6366F1",   # same as Tech
+    "Crypto Currencies Play": "#F97316",   # bitcoin orange
+    "Biotech":                "#34D399",   # same as Healthcare
+    "Space / Defense":        "#6B7280",   # gray
+    "Consumer Growth":        "#FCD34D",   # yellow
+    "Robotics / Automation":  "#C084FC",   # purple
+    "Fintech / Payments":     "#60A5FA",   # sky blue
+    "Energy Transition":      "#FB923C",   # warm orange
+    "Software / SaaS":        "#818CF8",   # soft indigo
+    "Cybersecurity":          "#F472B6",   # pink
+    "Cloud / Infrastructure": "#2DD4BF",   # teal
+    "Clean Energy":           "#4ADE80",   # light green
+    "Communication":          "#93C5FD",   # light blue
+    "Other":                  "#94A3B8",   # slate
+    "Cash":                   "#374151",   # dark gray
 }
 
 

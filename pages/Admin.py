@@ -154,9 +154,10 @@ st.divider()
 SECTORS    = ["Tech", "Healthcare", "Consumer", "Finance", "Communication",
               "Industrials", "Energy", "Materials", "Real Estate", "Utilities"]
 GEOS       = ["USA", "Europe", "Japan", "Asia ex-Japan", "LatAm", "Global", "Other"]
-THEMATICS  = ["AI / Semi", "DAT / Bitcoin", "Biotech / Genomics", "Space / Defense",
+THEMATICS  = ["AI / Semi", "Crypto Currencies Play", "Biotech", "Space / Defense",
               "Robotics / Automation", "Fintech / Payments", "Consumer Growth",
-              "Energy Transition", "Software / SaaS", "Other"]
+              "Energy Transition", "Software / SaaS", "Cybersecurity",
+              "Cloud / Infrastructure", "Clean Energy", "Other"]
 
 pos_options = {f"{p['ticker']}  —  {p['name']}": p for p in positions}
 

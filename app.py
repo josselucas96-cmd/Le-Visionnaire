@@ -95,6 +95,7 @@ history     = get_history(tickers, chart_start)
 
 spy_perf  = None
 spy_index = None
+qqq_index = None
 
 if not history.empty:
     port_index = build_portfolio_index(history, positions)
@@ -102,6 +103,9 @@ if not history.empty:
         spy_raw   = history["SPY"].dropna()
         spy_index = spy_raw / spy_raw.iloc[0] * 100
         spy_perf  = round(spy_index.iloc[-1] - 100, 2)
+    if "QQQ" in history.columns:
+        qqq_raw   = history["QQQ"].dropna()
+        qqq_index = qqq_raw / qqq_raw.iloc[0] * 100
     last_updated = history.index[-1].strftime("%b %d, %Y")
 else:
     port_index   = None
@@ -151,19 +155,35 @@ st.divider()
 # ── Performance ───────────────────────────────────────────────────────────────
 with st.expander("Performance", expanded=True):
     if port_index is not None and not port_index.empty:
+        # Benchmark toggles
+        cb1, cb2, _ = st.columns([1, 1, 6])
+        with cb1:
+            show_spy = st.checkbox("S&P 500", value=True, key="show_spy")
+        with cb2:
+            show_qqq = st.checkbox("Nasdaq 100", value=False, key="show_qqq")
+
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=port_index.index, y=port_index.values,
             name=portfolio_name,
-            line=dict(color=PORTFOLIO_LINE, width=2.5, shape="spline", smoothing=0.8),
+            line=dict(color=PORTFOLIO_LINE, width=3, shape="spline", smoothing=0.8),
             hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
         ))
-        if spy_index is not None:
+        if show_spy and spy_index is not None:
             fig.add_trace(go.Scatter(
                 x=spy_index.index, y=spy_index.values,
                 name="S&P 500",
-                line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot", shape="spline", smoothing=0.6),
+                line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot",
+                          shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
+            ))
+        if show_qqq and qqq_index is not None:
+            fig.add_trace(go.Scatter(
+                x=qqq_index.index, y=qqq_index.values,
+                name="Nasdaq 100",
+                line=dict(color="#A78BFA", width=1.5, dash="dash",
+                          shape="spline", smoothing=0.6),
+                hovertemplate="%{x|%b %d, %Y}<br>Nasdaq 100: %{y:.1f}<extra></extra>",
             ))
         fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
         layout = chart_layout(height=380)

@@ -84,6 +84,8 @@ today_ts = pd.Timestamp(date.today())
 port_index = build_portfolio_index(history, all_positions)
 spy_raw    = history["SPY"].dropna() if "SPY" in history.columns else None
 spy_index  = spy_raw / spy_raw.iloc[0] * 100 if spy_raw is not None else None
+qqq_raw    = history["QQQ"].dropna() if "QQQ" in history.columns else None
+qqq_index  = qqq_raw / qqq_raw.iloc[0] * 100 if qqq_raw is not None else None
 
 st.markdown(
     '<p style="font-size:2rem; font-weight:900; letter-spacing:-0.5px; margin-bottom:0.2rem;">'
@@ -98,10 +100,15 @@ st.write("")
 # ══════════════════════════════════════════════════════════════════════════════
 with st.expander("Performance & Moves", expanded=True):
     if port_index is not None and not port_index.empty:
+        cb1, cb2, _ = st.columns([1, 1, 6])
+        with cb1:
+            show_spy = st.checkbox("S&P 500", value=True, key="h_show_spy")
+        with cb2:
+            show_qqq = st.checkbox("Nasdaq 100", value=False, key="h_show_qqq")
+
         fig = go.Figure()
 
-        # S&P 500 baseline
-        if spy_index is not None:
+        if show_spy and spy_index is not None:
             fig.add_trace(go.Scatter(
                 x=spy_index.index, y=spy_index.values,
                 name="S&P 500",
@@ -109,12 +116,20 @@ with st.expander("Performance & Moves", expanded=True):
                           shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
             ))
+        if show_qqq and qqq_index is not None:
+            fig.add_trace(go.Scatter(
+                x=qqq_index.index, y=qqq_index.values,
+                name="Nasdaq 100",
+                line=dict(color="#A78BFA", width=1.5, dash="dash",
+                          shape="spline", smoothing=0.6),
+                hovertemplate="%{x|%b %d, %Y}<br>Nasdaq 100: %{y:.1f}<extra></extra>",
+            ))
 
         # Portfolio line
         fig.add_trace(go.Scatter(
             x=port_index.index, y=port_index.values,
             name="Le Visionnaire",
-            line=dict(color=PORTFOLIO_LINE, width=2.5, shape="spline", smoothing=0.8),
+            line=dict(color=PORTFOLIO_LINE, width=3, shape="spline", smoothing=0.8),
             hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
         ))
 

@@ -30,7 +30,7 @@ def get_history(tickers: tuple, start: str) -> pd.DataFrame:
     Missing tickers are silently dropped.
     """
     end = datetime.today().strftime("%Y-%m-%d")
-    all_tickers = list(set(list(tickers) + ["SPY"]))
+    all_tickers = list(set(list(tickers) + ["SPY", "QQQ"]))
 
     try:
         raw = yf.download(all_tickers, start=start, end=end,
