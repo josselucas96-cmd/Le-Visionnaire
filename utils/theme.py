@@ -29,22 +29,66 @@ HLINE_COLOR     = "#252D40"
 NAV_ACTIVE_COLOR = ACCENT
 NAV_ACTIVE_BG    = "rgba(129, 140, 248, 0.10)"
 
-# Stacked area palette (positions)
+# Stacked area palette (positions, by ticker order)
 POSITION_COLORS = [
-    "#818CF8",   # indigo
+    "#6366F1",   # indigo
     "#34D399",   # emerald
     "#60A5FA",   # sky
-    "#FBBF24",   # amber
+    "#F97316",   # orange
+    "#FCD34D",   # yellow
+    "#6B7280",   # gray
+    "#93C5FD",   # light blue
+    "#C084FC",   # purple
+    "#FDBA74",   # pale orange
+    "#FDE68A",   # pale yellow
     "#F472B6",   # pink
-    "#A78BFA",   # violet
-    "#2DD4BF",   # teal
-    "#FB923C",   # orange
-    "#94A3B8",   # slate
-    "#E879F9",   # fuchsia
-    "#4ADE80",   # green
 ]
 
 CASH_COLOR  = "#1A2235"
+
+# ── Semantic color maps for donut charts ──────────────────────────────────────
+# Sector
+SECTOR_COLORS = {
+    "Tech":          "#6366F1",   # strong indigo
+    "Healthcare":    "#34D399",   # emerald
+    "Finance":       "#F97316",   # bitcoin orange
+    "Communication": "#60A5FA",   # sky blue
+    "Industrials":   "#6B7280",   # neutral gray
+    "Consumer":      "#FCD34D",   # yellow
+    "Energy":        "#FB923C",   # warm orange
+    "Materials":     "#A8A29E",   # stone
+    "Real Estate":   "#818CF8",   # soft indigo
+    "Utilities":     "#94A3B8",   # slate
+    "Cash":          "#374151",   # dark gray
+}
+
+# Geography
+GEO_COLORS = {
+    "USA":           "#6366F1",   # same as Tech — USA = dominant
+    "Europe":        "#93C5FD",   # light blue
+    "Japan":         "#FDBA74",   # pale orange
+    "Asia ex-Japan": "#FDE68A",   # pale yellow
+    "LatAm":         "#86EFAC",   # light green
+    "Global":        "#C084FC",   # purple
+    "Other":         "#6B7280",   # gray
+    "USD":           "#374151",   # same as Cash
+}
+
+# Thematic
+THEMATIC_COLORS = {
+    "AI / Semi":            "#6366F1",   # same as Tech
+    "DAT / Bitcoin":        "#F97316",   # bitcoin orange
+    "Biotech / Genomics":   "#34D399",   # same as Healthcare
+    "Space / Defense":      "#6B7280",   # gray
+    "Consumer Growth":      "#FCD34D",   # yellow
+    "Robotics / Automation":"#C084FC",   # purple
+    "Fintech / Payments":   "#60A5FA",   # sky blue
+    "Energy Transition":    "#FB923C",   # warm orange
+    "Software / SaaS":      "#818CF8",   # soft indigo
+    "Communication":        "#93C5FD",   # light blue
+    "Other":                "#94A3B8",   # slate
+    "Cash":                 "#374151",   # dark gray
+}
 
 
 def action_colors():

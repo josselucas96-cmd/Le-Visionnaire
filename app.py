@@ -16,7 +16,8 @@ from utils.nav import render_nav
 from utils.theme import (
     BG, GRID, BORDER, ACCENT, POSITIVE, NEGATIVE, SWITCH, TRIM,
     TEXT_MID, TEXT_DIM, PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR,
-    CASH_COLOR, POSITION_COLORS, chart_layout,
+    CASH_COLOR, POSITION_COLORS, SECTOR_COLORS, GEO_COLORS, THEMATIC_COLORS,
+    chart_layout,
 )
 
 _published_count = len([p for p in get_research() if p["status"] == "published"])
@@ -303,11 +304,20 @@ with st.expander("Allocation", expanded=True):
     else:
         display_alloc = display
 
+    COLOR_MAPS = {
+        "Sector":    SECTOR_COLORS,
+        "Geography": GEO_COLORS,
+        "Thematic":  THEMATIC_COLORS,
+    }
+
     def donut_chart(df, col, title):
         grouped = df.groupby(col)["Current %"].sum().reset_index()
+        cmap = COLOR_MAPS.get(col, {})
+        # Fallback: any category not in the map gets a neutral gray
+        color_map = {cat: cmap.get(cat, "#6B7280") for cat in grouped[col].unique()}
         fig = px.pie(
             grouped, values="Current %", names=col, title=title,
-            hole=0.52, color_discrete_sequence=POSITION_COLORS,
+            hole=0.52, color=col, color_discrete_map=color_map,
         )
         fig.update_traces(
             textinfo="percent",
