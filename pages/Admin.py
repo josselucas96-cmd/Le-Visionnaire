@@ -78,29 +78,48 @@ if positions:
 
     df_pos = pd.DataFrame(positions)
     total_weight = df_pos["weight"].sum()
-    st.caption(f"Total weight: **{total_weight:.1f}%** (target: 100%)")
+
+    # Dynamic weights
+    initial_cash = max(0.0, 100.0 - total_weight)
+    for p in positions:
+        if p.get("current_price") and p.get("entry_price"):
+            p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
+        else:
+            p["current_value"] = p["weight"]
+    total_current_value = sum(p["current_value"] for p in positions) + initial_cash
+    for p in positions:
+        p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
+    current_cash_pct = round(initial_cash / total_current_value * 100, 1)
+
+    st.caption(
+        f"Alloc. deployed: **{total_weight:.1f}%** · "
+        f"Initial cash: **{initial_cash:.1f}%** · "
+        f"Current cash: **{current_cash_pct:.1f}%**"
+    )
 
     display_cols = [c for c in [
-        "ticker", "name", "weight", "entry_price", "current_price",
+        "ticker", "name", "weight", "current_weight", "entry_price", "current_price",
         "perf_pct", "change_today", "entry_date",
         "sector", "geography", "thematic", "thesis_short"
     ] if c in df_pos.columns]
 
-    display_admin = df_pos[display_cols].rename(columns={
-        "ticker": "Ticker", "name": "Name", "weight": "Weight %",
-        "entry_price": "Entry", "current_price": "Price",
-        "perf_pct": "Perf %", "change_today": "Today %",
-        "entry_date": "Entry Date", "sector": "Sector",
-        "geography": "Geography", "thematic": "Thematic", "thesis_short": "Thesis",
+    # Rebuild df with dynamic weights included
+    df_pos2 = pd.DataFrame(positions)
+    display_admin = df_pos2[[c for c in display_cols if c in df_pos2.columns]].rename(columns={
+        "ticker":         "Ticker",
+        "name":           "Name",
+        "weight":         "Alloc.",
+        "current_weight": "Current %",
+        "entry_price":    "Entry",
+        "current_price":  "Price",
+        "perf_pct":       "Perf %",
+        "change_today":   "Today %",
+        "entry_date":     "Entry Date",
+        "sector":         "Sector",
+        "geography":      "Geography",
+        "thematic":       "Thematic",
+        "thesis_short":   "Thesis",
     })
-
-    cash_pct = round(max(0.0, 100.0 - total_weight), 1)
-    if cash_pct <= 0 or cash_pct >= 10:
-        cash_color = "#FF4B4B"
-    elif cash_pct <= 2 or cash_pct >= 8:
-        cash_color = "#FFA500"
-    else:
-        cash_color = "#00D09C"
 
     def color_signed_admin(col):
         return [
@@ -110,17 +129,21 @@ if positions:
         ]
 
     styled = display_admin.style.format({
-        "Weight %": lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
-        "Entry":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
-        "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
-        "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-        "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+        "Alloc.":    lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
+        "Current %": lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
+        "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+        "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+        "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+        "Today %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
     }).apply(color_signed_admin, subset=["Perf %", "Today %"])
 
     table_height = 38 + min(len(positions), 20) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
+
+    cash_color = "#00D09C" if 2 < current_cash_pct < 8 else "#FFA500" if current_cash_pct <= 10 else "#FF4B4B"
     st.markdown(
-        f"<span style='color:{cash_color}; font-weight:600;'>CASH (USD) — {cash_pct:.1f}%</span>",
+        f"<span style='color:{cash_color}; font-weight:600;'>"
+        f"CASH — Initial: {initial_cash:.1f}% · Current: {current_cash_pct:.1f}%</span>",
         unsafe_allow_html=True,
     )
 else:

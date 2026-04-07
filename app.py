@@ -70,6 +70,20 @@ valid   = [p for p in positions if p["perf_pct"] is not None]
 total_w = sum(p["weight"] for p in valid) or 1
 portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
 
+# ── Dynamic weights ────────────────────────────────────────────────────────────
+# current_value_i = entry_weight_i * (current_price_i / entry_price_i)
+# cash doesn't drift; total = sum(current_values) + initial_cash
+initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
+for p in positions:
+    if p.get("current_price") and p.get("entry_price"):
+        p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
+    else:
+        p["current_value"] = p["weight"]
+total_current_value = sum(p["current_value"] for p in positions) + initial_cash
+for p in positions:
+    p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
+current_cash_pct = round(initial_cash / total_current_value * 100, 1)
+
 chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
 history     = get_history(tickers, chart_start)
 
@@ -194,20 +208,21 @@ st.divider()
 with st.expander("Positions", expanded=True):
     df = pd.DataFrame(positions)
     display = df[[c for c in [
-        "ticker", "name", "weight", "entry_price", "current_price",
+        "ticker", "name", "weight", "current_weight", "entry_price", "current_price",
         "perf_pct", "change_today", "sector", "geography", "thematic", "thesis_short"
     ] if c in df.columns]].rename(columns={
-        "ticker":        "Ticker",
-        "name":          "Name",
-        "weight":        "Weight %",
-        "entry_price":   "Entry",
-        "current_price": "Price",
-        "perf_pct":      "Perf %",
-        "change_today":  "Today %",
-        "sector":        "Sector",
-        "geography":     "Geography",
-        "thematic":      "Thematic",
-        "thesis_short":  "Thesis",
+        "ticker":         "Ticker",
+        "name":           "Name",
+        "weight":         "Alloc.",
+        "current_weight": "Current %",
+        "entry_price":    "Entry",
+        "current_price":  "Price",
+        "perf_pct":       "Perf %",
+        "change_today":   "Today %",
+        "sector":         "Sector",
+        "geography":      "Geography",
+        "thematic":       "Thematic",
+        "thesis_short":   "Thesis",
     })
 
     def color_signed(col):
@@ -218,18 +233,18 @@ with st.expander("Positions", expanded=True):
         ]
 
     styled = display.style.format({
-        "Weight %": "{:.1f}%",
-        "Entry":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Price":    lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Perf %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-        "Today %":  lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
+        "Alloc.":    "{:.1f}%",
+        "Current %": "{:.2f}%",
+        "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+        "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+        "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
+        "Today %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
     }).apply(color_signed, subset=["Perf %", "Today %"])
 
     table_height = 38 + min(len(positions), 20) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-    cash_pct_pub = round(max(0.0, 100.0 - display["Weight %"].sum()), 1)
-    st.caption(f"CASH (USD) — {cash_pct_pub:.1f}%")
+    st.caption(f"CASH (USD) — Initial: {initial_cash:.1f}% · Current: {current_cash_pct:.1f}%")
 
     st.write("")
     st.markdown(f"""
@@ -277,11 +292,11 @@ st.divider()
 
 # ── Allocation ────────────────────────────────────────────────────────────────
 with st.expander("Allocation", expanded=True):
-    total_invested = display["Weight %"].sum()
-    cash_pct = round(max(0, 100 - total_invested), 1)
-    if cash_pct > 0:
+    # Donuts use current (dynamic) weights
+    if current_cash_pct > 0:
         cash_row = pd.DataFrame([{
-            "Ticker": "CASH", "Name": "Cash (USD)", "Weight %": cash_pct,
+            "Ticker": "CASH", "Name": "Cash (USD)", "Current %": current_cash_pct,
+            "Alloc.": initial_cash,
             "Entry": None, "Price": None, "Perf %": None, "Today %": None,
             "Sector": "Cash", "Geography": "USD", "Thematic": "Cash", "Thesis": "—",
         }])
@@ -292,9 +307,9 @@ with st.expander("Allocation", expanded=True):
     COLORS = px.colors.qualitative.Set2
 
     def donut_chart(df, col, title):
-        grouped = df.groupby(col)["Weight %"].sum().reset_index()
+        grouped = df.groupby(col)["Current %"].sum().reset_index()
         fig = px.pie(
-            grouped, values="Weight %", names=col, title=title,
+            grouped, values="Current %", names=col, title=title,
             hole=0.52, color_discrete_sequence=COLORS,
         )
         fig.update_traces(
@@ -341,10 +356,10 @@ with st.expander("Risk Analysis", expanded=True):
             st.metric("VaR 95% (1-day)", f"{v:.2f}%" if v is not None else "—",
                       help="Historical VaR: worst daily loss in 95% of scenarios")
         with ra4:
-            top3 = display.nlargest(3, "Weight %")[["Ticker", "Weight %"]]
-            top3_pct = top3["Weight %"].sum()
+            top3 = display.nlargest(3, "Current %")[["Ticker", "Current %"]]
+            top3_pct = top3["Current %"].sum()
             st.metric("Top 3 Concentration", f"{top3_pct:.1f}%",
-                      help=" · ".join(top3["Ticker"].tolist()))
+                      help=" · ".join(top3["Ticker"].tolist()) + " (current weights)")
 
         corr    = correlation_matrix(history, positions)
         avg_corr = avg_pairwise_correlation(history, positions)
