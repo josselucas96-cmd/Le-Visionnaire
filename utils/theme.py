@@ -88,6 +88,8 @@ THEMATIC_COLORS = {
     "Cybersecurity":          "#F472B6",   # pink
     "Cloud / Infrastructure": "#2DD4BF",   # teal
     "Clean Energy":           "#4ADE80",   # light green
+    "Digital Health":         "#34D399",   # emerald (same family as Healthcare)
+    "Energy Shortage":        "#FDE68A",   # pale yellow — broad energy theme
     "Communication":          "#93C5FD",   # light blue
     "Other":                  "#94A3B8",   # slate
     "Cash":                   "#374151",   # dark gray
