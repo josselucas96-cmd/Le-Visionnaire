@@ -11,7 +11,7 @@ from utils.nav import render_nav
 from utils.theme import (
     BG, GRID, BORDER, ACCENT, POSITIVE, NEGATIVE, SWITCH, TRIM,
     TEXT_MID, PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR,
-    CASH_COLOR, POSITION_COLORS, action_colors, chart_layout,
+    CASH_COLOR, POSITION_COLORS, THEMATIC_COLORS, action_colors, chart_layout,
 )
 
 st.set_page_config(
@@ -34,29 +34,6 @@ st.markdown("""
 
 render_nav("history")
 
-# ── Admin-only gate ───────────────────────────────────────────────────────────
-if not st.session_state.get("authenticated", False):
-    st.write("")
-    st.markdown(
-        f"""
-<div style="
-    max-width: 520px; margin: 6rem auto; text-align: center;
-    background: {BG}; border: 1px solid {BORDER};
-    border-radius: 16px; padding: 3rem 2.5rem;
-">
-    <div style="font-size:2.4rem; margin-bottom:1rem;">🔧</div>
-    <div style="font-size:1.4rem; font-weight:800; color:#EEF0F6; margin-bottom:0.8rem;">
-        Work in progress
-    </div>
-    <div style="font-size:0.9rem; color:#4A5568; line-height:1.7;">
-        This section will be made public once the portfolio has enough track record.
-        <br>Check back soon.
-    </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-    st.stop()
 
 ACTION_COLORS  = action_colors()
 ACTION_LABELS  = {"IN": "Buy", "OUT": "Sell", "SWITCH": "Switch", "TRIM": "Trim"}
@@ -218,7 +195,12 @@ with st.expander("Allocation Over Time", expanded=True):
         values = w_initial * window / base
         # Unique label handles duplicate tickers
         label  = f"{ticker}_{p['id']}" if p.get("id") else ticker
-        pos_series_list.append({"col": label, "ticker": ticker, "series": values})
+        pos_series_list.append({
+            "col": label,
+            "ticker": ticker,
+            "thematic": p.get("thematic", "Other"),
+            "series": values,
+        })
 
     if pos_series_list:
         all_dates = sorted(set().union(*[ps["series"].index for ps in pos_series_list]))
@@ -227,31 +209,28 @@ with st.expander("Allocation Over Time", expanded=True):
             df_vals[ps["col"]] = ps["series"].reindex(all_dates).fillna(0)
 
         # Dynamic cash: at each date, cash = 100 - sum of active position values
-        # (expressed as % of the original 100 portfolio)
         df_vals["CASH"] = (100.0 - df_vals.sum(axis=1)).clip(lower=0)
-
-        total = df_vals.sum(axis=1)
-        df_pct = df_vals.div(total, axis=0) * 100
 
         fig2 = go.Figure()
 
         pos_cols = [ps["col"] for ps in pos_series_list]
-        avg_w    = {c: df_pct[c].mean() for c in pos_cols}
+        avg_w    = {c: df_vals[c].mean() for c in pos_cols}
         pos_cols_sorted = sorted(pos_cols, key=lambda c: avg_w[c], reverse=True)
 
-        # Map col → display ticker name
-        col_to_ticker = {ps["col"]: ps["ticker"] for ps in pos_series_list}
+        # Map col → display ticker / thematic
+        col_to_ticker   = {ps["col"]: ps["ticker"]   for ps in pos_series_list}
+        col_to_thematic = {ps["col"]: ps["thematic"] for ps in pos_series_list}
 
         all_cols = pos_cols_sorted + ["CASH"]
-        col_map  = {c: POSITION_COLORS[i % len(POSITION_COLORS)]
-                    for i, c in enumerate(pos_cols_sorted)}
+        col_map  = {c: THEMATIC_COLORS.get(col_to_thematic.get(c, "Other"), "#6B7280")
+                    for c in pos_cols_sorted}
         col_map["CASH"] = "#2A3345"
 
         for col in all_cols:
-            if col not in df_pct.columns:
+            if col not in df_vals.columns:
                 continue
             display_name = col_to_ticker.get(col, col)
-            series = df_pct[col]
+            series = df_vals[col]
             fig2.add_trace(go.Scatter(
                 x=series.index,
                 y=series.values,
@@ -261,16 +240,15 @@ with st.expander("Allocation Over Time", expanded=True):
                 line=dict(width=0.5, color=col_map[col]),
                 fillcolor=col_map[col],
                 customdata=list(zip([display_name] * len(series), series.values)),
-                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f}%<br>%{x|%b %d, %Y}<extra></extra>",
+                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f} pts<br>%{x|%b %d, %Y}<extra></extra>",
             ))
 
         layout2 = chart_layout(height=380)
-        layout2["yaxis"]["title"] = "Allocation %"
-        layout2["yaxis"]["range"] = [0, 100]
+        layout2["yaxis"]["title"] = "NAV (base 100)"
         fig2.update_layout(**layout2)
         st.plotly_chart(fig2, use_container_width=True)
-        st.caption("Weekly allocation based on live prices vs entry price. "
-                   "Surfaces grow/shrink as positions appreciate or decline.")
+        st.caption("Weekly NAV breakdown. Total height = portfolio value (base 100 at inception). "
+                   "Each surface grows or shrinks as the position appreciates or declines.")
     else:
         st.info("Not enough data to render the allocation chart.")
 
