@@ -100,26 +100,22 @@ st.write("")
 # ══════════════════════════════════════════════════════════════════════════════
 with st.expander("Performance & Moves", expanded=True):
     if port_index is not None and not port_index.empty:
-        cb1, cb2, _ = st.columns([1, 1, 6])
-        with cb1:
-            show_spy = st.checkbox("S&P 500", value=True, key="h_show_spy")
-        with cb2:
-            show_qqq = st.checkbox("Nasdaq 100", value=False, key="h_show_qqq")
-
         fig = go.Figure()
 
-        if show_spy and spy_index is not None:
+        if spy_index is not None:
             fig.add_trace(go.Scatter(
                 x=spy_index.index, y=spy_index.values,
                 name="S&P 500",
+                visible=True,
                 line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot",
                           shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
             ))
-        if show_qqq and qqq_index is not None:
+        if qqq_index is not None:
             fig.add_trace(go.Scatter(
                 x=qqq_index.index, y=qqq_index.values,
                 name="Nasdaq 100",
+                visible="legendonly",
                 line=dict(color="#A78BFA", width=1.5, dash="dash",
                           shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>Nasdaq 100: %{y:.1f}<extra></extra>",
