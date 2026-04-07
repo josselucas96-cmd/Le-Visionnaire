@@ -69,8 +69,8 @@ if history.empty:
 
 today_ts = pd.Timestamp(date.today())
 
-# Portfolio index (active positions only, for the perf line)
-port_index = build_portfolio_index(history, active_pos)
+# Portfolio index — use ALL positions (active + closed) for true historical perf
+port_index = build_portfolio_index(history, all_positions)
 spy_raw    = history["SPY"].dropna() if "SPY" in history.columns else None
 spy_index  = spy_raw / spy_raw.iloc[0] * 100 if spy_raw is not None else None
 
@@ -182,11 +182,9 @@ with st.expander("Allocation Over Time", expanded=True):
     # Resample to weekly
     hist_w = history.resample("W").last()
 
-    initial_cash = max(0.0, 100.0 - sum(float(p["weight"]) for p in all_positions
-                                        if p.get("is_active")))
-
-    # For each position, build a value series (only when active)
-    position_values = {}
+    # Build per-position value series (only during active window)
+    # Use a list to handle same ticker bought twice (e.g. NVDA sold and re-bought)
+    pos_series_list = []
     for p in all_positions:
         ticker = p["ticker"]
         if ticker not in hist_w.columns:
@@ -196,55 +194,58 @@ with st.expander("Allocation Over Time", expanded=True):
         w_initial = float(p["weight"])
 
         series = hist_w[ticker].dropna()
-        active = series[(series.index >= entry_ts) & (series.index <= exit_ts)]
-        if active.empty:
+        window = series[(series.index >= entry_ts) & (series.index <= exit_ts)]
+        if window.empty:
             continue
 
-        base = active.iloc[0]
-        values = w_initial * active / base
-        label = f"{ticker} ({p['name'].split()[0] if p.get('name') else ticker})"
-        position_values[ticker] = {"series": values, "label": ticker}
+        base   = window.iloc[0]
+        values = w_initial * window / base
+        # Unique label handles duplicate tickers
+        label  = f"{ticker}_{p['id']}" if p.get("id") else ticker
+        pos_series_list.append({"col": label, "ticker": ticker, "series": values})
 
-    if position_values:
-        all_dates = sorted(set().union(*[v["series"].index for v in position_values.values()]))
+    if pos_series_list:
+        all_dates = sorted(set().union(*[ps["series"].index for ps in pos_series_list]))
         df_vals = pd.DataFrame(index=all_dates)
-        for ticker, info in position_values.items():
-            df_vals[ticker] = info["series"].reindex(all_dates)
-        df_vals = df_vals.fillna(0)
-        df_vals["CASH"] = initial_cash
+        for ps in pos_series_list:
+            df_vals[ps["col"]] = ps["series"].reindex(all_dates).fillna(0)
+
+        # Dynamic cash: at each date, cash = 100 - sum of active position values
+        # (expressed as % of the original 100 portfolio)
+        df_vals["CASH"] = (100.0 - df_vals.sum(axis=1)).clip(lower=0)
 
         total = df_vals.sum(axis=1)
         df_pct = df_vals.div(total, axis=0) * 100
 
         fig2 = go.Figure()
 
-        # Cash first (bottom)
-        colors_used = {}
-        tickers_sorted = [c for c in df_pct.columns if c != "CASH"]
-        # Sort by average weight descending for better visual
-        avg_w = {t: df_pct[t].mean() for t in tickers_sorted}
-        tickers_sorted = sorted(tickers_sorted, key=lambda t: avg_w[t], reverse=True)
+        pos_cols = [ps["col"] for ps in pos_series_list]
+        avg_w    = {c: df_pct[c].mean() for c in pos_cols}
+        pos_cols_sorted = sorted(pos_cols, key=lambda c: avg_w[c], reverse=True)
 
-        all_cols = tickers_sorted + ["CASH"]
-        col_map  = {t: POSITION_COLORS[i % len(POSITION_COLORS)]
-                    for i, t in enumerate(tickers_sorted)}
+        # Map col → display ticker name
+        col_to_ticker = {ps["col"]: ps["ticker"] for ps in pos_series_list}
+
+        all_cols = pos_cols_sorted + ["CASH"]
+        col_map  = {c: POSITION_COLORS[i % len(POSITION_COLORS)]
+                    for i, c in enumerate(pos_cols_sorted)}
         col_map["CASH"] = "#2A3345"
 
-        for i, ticker in enumerate(all_cols):
-            if ticker not in df_pct.columns:
+        for col in all_cols:
+            if col not in df_pct.columns:
                 continue
-            series = df_pct[ticker]
-            hover = [f"<b>{ticker}</b><br>{v:.1f}%<br>{d.strftime('%b %d, %Y')}<extra></extra>"
-                     for d, v in zip(series.index, series.values)]
+            display_name = col_to_ticker.get(col, col)
+            series = df_pct[col]
             fig2.add_trace(go.Scatter(
                 x=series.index,
                 y=series.values,
-                name=ticker,
+                name=display_name,
                 mode="lines",
                 stackgroup="one",
-                line=dict(width=0.5, color=col_map[ticker]),
-                fillcolor=col_map[ticker],
-                hovertemplate=hover,
+                line=dict(width=0.5, color=col_map[col]),
+                fillcolor=col_map[col],
+                customdata=list(zip([display_name] * len(series), series.values)),
+                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f}%<br>%{x|%b %d, %Y}<extra></extra>",
             ))
 
         fig2.update_layout(

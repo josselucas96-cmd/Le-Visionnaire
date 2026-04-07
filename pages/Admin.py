@@ -97,15 +97,15 @@ if positions:
         f"Current cash: **{current_cash_pct:.1f}%**"
     )
 
+    # Rebuild df AFTER dynamic weights have been added to position dicts
+    df_pos2 = pd.DataFrame(positions)
     display_cols = [c for c in [
         "ticker", "name", "weight", "current_weight", "entry_price", "current_price",
         "perf_pct", "change_today", "entry_date",
         "sector", "geography", "thematic", "thesis_short"
-    ] if c in df_pos.columns]
+    ] if c in df_pos2.columns]
 
-    # Rebuild df with dynamic weights included
-    df_pos2 = pd.DataFrame(positions)
-    display_admin = df_pos2[[c for c in display_cols if c in df_pos2.columns]].rename(columns={
+    display_admin = df_pos2[display_cols].rename(columns={
         "ticker":         "Ticker",
         "name":           "Name",
         "weight":         "Alloc.",
