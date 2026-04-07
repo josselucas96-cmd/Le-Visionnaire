@@ -78,7 +78,7 @@ GEO_COLORS = {
 THEMATIC_COLORS = {
     "AI / Semi":              "#6366F1",   # same as Tech
     "Crypto Currencies Play": "#F97316",   # bitcoin orange
-    "Biotech":                "#34D399",   # same as Healthcare
+    "Biotech":                "#059669",   # dark emerald
     "Space / Defense":        "#6B7280",   # gray
     "Consumer Growth":        "#FCD34D",   # yellow
     "Robotics / Automation":  "#C084FC",   # purple
