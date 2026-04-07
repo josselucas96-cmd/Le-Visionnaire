@@ -13,6 +13,11 @@ from utils.metrics import (
 )
 from utils.research import get_research
 from utils.nav import render_nav
+from utils.theme import (
+    BG, GRID, BORDER, ACCENT, POSITIVE, NEGATIVE, SWITCH, TRIM,
+    TEXT_MID, TEXT_DIM, PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR,
+    CASH_COLOR, POSITION_COLORS, chart_layout,
+)
 
 _published_count = len([p for p in get_research() if p["status"] == "published"])
 papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} published" if _published_count else "Coming soon"
@@ -37,8 +42,8 @@ st.markdown("""
         font-weight: 800 !important;
         letter-spacing: -0.3px !important;
     }
-    .disclaimer { font-size: 0.72rem; color: #666; margin-top: 3rem;
-                  border-top: 1px solid #222; padding-top: 1rem; line-height: 1.5; }
+    .disclaimer { font-size: 0.72rem; color: #4A5568; margin-top: 3rem;
+                  border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -149,27 +154,21 @@ with st.expander("Performance", expanded=True):
         fig.add_trace(go.Scatter(
             x=port_index.index, y=port_index.values,
             name=portfolio_name,
-            line=dict(color="#00D09C", width=2.5),
+            line=dict(color=PORTFOLIO_LINE, width=2.5, shape="spline", smoothing=0.8),
             hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
         ))
         if spy_index is not None:
             fig.add_trace(go.Scatter(
                 x=spy_index.index, y=spy_index.values,
                 name="S&P 500",
-                line=dict(color="#888888", width=1.5, dash="dot"),
+                line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot", shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
             ))
-        fig.add_hline(y=100, line_dash="dash", line_color="#333", line_width=1)
-        fig.update_layout(
-            plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
-            font=dict(color="#CCC"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            yaxis=dict(title="Base 100", gridcolor="#1F2633", zeroline=False),
-            xaxis=dict(gridcolor="#1F2633"),
-            hovermode="x unified",
-            height=380,
-            margin=dict(l=0, r=0, t=10, b=0),
-        )
+        fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
+        layout = chart_layout(height=380)
+        layout["hovermode"] = "x unified"
+        layout["yaxis"]["title"] = "Base 100"
+        fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True)
 
         port_ret = daily_returns(port_index)
@@ -227,8 +226,8 @@ with st.expander("Positions", expanded=True):
 
     def color_signed(col):
         return [
-            "color: #00D09C" if isinstance(v, (int, float)) and v > 0
-            else "color: #FF4B4B" if isinstance(v, (int, float)) and v < 0
+            f"color: {POSITIVE}" if isinstance(v, (int, float)) and v > 0
+            else f"color: {NEGATIVE}" if isinstance(v, (int, float)) and v < 0
             else "" for v in col
         ]
 
@@ -304,21 +303,19 @@ with st.expander("Allocation", expanded=True):
     else:
         display_alloc = display
 
-    COLORS = px.colors.qualitative.Set2
-
     def donut_chart(df, col, title):
         grouped = df.groupby(col)["Current %"].sum().reset_index()
         fig = px.pie(
             grouped, values="Current %", names=col, title=title,
-            hole=0.52, color_discrete_sequence=COLORS,
+            hole=0.52, color_discrete_sequence=POSITION_COLORS,
         )
         fig.update_traces(
             textinfo="percent",
             hovertemplate="%{label}: %{value:.1f}%<extra></extra>",
         )
         fig.update_layout(
-            plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
-            font=dict(color="#CCC"),
+            plot_bgcolor=BG, paper_bgcolor=BG,
+            font=dict(color=TEXT_MID),
             margin=dict(l=0, r=0, t=40, b=0),
             legend=dict(font=dict(size=11)),
             title_font_size=14,
@@ -365,11 +362,11 @@ with st.expander("Risk Analysis", expanded=True):
         avg_corr = avg_pairwise_correlation(history, positions)
         if avg_corr is not None:
             if avg_corr < 0.3:
-                corr_label, corr_color = "Low — well diversified", "#00D09C"
+                corr_label, corr_color = "Low — well diversified", POSITIVE
             elif avg_corr < 0.6:
-                corr_label, corr_color = "Moderate", "#FFA500"
+                corr_label, corr_color = "Moderate", TRIM
             else:
-                corr_label, corr_color = "High — concentrated risk", "#FF4B4B"
+                corr_label, corr_color = "High — concentrated risk", NEGATIVE
             st.markdown(
                 f"**Avg Pairwise Correlation** &nbsp; "
                 f"<span style='font-size:1.6rem; font-weight:800;'>{avg_corr}</span>"
@@ -389,9 +386,9 @@ with st.expander("Risk Analysis", expanded=True):
                 x=corr.columns.tolist(),
                 y=corr.index.tolist(),
                 colorscale=[
-                    [0.0, "#FF4B4B"],
-                    [0.5, "#0E1117"],
-                    [1.0, "#00D09C"],
+                    [0.0, NEGATIVE],
+                    [0.5, BG],
+                    [1.0, ACCENT],
                 ],
                 zmin=-1, zmax=1,
                 text=corr.values.round(2),
@@ -400,8 +397,8 @@ with st.expander("Risk Analysis", expanded=True):
                 hovertemplate="%{y} / %{x}: %{z:.2f}<extra></extra>",
             ))
             fig_corr.update_layout(
-                plot_bgcolor="#0E1117", paper_bgcolor="#0E1117",
-                font=dict(color="#CCC"),
+                plot_bgcolor=BG, paper_bgcolor=BG,
+                font=dict(color=TEXT_MID),
                 height=380,
                 margin=dict(l=0, r=0, t=10, b=0),
                 xaxis=dict(side="bottom"),

@@ -8,6 +8,11 @@ from utils.data import get_positions, get_transactions
 from utils.market import get_history
 from utils.metrics import build_portfolio_index
 from utils.nav import render_nav
+from utils.theme import (
+    BG, GRID, BORDER, ACCENT, POSITIVE, NEGATIVE, SWITCH, TRIM,
+    TEXT_MID, PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR,
+    CASH_COLOR, POSITION_COLORS, action_colors, chart_layout,
+)
 
 st.set_page_config(
     page_title="History Analysis | Le Visionnaire",
@@ -29,26 +34,32 @@ st.markdown("""
 
 render_nav("history")
 
-DARK_BG   = "#0E1117"
-GRID_COL  = "#1F2633"
-ACTION_COLORS = {
-    "IN":     "#00D09C",
-    "OUT":    "#FF4B4B",
-    "SWITCH": "#4B9EFF",
-    "TRIM":   "#FFA500",
-}
-ACTION_LABELS = {
-    "IN":     "Buy",
-    "OUT":    "Sell",
-    "SWITCH": "Switch",
-    "TRIM":   "Trim",
-}
+# ── Admin-only gate ───────────────────────────────────────────────────────────
+if not st.session_state.get("authenticated", False):
+    st.write("")
+    st.markdown(
+        f"""
+<div style="
+    max-width: 520px; margin: 6rem auto; text-align: center;
+    background: {BG}; border: 1px solid {BORDER};
+    border-radius: 16px; padding: 3rem 2.5rem;
+">
+    <div style="font-size:2.4rem; margin-bottom:1rem;">🔧</div>
+    <div style="font-size:1.4rem; font-weight:800; color:#EEF0F6; margin-bottom:0.8rem;">
+        Work in progress
+    </div>
+    <div style="font-size:0.9rem; color:#4A5568; line-height:1.7;">
+        This section will be made public once the portfolio has enough track record.
+        <br>Check back soon.
+    </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    st.stop()
 
-POSITION_COLORS = [
-    "#00D09C", "#4B9EFF", "#FFA500", "#FF4B4B", "#A78BFA",
-    "#34D399", "#F472B6", "#60A5FA", "#FBBF24", "#F87171",
-    "#818CF8",
-]
+ACTION_COLORS  = action_colors()
+ACTION_LABELS  = {"IN": "Buy", "OUT": "Sell", "SWITCH": "Switch", "TRIM": "Trim"}
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 all_positions  = get_positions(active_only=False)
@@ -94,7 +105,8 @@ with st.expander("Performance & Moves", expanded=True):
             fig.add_trace(go.Scatter(
                 x=spy_index.index, y=spy_index.values,
                 name="S&P 500",
-                line=dict(color="#555", width=1.5, dash="dot"),
+                line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot",
+                          shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
             ))
 
@@ -102,7 +114,7 @@ with st.expander("Performance & Moves", expanded=True):
         fig.add_trace(go.Scatter(
             x=port_index.index, y=port_index.values,
             name="Le Visionnaire",
-            line=dict(color="#00D09C", width=2.5),
+            line=dict(color=PORTFOLIO_LINE, width=2.5, shape="spline", smoothing=0.8),
             hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
         ))
 
@@ -160,17 +172,10 @@ with st.expander("Performance & Moves", expanded=True):
                 text=texts,
             ))
 
-        fig.add_hline(y=100, line_dash="dash", line_color="#333", line_width=1)
-        fig.update_layout(
-            plot_bgcolor=DARK_BG, paper_bgcolor=DARK_BG,
-            font=dict(color="#CCC"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            yaxis=dict(title="Base 100", gridcolor=GRID_COL, zeroline=False),
-            xaxis=dict(gridcolor=GRID_COL),
-            hovermode="closest",
-            height=420,
-            margin=dict(l=0, r=0, t=30, b=0),
-        )
+        fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
+        layout = chart_layout(height=420)
+        layout["yaxis"]["title"] = "Base 100"
+        fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Not enough data to render the performance chart.")
@@ -248,17 +253,10 @@ with st.expander("Allocation Over Time", expanded=True):
                 hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f}%<br>%{x|%b %d, %Y}<extra></extra>",
             ))
 
-        fig2.update_layout(
-            plot_bgcolor=DARK_BG, paper_bgcolor=DARK_BG,
-            font=dict(color="#CCC"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                        font=dict(size=10)),
-            yaxis=dict(title="Allocation %", gridcolor=GRID_COL, range=[0, 100]),
-            xaxis=dict(gridcolor=GRID_COL),
-            hovermode="closest",
-            height=380,
-            margin=dict(l=0, r=0, t=30, b=0),
-        )
+        layout2 = chart_layout(height=380)
+        layout2["yaxis"]["title"] = "Allocation %"
+        layout2["yaxis"]["range"] = [0, 100]
+        fig2.update_layout(**layout2)
         st.plotly_chart(fig2, use_container_width=True)
         st.caption("Weekly allocation based on live prices vs entry price. "
                    "Surfaces grow/shrink as positions appreciate or decline.")
@@ -339,20 +337,11 @@ with st.expander("Position Timeline", expanded=True):
         annotation_font_color="#666",
     )
 
-    fig3.update_layout(
-        plot_bgcolor=DARK_BG, paper_bgcolor=DARK_BG,
-        font=dict(color="#CCC"),
-        xaxis=dict(
-            type="date",
-            gridcolor=GRID_COL,
-            title="",
-        ),
-        yaxis=dict(gridcolor=GRID_COL, autorange="reversed"),
-        barmode="overlay",
-        height=80 + len(sorted_pos) * 36,
-        margin=dict(l=0, r=0, t=10, b=0),
-        hovermode="closest",
-    )
+    layout3 = chart_layout(height=80 + len(sorted_pos) * 36)
+    layout3["xaxis"]["type"] = "date"
+    layout3["yaxis"]["autorange"] = "reversed"
+    layout3["barmode"] = "overlay"
+    fig3.update_layout(**layout3)
     st.plotly_chart(fig3, use_container_width=True)
     st.caption(
         "Green = active position · Red = closed at a loss · Blue = closed at a gain · "
