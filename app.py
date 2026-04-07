@@ -185,6 +185,13 @@ with st.expander("Performance", expanded=True):
         layout = chart_layout(height=380)
         layout["hovermode"] = "x unified"
         layout["yaxis"]["title"] = "Base 100"
+        layout["legend"] = dict(
+            orientation="h",
+            yanchor="top", y=-0.08,
+            xanchor="center", x=0.5,
+            font=dict(size=10),
+            bgcolor="rgba(0,0,0,0)",
+        )
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True)
 
