@@ -7,9 +7,10 @@ def render_nav(current: str):
     current: one of 'app', 'research', 'about'
     """
     pages = [
-        ("Portfolio",     "/",         "app"),
-        ("Stock Papers",  "/Research", "research"),
-        ("About",         "/About",    "about"),
+        ("Portfolio",         "/",                "app"),
+        ("History",           "/HistoryAnalysis", "history"),
+        ("Stock Papers",      "/Research",        "research"),
+        ("About",             "/About",           "about"),
     ]
 
     links_html = ""
