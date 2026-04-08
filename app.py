@@ -387,7 +387,11 @@ with st.expander("Allocation", expanded=True):
     }
 
     def layer_donut(df):
-        grouped = df.groupby("Layer")["Alloc."].sum().reset_index() if "Layer" in df.columns else pd.DataFrame()
+        if "Layer" not in df.columns:
+            return None
+        df_layer = df.copy()
+        df_layer["Layer"] = df_layer["Layer"].replace("Cash", "Cash/Equivalent")
+        grouped = df_layer.groupby("Layer")["Alloc."].sum().reset_index()
         if grouped.empty:
             return None
         color_map = {c: LAYER_COLORS.get(c, "#6B7280") for c in grouped["Layer"].unique()}
