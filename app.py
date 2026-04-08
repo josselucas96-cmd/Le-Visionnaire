@@ -230,6 +230,7 @@ st.divider()
 # ── Positions ─────────────────────────────────────────────────────────────────
 with st.expander("Positions", expanded=True):
     df = pd.DataFrame(positions)
+    df = df.sort_values("current_weight", ascending=False)
     display = df[[c for c in [
         "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
         "perf_pct", "change_today", "sector", "geography", "thematic", "thesis_short"
@@ -317,7 +318,7 @@ with st.expander("Allocation", expanded=True):
     # Donuts use current (dynamic) weights
     if current_cash_pct > 0:
         cash_row = pd.DataFrame([{
-            "Ticker": "CASH", "Name": "Cash (USD)", "Alloc.": current_cash_pct,
+            "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
             "Entry": None, "Price": None, "Perf %": None, "Today %": None,
             "Sector": "Cash", "Geography": "USD", "Thematic": "Cash", "Thesis": "—",
         }])
@@ -352,11 +353,36 @@ with st.expander("Allocation", expanded=True):
         )
         return fig
 
-    a1, a2, a3 = st.columns(3)
+    LAYER_COLORS = {
+        "Core":       "#6366F1",
+        "Conviction": "#F97316",
+        "Moonshot":   "#34D399",
+        "Cash":       "#374151",
+    }
+
+    def layer_donut(df):
+        grouped = df.groupby("Layer")["Alloc."].sum().reset_index() if "Layer" in df.columns else pd.DataFrame()
+        if grouped.empty:
+            return None
+        color_map = {c: LAYER_COLORS.get(c, "#6B7280") for c in grouped["Layer"].unique()}
+        fig = px.pie(grouped, values="Alloc.", names="Layer", title="Portfolio Layer",
+                     hole=0.52, color="Layer", color_discrete_map=color_map)
+        fig.update_traces(textinfo="percent",
+                          hovertemplate="%{label}: %{value:.2f}%<extra></extra>")
+        fig.update_layout(plot_bgcolor=BG, paper_bgcolor=BG, font=dict(color=TEXT_MID),
+                          margin=dict(l=0, r=0, t=40, b=0),
+                          legend=dict(font=dict(size=11)), title_font_size=14)
+        return fig
+
+    a1, a2, a3, a4 = st.columns(4)
+    layer_fig = layer_donut(display_alloc)
+    if layer_fig:
+        with a1:
+            st.plotly_chart(layer_fig, use_container_width=True)
     for col_name, title, container in [
-        ("Sector",    "Sector",    a1),
-        ("Geography", "Geography", a2),
-        ("Thematic",  "Thematic",  a3),
+        ("Sector",    "Sector",    a2),
+        ("Geography", "Geography", a3),
+        ("Thematic",  "Thematic",  a4),
     ]:
         if col_name in display_alloc.columns:
             with container:
@@ -383,8 +409,8 @@ with st.expander("Risk Analysis", expanded=True):
             st.metric("VaR 95% (1-day)", f"{v:.2f}%" if v is not None else "—",
                       help="Historical VaR: worst daily loss in 95% of scenarios")
         with ra4:
-            top3 = display.nlargest(3, "Current %")[["Ticker", "Current %"]]
-            top3_pct = top3["Current %"].sum()
+            top3 = display.nlargest(3, "Alloc.")[["Ticker", "Alloc."]]
+            top3_pct = top3["Alloc."].sum()
             st.metric("Top 3 Concentration", f"{top3_pct:.1f}%",
                       help=" · ".join(top3["Ticker"].tolist()) + " (current weights)")
 
