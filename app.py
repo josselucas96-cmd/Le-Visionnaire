@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 from utils.data import get_positions, get_setting
-from utils.market import get_prices, get_history, get_dividends_since
+from utils.market import get_prices, get_history, get_total_return_factor
 from utils.metrics import (
     build_portfolio_index, daily_returns,
     sharpe_ratio, max_drawdown, beta_vs_spy,
@@ -61,23 +61,25 @@ if not positions:
 tickers = tuple(p["ticker"] for p in positions)
 prices  = get_prices(tickers)
 
-# ── Dividends (total return) ───────────────────────────────────────────────────
-entry_dates  = tuple(p["entry_date"] for p in positions)
-dividends    = get_dividends_since(tickers, entry_dates)
+# ── Total Return (price + reinvested dividends) ───────────────────────────────
+entry_dates    = tuple(p["entry_date"] for p in positions)
+entry_prices_t = tuple(float(p["entry_price"]) for p in positions)
+tr_factors     = get_total_return_factor(tickers, entry_dates, entry_prices_t)
 
 for p in positions:
     live = prices.get(p["ticker"], {})
     p["current_price"] = live.get("price")
     p["change_today"]  = live.get("change_pct")
-    divs_per_share     = dividends.get(p["ticker"], 0.0)
-    p["dividends_per_share"] = divs_per_share
+
+    factor = tr_factors.get(p["ticker"], {"shares_factor": 1.0, "div_return_pct": 0.0})
+    p["div_return"] = factor["div_return_pct"]
 
     if p["current_price"] and p["entry_price"]:
-        price_return = (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100
-        div_return   = divs_per_share / p["entry_price"] * 100
-        p["perf_pct"]      = round(price_return + div_return, 2)
+        price_return       = (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100
+        # Total return = price gain on reinvested shares + div accumulation
+        total_return       = (factor["shares_factor"] * p["current_price"] / p["entry_price"] - 1) * 100
         p["price_return"]  = round(price_return, 2)
-        p["div_return"]    = round(div_return, 2)
+        p["perf_pct"]      = round(total_return, 2)
     else:
         p["perf_pct"]     = None
         p["price_return"] = None
