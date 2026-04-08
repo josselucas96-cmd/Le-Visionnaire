@@ -123,12 +123,17 @@ def _trailing_returns(history: pd.DataFrame, tickers: list, lookback_days: int =
     return window.pct_change().dropna(how="all")
 
 
-def avg_pairwise_correlation(history: pd.DataFrame, positions: list) -> float | None:
-    """Average of all off-diagonal correlation coefficients — trailing 12 months."""
+def avg_pairwise_correlation(history: pd.DataFrame, positions: list,
+                             inception: bool = False) -> float | None:
+    """Average of all off-diagonal correlation coefficients.
+    inception=False → trailing 12 months (default)
+    inception=True  → full history since first data point
+    """
     tickers = [p["ticker"] for p in positions if p["ticker"] in history.columns]
     if len(tickers) < 2:
         return None
-    returns = _trailing_returns(history, tickers)
+    returns = history[tickers].pct_change().dropna(how="all") if inception \
+              else _trailing_returns(history, tickers)
     if len(returns) < 10:
         return None
     corr = returns.corr()
@@ -137,12 +142,17 @@ def avg_pairwise_correlation(history: pd.DataFrame, positions: list) -> float | 
     return round(float(values.mean()), 2)
 
 
-def correlation_matrix(history: pd.DataFrame, positions: list) -> pd.DataFrame:
-    """Daily return correlation — trailing 12 months."""
+def correlation_matrix(history: pd.DataFrame, positions: list,
+                       inception: bool = False) -> pd.DataFrame:
+    """Daily return correlation matrix.
+    inception=False → trailing 12 months (default)
+    inception=True  → full history since first data point
+    """
     tickers = [p["ticker"] for p in positions if p["ticker"] in history.columns]
     if len(tickers) < 2:
         return pd.DataFrame()
-    returns = _trailing_returns(history, tickers)
+    returns = history[tickers].pct_change().dropna(how="all") if inception \
+              else _trailing_returns(history, tickers)
     if len(returns) < 10:
         return pd.DataFrame()
     return returns.corr().round(2)

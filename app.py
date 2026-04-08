@@ -440,8 +440,16 @@ with st.expander("Risk Analysis", expanded=True):
             st.metric("Top 3 Concentration", f"{top3_pct:.1f}%",
                       help=" · ".join(top3["Ticker"].tolist()) + " (current weights)")
 
-        corr    = correlation_matrix(history, positions)
-        avg_corr = avg_pairwise_correlation(history, positions)
+        corr_mode = st.radio(
+            "Correlation window",
+            ["Trailing 12 months", "Since inception"],
+            horizontal=True,
+            index=0,
+            label_visibility="collapsed",
+        )
+        use_inception = corr_mode == "Since inception"
+        corr     = correlation_matrix(history, positions, inception=use_inception)
+        avg_corr = avg_pairwise_correlation(history, positions, inception=use_inception)
         if avg_corr is not None:
             if avg_corr < 0.3:
                 corr_label, corr_color = "Low — well diversified", POSITIVE
@@ -462,7 +470,8 @@ with st.expander("Risk Analysis", expanded=True):
             )
 
         if not corr.empty:
-            st.markdown("**Correlation Matrix** (daily returns, trailing 12 months)")
+            label = "trailing 12 months" if not use_inception else "since inception"
+            st.markdown(f"**Correlation Matrix** (daily returns, {label})")
             fig_corr = go.Figure(data=go.Heatmap(
                 z=corr.values,
                 x=corr.columns.tolist(),
