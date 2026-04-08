@@ -267,7 +267,7 @@ with st.expander("Positions", expanded=True):
     table_height = 38 + min(len(positions), 20) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-    st.caption(f"CASH (USD) — Initial: {initial_cash:.1f}% · Current: {current_cash_pct:.1f}%")
+    st.caption(f"Cash (+ STRC) — Initial: {initial_cash:.1f}% · Current: {current_cash_pct:.1f}%")
 
     st.write("")
     st.markdown(f"""
