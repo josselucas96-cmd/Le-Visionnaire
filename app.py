@@ -97,6 +97,12 @@ cash_equiv_current = round(current_cash_pct + strc_current_pct, 1)
 chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
 history     = get_history(tickers, chart_start)
 
+# Separate 1-year history for correlation (independent of inception date)
+from datetime import date, timedelta
+corr_start   = (date.today() - timedelta(days=365)).isoformat()
+corr_tickers = tuple(p["ticker"] for p in positions if p["ticker"] not in ("STRC",))
+history_corr = get_history(corr_tickers, corr_start)
+
 spy_perf  = None
 spy_index = None
 qqq_index = None
@@ -452,8 +458,9 @@ with st.expander("Risk Analysis", expanded=True):
             label_visibility="collapsed",
         )
         use_inception = corr_mode == "Since inception"
-        corr     = correlation_matrix(history, positions, inception=use_inception)
-        avg_corr = avg_pairwise_correlation(history, positions, inception=use_inception)
+        h_for_corr = history if use_inception else history_corr
+        corr     = correlation_matrix(h_for_corr, positions, inception=True)
+        avg_corr = avg_pairwise_correlation(h_for_corr, positions, inception=True)
         if avg_corr is not None:
             if avg_corr < 0.3:
                 corr_label, corr_color = "Low — well diversified", POSITIVE
