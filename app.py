@@ -80,6 +80,7 @@ portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
 # current_value_i = entry_weight_i * (current_price_i / entry_price_i)
 # cash doesn't drift; total = sum(current_values) + initial_cash
 initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
+strc_weight   = sum(p["weight"] for p in positions if p.get("ticker") == "STRC")
 for p in positions:
     if p.get("current_price") and p.get("entry_price"):
         p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
@@ -88,7 +89,10 @@ for p in positions:
 total_current_value = sum(p["current_value"] for p in positions) + initial_cash
 for p in positions:
     p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
-current_cash_pct = round(initial_cash / total_current_value * 100, 1)
+current_cash_pct  = round(initial_cash / total_current_value * 100, 1)
+strc_current_pct  = round(sum(p["current_weight"] for p in positions if p.get("ticker") == "STRC"), 1)
+cash_equiv_initial = round(initial_cash + strc_weight, 1)
+cash_equiv_current = round(current_cash_pct + strc_current_pct, 1)
 
 chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
 history     = get_history(tickers, chart_start)
@@ -267,7 +271,7 @@ with st.expander("Positions", expanded=True):
     table_height = 38 + min(len(positions), 20) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-    st.caption(f"Cash (+ STRC) — Initial: {initial_cash:.1f}% · Current: {current_cash_pct:.1f}%")
+    st.caption(f"Cash (+ STRC) — Initial: {cash_equiv_initial:.1f}% · Current: {cash_equiv_current:.1f}%")
 
     st.write("")
     st.markdown(f"""
@@ -316,15 +320,22 @@ st.divider()
 # ── Allocation ────────────────────────────────────────────────────────────────
 with st.expander("Allocation", expanded=True):
     # Donuts use current (dynamic) weights
+    # Reclassify STRC as Cash/Equivalent for donut display
+    display_donut = display.copy()
+    display_donut.loc[display_donut["Ticker"] == "STRC", "Sector"]   = "Cash/Equivalent"
+    display_donut.loc[display_donut["Ticker"] == "STRC", "Thematic"] = "Cash/Equivalent"
+    display_donut.loc[display_donut["Ticker"] == "STRC", "Geography"] = "USD"
+
     if current_cash_pct > 0:
         cash_row = pd.DataFrame([{
             "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
             "Entry": None, "Price": None, "Perf %": None, "Today %": None,
-            "Sector": "Cash", "Geography": "USD", "Thematic": "Cash", "Thesis": "—",
+            "Sector": "Cash/Equivalent", "Geography": "USD",
+            "Thematic": "Cash/Equivalent", "Thesis": "—",
         }])
-        display_alloc = pd.concat([display, cash_row], ignore_index=True)
+        display_alloc = pd.concat([display_donut, cash_row], ignore_index=True)
     else:
-        display_alloc = display
+        display_alloc = display_donut
 
     COLOR_MAPS = {
         "Sector":    SECTOR_COLORS,

@@ -59,7 +59,8 @@ SECTOR_COLORS = {
     "Materials":     "#A8A29E",   # stone
     "Real Estate":   "#818CF8",   # soft indigo
     "Utilities":     "#94A3B8",   # slate
-    "Cash":          "#374151",   # dark gray
+    "Cash":              "#374151",   # dark gray
+    "Cash/Equivalent":   "#374151",   # dark gray
 }
 
 # Geography
@@ -96,6 +97,7 @@ THEMATIC_COLORS = {
     "EV / China":             "#86EFAC",   # light green
     "Other":                  "#94A3B8",   # slate
     "Cash":                   "#374151",   # dark gray
+    "Cash/Equivalent":        "#374151",   # dark gray
 }
 
 
