@@ -256,7 +256,7 @@ with st.expander("Positions", expanded=True):
     df = df.sort_values("current_weight", ascending=False)
     display = df[[c for c in [
         "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
-        "price_return", "div_return", "perf_pct", "change_today",
+        "perf_pct", "change_today",
         "sector", "geography", "thematic", "thesis_short"
     ] if c in df.columns]].rename(columns={
         "ticker":         "Ticker",
@@ -265,8 +265,6 @@ with st.expander("Positions", expanded=True):
         "current_weight": "Alloc.",
         "entry_price":    "Entry",
         "current_price":  "Price",
-        "price_return":   "Price %",
-        "div_return":     "Div %",
         "perf_pct":       "Total Return",
         "change_today":   "Today %",
         "sector":         "Sector",
@@ -291,7 +289,7 @@ with st.expander("Positions", expanded=True):
         "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
         "Alloc.": current_cash_pct,
         "Entry": None, "Price": None,
-        "Price %": None, "Div %": None, "Total Return": None, "Today %": None,
+        "Total Return": None, "Today %": None,
         "Sector": "—", "Geography": "USD", "Thematic": "—", "Thesis": "Dry powder — uninvested capital.",
     }])
 
@@ -301,11 +299,9 @@ with st.expander("Positions", expanded=True):
         "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
         "Entry":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
         "Price":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Price %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-        "Div %":        lambda v: f"+{v:.2f}%" if isinstance(v, (int, float)) and v > 0 else ("—" if not isinstance(v, (int, float)) else "—"),
         "Total Return": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
         "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-    }).apply(color_signed, subset=["Price %", "Total Return", "Today %"])
+    }).apply(color_signed, subset=["Total Return", "Today %"])
 
     table_height = 38 + (len(display_main) + 3) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
