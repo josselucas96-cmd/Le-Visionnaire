@@ -91,6 +91,9 @@ THEMATIC_COLORS = {
     "Digital Health":         "#34D399",   # emerald (same family as Healthcare)
     "Energy Shortage":        "#FDE68A",   # pale yellow — broad energy theme
     "Communication":          "#93C5FD",   # light blue
+    "Social Platform":        "#F472B6",   # pink
+    "EdTech":                 "#A78BFA",   # violet
+    "EV / China":             "#86EFAC",   # light green
     "Other":                  "#94A3B8",   # slate
     "Cash":                   "#374151",   # dark gray
 }

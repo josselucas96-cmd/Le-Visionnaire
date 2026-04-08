@@ -231,13 +231,13 @@ st.divider()
 with st.expander("Positions", expanded=True):
     df = pd.DataFrame(positions)
     display = df[[c for c in [
-        "ticker", "name", "weight", "current_weight", "entry_price", "current_price",
+        "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
         "perf_pct", "change_today", "sector", "geography", "thematic", "thesis_short"
     ] if c in df.columns]].rename(columns={
         "ticker":         "Ticker",
         "name":           "Name",
-        "weight":         "Alloc.",
-        "current_weight": "Current %",
+        "layer":          "Layer",
+        "current_weight": "Alloc.",
         "entry_price":    "Entry",
         "current_price":  "Price",
         "perf_pct":       "Perf %",
@@ -256,8 +256,7 @@ with st.expander("Positions", expanded=True):
         ]
 
     styled = display.style.format({
-        "Alloc.":    "{:.1f}%",
-        "Current %": "{:.2f}%",
+        "Alloc.":    "{:.2f}%",
         "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
         "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
         "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
@@ -318,8 +317,7 @@ with st.expander("Allocation", expanded=True):
     # Donuts use current (dynamic) weights
     if current_cash_pct > 0:
         cash_row = pd.DataFrame([{
-            "Ticker": "CASH", "Name": "Cash (USD)", "Current %": current_cash_pct,
-            "Alloc.": initial_cash,
+            "Ticker": "CASH", "Name": "Cash (USD)", "Alloc.": current_cash_pct,
             "Entry": None, "Price": None, "Perf %": None, "Today %": None,
             "Sector": "Cash", "Geography": "USD", "Thematic": "Cash", "Thesis": "—",
         }])
@@ -334,17 +332,16 @@ with st.expander("Allocation", expanded=True):
     }
 
     def donut_chart(df, col, title):
-        grouped = df.groupby(col)["Current %"].sum().reset_index()
+        grouped = df.groupby(col)["Alloc."].sum().reset_index()
         cmap = COLOR_MAPS.get(col, {})
-        # Fallback: any category not in the map gets a neutral gray
         color_map = {cat: cmap.get(cat, "#6B7280") for cat in grouped[col].unique()}
         fig = px.pie(
-            grouped, values="Current %", names=col, title=title,
+            grouped, values="Alloc.", names=col, title=title,
             hole=0.52, color=col, color_discrete_map=color_map,
         )
         fig.update_traces(
             textinfo="percent",
-            hovertemplate="%{label}: %{value:.1f}%<extra></extra>",
+            hovertemplate="%{label}: %{value:.2f}%<extra></extra>",
         )
         fig.update_layout(
             plot_bgcolor=BG, paper_bgcolor=BG,
