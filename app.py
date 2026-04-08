@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 from utils.data import get_positions, get_setting
-from utils.market import get_prices, get_history
+from utils.market import get_prices, get_history, get_dividends_since
 from utils.metrics import (
     build_portfolio_index, daily_returns,
     sharpe_ratio, max_drawdown, beta_vs_spy,
@@ -61,16 +61,27 @@ if not positions:
 tickers = tuple(p["ticker"] for p in positions)
 prices  = get_prices(tickers)
 
+# ── Dividends (total return) ───────────────────────────────────────────────────
+entry_dates  = tuple(p["entry_date"] for p in positions)
+dividends    = get_dividends_since(tickers, entry_dates)
+
 for p in positions:
     live = prices.get(p["ticker"], {})
     p["current_price"] = live.get("price")
     p["change_today"]  = live.get("change_pct")
+    divs_per_share     = dividends.get(p["ticker"], 0.0)
+    p["dividends_per_share"] = divs_per_share
+
     if p["current_price"] and p["entry_price"]:
-        p["perf_pct"] = round(
-            (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100, 2
-        )
+        price_return = (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100
+        div_return   = divs_per_share / p["entry_price"] * 100
+        p["perf_pct"]      = round(price_return + div_return, 2)
+        p["price_return"]  = round(price_return, 2)
+        p["div_return"]    = round(div_return, 2)
     else:
-        p["perf_pct"] = None
+        p["perf_pct"]     = None
+        p["price_return"] = None
+        p["div_return"]   = None
 
 valid   = [p for p in positions if p["perf_pct"] is not None]
 total_w = sum(p["weight"] for p in valid) or 1
@@ -243,7 +254,8 @@ with st.expander("Positions", expanded=True):
     df = df.sort_values("current_weight", ascending=False)
     display = df[[c for c in [
         "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
-        "perf_pct", "change_today", "sector", "geography", "thematic", "thesis_short"
+        "price_return", "div_return", "perf_pct", "change_today",
+        "sector", "geography", "thematic", "thesis_short"
     ] if c in df.columns]].rename(columns={
         "ticker":         "Ticker",
         "name":           "Name",
@@ -251,7 +263,9 @@ with st.expander("Positions", expanded=True):
         "current_weight": "Alloc.",
         "entry_price":    "Entry",
         "current_price":  "Price",
-        "perf_pct":       "Perf %",
+        "price_return":   "Price %",
+        "div_return":     "Div %",
+        "perf_pct":       "Total Return",
         "change_today":   "Today %",
         "sector":         "Sector",
         "geography":      "Geography",
@@ -274,19 +288,22 @@ with st.expander("Positions", expanded=True):
     cash_row_table = pd.DataFrame([{
         "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
         "Alloc.": current_cash_pct,
-        "Entry": None, "Price": None, "Perf %": None, "Today %": None,
+        "Entry": None, "Price": None,
+        "Price %": None, "Div %": None, "Total Return": None, "Today %": None,
         "Sector": "—", "Geography": "USD", "Thematic": "—", "Thesis": "Dry powder — uninvested capital.",
     }])
 
     display_full = pd.concat([display_main, empty_row, strc_row, cash_row_table], ignore_index=True)
 
     styled = display_full.style.format({
-        "Alloc.":    lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
-        "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-        "Today %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-    }).apply(color_signed, subset=["Perf %", "Today %"])
+        "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
+        "Entry":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+        "Price":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+        "Price %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
+        "Div %":        lambda v: f"+{v:.2f}%" if isinstance(v, (int, float)) and v > 0 else ("—" if not isinstance(v, (int, float)) else "—"),
+        "Total Return": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
+        "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
+    }).apply(color_signed, subset=["Price %", "Total Return", "Today %"])
 
     table_height = 38 + (len(display_main) + 3) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
