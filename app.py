@@ -365,10 +365,11 @@ with st.expander("Allocation", expanded=True):
         return fig
 
     LAYER_COLORS = {
-        "Core":       "#6366F1",
-        "Conviction": "#F97316",
-        "Moonshot":   "#34D399",
-        "Cash":       "#374151",
+        "Core":             "#6366F1",
+        "Conviction":       "#F97316",
+        "Moonshot":         "#34D399",
+        "Cash":             "#374151",
+        "Cash/Equivalent":  "#4B5563",
     }
 
     def layer_donut(df):
