@@ -260,15 +260,29 @@ with st.expander("Positions", expanded=True):
             else "" for v in col
         ]
 
-    styled = display.style.format({
-        "Alloc.":    "{:.2f}%",
+    # Add separator + STRC + Cash rows at the bottom
+    strc_row = display[display["Ticker"] == "STRC"].copy() if "STRC" in display["Ticker"].values else pd.DataFrame()
+    display_main = display[display["Ticker"] != "STRC"]
+
+    empty_row = pd.DataFrame([{c: "" for c in display_main.columns}])
+    cash_row_table = pd.DataFrame([{
+        "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
+        "Alloc.": current_cash_pct,
+        "Entry": None, "Price": None, "Perf %": None, "Today %": None,
+        "Sector": "—", "Geography": "USD", "Thematic": "—", "Thesis": "Dry powder — uninvested capital.",
+    }])
+
+    display_full = pd.concat([display_main, empty_row, strc_row, cash_row_table], ignore_index=True)
+
+    styled = display_full.style.format({
+        "Alloc.":    lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
         "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
         "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
         "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
         "Today %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
     }).apply(color_signed, subset=["Perf %", "Today %"])
 
-    table_height = 38 + min(len(positions), 20) * 35
+    table_height = 38 + (len(display_main) + 3) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
     st.caption(f"Cash (+ STRC) — Initial: {cash_equiv_initial:.1f}% · Current: {cash_equiv_current:.1f}%")
