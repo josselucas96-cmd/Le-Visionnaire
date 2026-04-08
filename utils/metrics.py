@@ -116,23 +116,33 @@ def var_95(returns: pd.Series) -> float | None:
     return round(np.percentile(returns, 5) * 100, 2)
 
 
+def _trailing_returns(history: pd.DataFrame, tickers: list, lookback_days: int = 252) -> pd.DataFrame:
+    """Daily returns for the trailing lookback_days window."""
+    cutoff = history.index[-1] - pd.Timedelta(days=lookback_days)
+    window = history[history.index >= cutoff][tickers]
+    return window.pct_change().dropna(how="all")
+
+
 def avg_pairwise_correlation(history: pd.DataFrame, positions: list) -> float | None:
-    """Average of all off-diagonal correlation coefficients."""
+    """Average of all off-diagonal correlation coefficients — trailing 12 months."""
     tickers = [p["ticker"] for p in positions if p["ticker"] in history.columns]
     if len(tickers) < 2:
         return None
-    returns = history[tickers].pct_change().dropna(how="all")
+    returns = _trailing_returns(history, tickers)
+    if len(returns) < 10:
+        return None
     corr = returns.corr()
-    # Extract upper triangle (excluding diagonal)
     mask = np.triu(np.ones(corr.shape), k=1).astype(bool)
     values = corr.where(mask).stack()
     return round(float(values.mean()), 2)
 
 
 def correlation_matrix(history: pd.DataFrame, positions: list) -> pd.DataFrame:
-    """Daily return correlation between all positions with sufficient history."""
+    """Daily return correlation — trailing 12 months."""
     tickers = [p["ticker"] for p in positions if p["ticker"] in history.columns]
     if len(tickers) < 2:
         return pd.DataFrame()
-    returns = history[tickers].pct_change().dropna(how="all")
+    returns = _trailing_returns(history, tickers)
+    if len(returns) < 10:
+        return pd.DataFrame()
     return returns.corr().round(2)

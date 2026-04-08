@@ -285,7 +285,7 @@ with st.expander("Positions", expanded=True):
     table_height = 38 + (len(display_main) + 3) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-    st.caption(f"Cash (+ STRC) — Initial: {cash_equiv_initial:.1f}% · Current: {cash_equiv_current:.1f}%")
+    st.caption(f"Cash (+ STRC) — Current: {cash_equiv_current:.1f}%")
 
     st.write("")
     st.markdown(f"""
@@ -462,7 +462,7 @@ with st.expander("Risk Analysis", expanded=True):
             )
 
         if not corr.empty:
-            st.markdown("**Correlation Matrix** (daily returns, inception to date)")
+            st.markdown("**Correlation Matrix** (daily returns, trailing 12 months)")
             fig_corr = go.Figure(data=go.Heatmap(
                 z=corr.values,
                 x=corr.columns.tolist(),
