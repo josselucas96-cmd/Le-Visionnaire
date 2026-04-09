@@ -339,7 +339,7 @@ with st.expander("Positions", expanded=True):
 </div>
 <a href="/Research" target="_self" style="
     display: inline-block;
-    background: #00D09C;
+    background: #F97316;
     color: #0E1117;
     font-weight: 800;
     font-size: 0.95rem;
