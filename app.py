@@ -45,6 +45,10 @@ st.markdown("""
     }
     .disclaimer { font-size: 0.72rem; color: #4A5568; margin-top: 3rem;
                   border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }
+    /* Radio buttons accent color → orange */
+    [data-testid="stRadio"] label div[data-testid="stMarkdownContainer"] { color: inherit; }
+    [data-baseweb="radio"] [data-checked="true"] div { background-color: #F97316 !important; border-color: #F97316 !important; }
+    [data-baseweb="radio"] div:focus-within { border-color: #F97316 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -327,7 +331,7 @@ with st.expander("Positions", expanded=True):
         border-radius: 50%;
     "></div>
     <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
-                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
+                color:#F97316; text-transform:uppercase; margin-bottom:0.5rem;">
         Research · {papers_label}
     </div>
     <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
