@@ -272,6 +272,9 @@ with st.expander("Positions", expanded=True):
         "thematic":       "Thematic",
         "thesis_short":   "Thesis",
     })
+    # Keep thesis mapping before dropping the column from the table
+    thesis_map = dict(zip(display["Ticker"], display["Thesis"])) if "Thesis" in display.columns else {}
+    display = display.drop(columns=["Thesis"], errors="ignore")
 
     def color_signed(col):
         return [
@@ -290,7 +293,7 @@ with st.expander("Positions", expanded=True):
         "Alloc.": current_cash_pct,
         "Entry": None, "Price": None,
         "Total Return": None, "Today %": None,
-        "Sector": "—", "Geography": "USD", "Thematic": "—", "Thesis": "Dry powder — uninvested capital.",
+        "Sector": "—", "Geography": "USD", "Thematic": "—",
     }])
 
     display_full = pd.concat([display_main, empty_row, strc_row, cash_row_table], ignore_index=True)
@@ -307,6 +310,23 @@ with st.expander("Positions", expanded=True):
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
     st.caption(f"Cash (+ STRC) — Current: {cash_equiv_current:.1f}%")
+
+    # ── Thesis expanders ──────────────────────────────────────────────────────
+    st.markdown("<div style='margin-top:1rem;'></div>", unsafe_allow_html=True)
+    thesis_positions = [p for p in positions if p.get("ticker") not in ("STRC",) and p.get("thesis_short")]
+    thesis_positions_sorted = sorted(thesis_positions, key=lambda p: p.get("current_weight", 0), reverse=True)
+    for p in thesis_positions_sorted:
+        ticker  = p["ticker"]
+        layer   = p.get("layer", "")
+        thesis  = thesis_map.get(ticker) or p.get("thesis_short", "")
+        thematic = p.get("thematic", "")
+        if not thesis:
+            continue
+        layer_colors = {"Core": ACCENT, "Conviction": "#F97316", "Moonshot": "#34D399", "Cash/Equivalent": "#4B5563"}
+        lcolor = layer_colors.get(layer, TEXT_DIM)
+        label = f"**{ticker}** &nbsp; <span style='color:{lcolor}; font-size:0.8rem;'>{layer}</span> &nbsp; <span style='color:{TEXT_DIM}; font-size:0.8rem;'>{thematic}</span>"
+        with st.expander(label):
+            st.markdown(f"<span style='font-size:0.95rem;'>{thesis}</span>", unsafe_allow_html=True)
 
     st.write("")
     st.markdown(f"""
