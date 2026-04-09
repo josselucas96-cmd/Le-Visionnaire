@@ -66,13 +66,14 @@ SECTOR_COLORS = {
 # Geography
 GEO_COLORS = {
     "USA":           "#6366F1",   # same as Tech — USA = dominant
-    "Europe":        "#93C5FD",   # light blue
-    "Japan":         "#FDBA74",   # pale orange
-    "Asia ex-Japan": "#FDE68A",   # pale yellow
-    "LatAm":         "#86EFAC",   # light green
-    "Global":        "#C084FC",   # purple
-    "Other":         "#6B7280",   # gray
-    "USD":           "#374151",   # same as Cash
+    "Europe":           "#93C5FD",   # light blue
+    "Japan":            "#FDBA74",   # pale orange
+    "Asia ex-Japan":    "#FDE68A",   # pale yellow
+    "Emerging Markets": "#FCD34D",   # yellow
+    "LatAm":            "#86EFAC",   # light green
+    "Global":           "#C084FC",   # purple
+    "Other":            "#6B7280",   # gray
+    "USD":              "#374151",   # same as Cash
 }
 
 # Thematic
@@ -81,13 +82,13 @@ THEMATIC_COLORS = {
     "Crypto Currencies Play": "#F97316",   # bitcoin orange
     "Biotech":                "#059669",   # dark emerald
     "Space / Defense":        "#6B7280",   # gray
-    "Consumer Growth":        "#FCD34D",   # yellow
+    "Consumer Growth":        "#FCA5A5",   # light red
     "Robotics / Automation":  "#C084FC",   # purple
     "Fintech / Payments":     "#60A5FA",   # sky blue
-    "Energy Transition":      "#FB923C",   # warm orange
+    "Energy Transition":      "#FCD34D",   # yellow
     "Software / SaaS":        "#818CF8",   # soft indigo
     "Cybersecurity":          "#F472B6",   # pink
-    "Cloud / Infrastructure": "#2DD4BF",   # teal
+    "Cloud / Infrastructure": "#1E40AF",   # dark blue
     "Clean Energy":           "#4ADE80",   # light green
     "Digital Health":         "#34D399",   # emerald (same family as Healthcare)
     "Energy Shortage":        "#FDE68A",   # pale yellow — broad energy theme

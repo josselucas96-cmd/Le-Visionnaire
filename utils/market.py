@@ -43,6 +43,10 @@ def get_history(tickers: tuple, start: str) -> pd.DataFrame:
             # Single ticker: raw is a DataFrame with OHLCV columns
             raw = raw[["Close"]].rename(columns={"Close": all_tickers[0]})
 
+        # Normalize index to date-only (strip timezone + time component)
+        if raw.index.tz is not None:
+            raw.index = raw.index.tz_localize(None)
+        raw.index = pd.to_datetime(raw.index.date)
         return raw.dropna(how="all")
     except Exception:
         return pd.DataFrame()

@@ -151,13 +151,14 @@ else:
 
 st.divider()
 
+LAYERS     = ["Core", "Conviction", "Moonshot", "Cash/Equivalent"]
 SECTORS    = ["Tech", "Healthcare", "Consumer", "Finance", "Communication",
               "Industrials", "Energy", "Materials", "Real Estate", "Utilities"]
-GEOS       = ["USA", "Europe", "Japan", "Asia ex-Japan", "LatAm", "Global", "Other"]
+GEOS       = ["USA", "Europe", "Japan", "Asia ex-Japan", "Emerging Markets", "LatAm", "Global", "Other"]
 THEMATICS  = ["AI / Semi", "Crypto Currencies Play", "Biotech", "Digital Health",
-              "Space / Defense", "Robotics / Automation", "Fintech / Payments",
-              "Consumer Growth", "Energy Shortage", "Software / SaaS",
-              "Cybersecurity", "Cloud / Infrastructure", "Other"]
+              "Space / Defense", "Robotics / Automation", "Social Platform",
+              "Fintech / Payments", "Consumer Growth", "Energy Transition",
+              "Software / SaaS", "Cybersecurity", "Cloud / Infrastructure", "Other"]
 
 pos_options = {f"{p['ticker']}  —  {p['name']}": p for p in positions}
 
@@ -311,6 +312,7 @@ with tab_add:
         with c3:
             sec_idx = SECTORS.index(af["sector"]) if af["sector"] in SECTORS else 0
             geo_idx = GEOS.index(af["geo"]) if af["geo"] in GEOS else 0
+            layer     = st.selectbox("★ Layer",                       LAYERS)
             sector    = st.selectbox("Sector  (kept if exists)",    SECTORS, index=sec_idx)
             geography = st.selectbox("Geography  (kept if exists)", GEOS,    index=geo_idx)
             thematic  = st.selectbox("Thematic  (kept if exists)",  THEMATICS)
@@ -329,6 +331,7 @@ with tab_add:
             else:
                 add_position({
                     "ticker": ticker, "name": name, "isin": None,
+                    "layer": layer,
                     "weight": weight, "entry_price": entry_p,
                     "entry_date": str(entry_d), "sector": sector,
                     "geography": geography, "thematic": thematic,
@@ -483,6 +486,7 @@ with tab_switch:
             with c3:
                 sw_sec_idx = SECTORS.index(sw_af["sector"]) if sw_af["sector"] in SECTORS else 0
                 sw_geo_idx = GEOS.index(sw_af["geo"]) if sw_af["geo"] in GEOS else 0
+                in_layer    = st.selectbox("★ Layer",    LAYERS)
                 in_sector   = st.selectbox("Sector",    SECTORS, index=sw_sec_idx)
                 in_geo      = st.selectbox("Geography", GEOS,    index=sw_geo_idx)
                 in_thematic = st.selectbox("Thematic",  THEMATICS)
@@ -497,6 +501,7 @@ with tab_switch:
                         out_id=sw_out_pos["id"], out_price=out_p,
                         in_data={
                             "ticker": in_ticker, "name": in_name, "isin": None,
+                            "layer": in_layer,
                             "weight": in_weight, "entry_price": in_p,
                             "entry_date": str(sw_lookup_date), "sector": in_sector,
                             "geography": in_geo, "thematic": in_thematic,

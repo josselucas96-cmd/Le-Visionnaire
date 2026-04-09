@@ -372,10 +372,41 @@ with st.expander("Allocation", expanded=True):
     else:
         display_alloc = display_donut
 
+    _THEMATIC = {
+        "AI / Semi":              "#6366F1",
+        "Crypto Currencies Play": "#F97316",
+        "Biotech":                "#059669",
+        "Space / Defense":        "#6B7280",
+        "Consumer Growth":        "#FCA5A5",
+        "Robotics / Automation":  "#C084FC",
+        "Fintech / Payments":     "#60A5FA",
+        "Energy Transition":      "#FCD34D",
+        "Software / SaaS":        "#818CF8",
+        "Cybersecurity":          "#F472B6",
+        "Cloud / Infrastructure": "#1E40AF",
+        "Clean Energy":           "#4ADE80",
+        "Digital Health":         "#34D399",
+        "Social Platform":        "#F472B6",
+        "EV / China":             "#86EFAC",
+        "Other":                  "#94A3B8",
+        "Cash":                   "#374151",
+        "Cash/Equivalent":        "#374151",
+    }
+    _GEO = {
+        "USA":              "#6366F1",
+        "Europe":           "#93C5FD",
+        "Japan":            "#FDBA74",
+        "Asia ex-Japan":    "#FDE68A",
+        "Emerging Markets": "#FCD34D",
+        "LatAm":            "#86EFAC",
+        "Global":           "#C084FC",
+        "Other":            "#6B7280",
+        "USD":              "#374151",
+    }
     COLOR_MAPS = {
         "Sector":    SECTOR_COLORS,
-        "Geography": GEO_COLORS,
-        "Thematic":  THEMATIC_COLORS,
+        "Geography": _GEO,
+        "Thematic":  _THEMATIC,
     }
 
     def donut_chart(df, col, title):
