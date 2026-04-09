@@ -374,27 +374,41 @@ with st.expander("Allocation", expanded=True):
         display_alloc = display_donut
 
     _THEMATIC = {
-        "AI / Semi":              "#6366F1",
+        "AI / Semi":              "#1E40AF",
         "Crypto Currencies Play": "#F97316",
         "Biotech":                "#059669",
-        "Space / Defense":        "#6B7280",
+        "Space / Defense":        "#374151",
         "Consumer Growth":        "#FCA5A5",
-        "Robotics / Automation":  "#C084FC",
+        "Robotics / Automation":  "#6B7280",
         "Fintech / Payments":     "#60A5FA",
         "Energy Transition":      "#FCD34D",
         "Software / SaaS":        "#818CF8",
         "Cybersecurity":          "#F472B6",
-        "Cloud / Infrastructure": "#1E40AF",
+        "Cloud / Infrastructure": "#6366F1",
         "Clean Energy":           "#4ADE80",
         "Digital Health":         "#34D399",
         "Social Platform":        "#F472B6",
         "EV / China":             "#86EFAC",
         "Other":                  "#94A3B8",
-        "Cash":                   "#374151",
-        "Cash/Equivalent":        "#374151",
+        "Cash":                   "#FFFFFF",
+        "Cash/Equivalent":        "#FFFFFF",
+    }
+    _SECTOR = {
+        "Tech":          "#1E40AF",
+        "Healthcare":    "#34D399",
+        "Finance":       "#6366F1",
+        "Communication": "#60A5FA",
+        "Industrials":   "#6B7280",
+        "Consumer":      "#FCD34D",
+        "Energy":        "#FB923C",
+        "Materials":     "#A8A29E",
+        "Real Estate":   "#818CF8",
+        "Utilities":     "#94A3B8",
+        "Cash":          "#FFFFFF",
+        "Cash/Equivalent": "#FFFFFF",
     }
     _GEO = {
-        "USA":              "#6366F1",
+        "USA":              "#1E40AF",
         "Europe":           "#93C5FD",
         "Japan":            "#FDBA74",
         "Asia ex-Japan":    "#FDE68A",
@@ -403,10 +417,10 @@ with st.expander("Allocation", expanded=True):
         "LatAm":            "#86EFAC",
         "Global":           "#C084FC",
         "Other":            "#6B7280",
-        "USD":              "#374151",
+        "USD":              "#FFFFFF",
     }
     COLOR_MAPS = {
-        "Sector":    SECTOR_COLORS,
+        "Sector":    _SECTOR,
         "Geography": _GEO,
         "Thematic":  _THEMATIC,
     }
@@ -433,11 +447,11 @@ with st.expander("Allocation", expanded=True):
         return fig
 
     LAYER_COLORS = {
-        "Core":             "#6366F1",
+        "Core":             "#1E40AF",
         "Conviction":       "#F97316",
         "Moonshot":         "#34D399",
-        "Cash":             "#374151",
-        "Cash/Equivalent":  "#4B5563",
+        "Cash":             "#FFFFFF",
+        "Cash/Equivalent":  "#FFFFFF",
     }
 
     def layer_donut(df):
