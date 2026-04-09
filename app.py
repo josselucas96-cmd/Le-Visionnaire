@@ -390,8 +390,8 @@ with st.expander("Allocation", expanded=True):
         "Social Platform":        "#F472B6",
         "EV / China":             "#86EFAC",
         "Other":                  "#94A3B8",
-        "Cash":                   "#FFFFFF",
-        "Cash/Equivalent":        "#FFFFFF",
+        "Cash":                   "#CBD5E1",
+        "Cash/Equivalent":        "#CBD5E1",
     }
     _SECTOR = {
         "Tech":          "#1E40AF",
@@ -404,8 +404,8 @@ with st.expander("Allocation", expanded=True):
         "Materials":     "#A8A29E",
         "Real Estate":   "#818CF8",
         "Utilities":     "#94A3B8",
-        "Cash":          "#FFFFFF",
-        "Cash/Equivalent": "#FFFFFF",
+        "Cash":          "#CBD5E1",
+        "Cash/Equivalent": "#CBD5E1",
     }
     _GEO = {
         "USA":              "#1E40AF",
@@ -417,7 +417,7 @@ with st.expander("Allocation", expanded=True):
         "LatAm":            "#86EFAC",
         "Global":           "#C084FC",
         "Other":            "#6B7280",
-        "USD":              "#FFFFFF",
+        "USD":              "#CBD5E1",
     }
     COLOR_MAPS = {
         "Sector":    _SECTOR,
@@ -450,8 +450,8 @@ with st.expander("Allocation", expanded=True):
         "Core":             "#1E40AF",
         "Conviction":       "#F97316",
         "Moonshot":         "#34D399",
-        "Cash":             "#FFFFFF",
-        "Cash/Equivalent":  "#FFFFFF",
+        "Cash":             "#CBD5E1",
+        "Cash/Equivalent":  "#CBD5E1",
     }
 
     def layer_donut(df):
