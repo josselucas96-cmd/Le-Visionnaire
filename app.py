@@ -398,6 +398,7 @@ with st.expander("Allocation", expanded=True):
         "Europe":           "#93C5FD",
         "Japan":            "#FDBA74",
         "Asia ex-Japan":    "#FDE68A",
+        "China":            "#991B1B",
         "Emerging Markets": "#FCD34D",
         "LatAm":            "#86EFAC",
         "Global":           "#C084FC",
