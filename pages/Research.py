@@ -95,6 +95,18 @@ st.markdown("""
         font-size: 0.72rem; color: #333; margin-top: 3rem;
         border-top: 1px solid #1A1F26; padding-top: 1rem; line-height: 1.5;
     }
+    /* Link button — orange BTC */
+    [data-testid="stLinkButton"] button {
+        background-color: #F7931A !important;
+        border: 1px solid #F7931A !important;
+        color: #0D1117 !important;
+        font-weight: 700 !important;
+    }
+    [data-testid="stLinkButton"] button:hover {
+        background-color: #E0820F !important;
+        border-color: #E0820F !important;
+        color: #0D1117 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
