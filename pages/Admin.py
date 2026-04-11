@@ -43,16 +43,22 @@ with col_logout:
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 with st.expander("Portfolio Settings"):
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         inc = st.text_input("Inception Date (YYYY-MM-DD)",
                             value=get_setting("inception_date", "2026-04-01"))
     with c2:
         name = st.text_input("Portfolio Name",
                              value=get_setting("portfolio_name", "Le Visionnaire"))
+    with c3:
+        capital = st.number_input("Initial Capital (USD)",
+                                  min_value=10_000, max_value=100_000_000,
+                                  step=10_000,
+                                  value=int(get_setting("initial_capital", "1000000")))
     if st.button("Save Settings"):
         upsert_setting("inception_date", inc)
         upsert_setting("portfolio_name", name)
+        upsert_setting("initial_capital", str(capital))
         st.success("Saved.")
         st.cache_data.clear()
 
@@ -79,7 +85,8 @@ if positions:
     df_pos = pd.DataFrame(positions)
     total_weight = df_pos["weight"].sum()
 
-    # Dynamic weights
+    # Dynamic weights + NAV
+    initial_capital = float(get_setting("initial_capital", "1000000"))
     initial_cash = max(0.0, 100.0 - total_weight)
     for p in positions:
         if p.get("current_price") and p.get("entry_price"):
@@ -89,18 +96,21 @@ if positions:
     total_current_value = sum(p["current_value"] for p in positions) + initial_cash
     for p in positions:
         p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
+        p["nav_usd"] = round(p["current_weight"] / 100 * initial_capital * (total_current_value / 100), 0)
     current_cash_pct = round(initial_cash / total_current_value * 100, 1)
+    nav_total = round(initial_capital * total_current_value / 100, 0)
 
     st.caption(
         f"Alloc. deployed: **{total_weight:.1f}%** · "
         f"Initial cash: **{initial_cash:.1f}%** · "
-        f"Current cash: **{current_cash_pct:.1f}%**"
+        f"Current cash: **{current_cash_pct:.1f}%** · "
+        f"NAV: **${nav_total:,.0f}**"
     )
 
     # Rebuild df AFTER dynamic weights have been added to position dicts
     df_pos2 = pd.DataFrame(positions)
     display_cols = [c for c in [
-        "ticker", "name", "weight", "current_weight", "entry_price", "current_price",
+        "ticker", "name", "weight", "current_weight", "nav_usd", "entry_price", "current_price",
         "perf_pct", "change_today", "entry_date",
         "sector", "geography", "thematic", "thesis_short"
     ] if c in df_pos2.columns]
@@ -110,6 +120,7 @@ if positions:
         "name":           "Name",
         "weight":         "Alloc.",
         "current_weight": "Current %",
+        "nav_usd":        "NAV (USD)",
         "entry_price":    "Entry",
         "current_price":  "Price",
         "perf_pct":       "Perf %",
@@ -131,6 +142,7 @@ if positions:
     styled = display_admin.style.format({
         "Alloc.":    lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
         "Current %": lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
+        "NAV (USD)": lambda v: f"${v:,.0f}" if isinstance(v, (int, float)) else "",
         "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
         "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
         "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
