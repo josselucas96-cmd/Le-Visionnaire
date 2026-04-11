@@ -25,7 +25,7 @@ def render_nav(current: str):
 
     /* Global font override */
     html, body, [class*="css"], .stMarkdown, .stDataFrame,
-    .stMetric, .stExpander, p, div, span, td, th, label, button {{
+    .stMetric, p, div, span, td, th, label {{
         font-family: "Avenir Next LT Pro", "Avenir Next", "Avenir", "Nunito", sans-serif !important;
     }}
 
