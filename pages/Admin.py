@@ -610,8 +610,9 @@ with tab_research:
 
     st.divider()
 
-    # ── Existing documents ──
-    papers = get_research()
+    # ── Existing documents — fetch all statuses, bypass cache ──
+    from utils.data import get_client as _get_client
+    papers = _get_client().table("research").select("*").order("published_at", desc=True).execute().data
     if not papers:
         st.info("No papers yet.")
     else:
