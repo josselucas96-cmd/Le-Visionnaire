@@ -638,8 +638,10 @@ with tab_research:
                 )
                 if new_status != p["status"]:
                     upsert_research({"id": p["id"], "status": new_status})
+                    st.cache_data.clear()
                     st.rerun()
             with col_del:
                 if st.button("🗑", key=f"del_{p['id']}", help="Delete"):
                     delete_research(p["id"])
+                    st.cache_data.clear()
                     st.rerun()
