@@ -573,6 +573,49 @@ with st.expander("Risk Analysis", expanded=True):
             )
             st.plotly_chart(fig_corr, use_container_width=True)
 
+# ── Documents ────────────────────────────────────────────────────────────────
+all_docs = [p for p in get_research() if p["status"] == "published"]
+if all_docs:
+    st.divider()
+    with st.expander("Documents", expanded=True):
+        stock_papers = [d for d in all_docs if d.get("doc_type", "Stock Paper") == "Stock Paper"]
+        other_docs   = [d for d in all_docs if d.get("doc_type", "Stock Paper") != "Stock Paper"]
+
+        if stock_papers:
+            st.markdown("**Stock Papers**")
+            for d in stock_papers:
+                c1, c2 = st.columns([6, 1])
+                with c1:
+                    ticker_tag = f"`{d['ticker']}` — " if d.get("ticker") else ""
+                    st.markdown(
+                        f"{ticker_tag}**{d['title']}**  \n"
+                        f"<span style='font-size:0.78rem; color:#555;'>{d.get('published_at','')}"
+                        f"{(' · ' + d['summary'][:80] + '…') if d.get('summary') else ''}</span>",
+                        unsafe_allow_html=True,
+                    )
+                with c2:
+                    if d.get("file_url"):
+                        st.link_button("Read →", d["file_url"])
+                st.write("")
+
+        if other_docs:
+            if stock_papers:
+                st.markdown("---")
+            st.markdown("**Other Documents**")
+            for d in other_docs:
+                c1, c2 = st.columns([6, 1])
+                with c1:
+                    st.markdown(
+                        f"**{d['title']}**  \n"
+                        f"<span style='font-size:0.78rem; color:#555;'>{d.get('published_at','')}"
+                        f"{(' · ' + d['summary'][:80] + '…') if d.get('summary') else ''}</span>",
+                        unsafe_allow_html=True,
+                    )
+                with c2:
+                    if d.get("file_url"):
+                        st.link_button("Open →", d["file_url"])
+                st.write("")
+
 # ── Disclaimer ────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="disclaimer">

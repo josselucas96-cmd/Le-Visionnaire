@@ -163,7 +163,7 @@ THEMATICS  = ["AI / Semi", "Crypto Currencies Play", "Biotech", "Digital Health"
 pos_options = {f"{p['ticker']}  —  {p['name']}": p for p in positions}
 
 tab_add, tab_close, tab_switch, tab_history, tab_research = st.tabs([
-    "➕  Add", "✖  Close", "🔄  Switch", "📋  History", "📄  Research"
+    "➕  Add", "✖  Close", "🔄  Switch", "📋  History", "📄  Documents"
 ])
 
 # ── ADD ───────────────────────────────────────────────────────────────────────
@@ -557,22 +557,26 @@ with tab_history:
     else:
         st.info("No transactions yet.")
 
-# ── RESEARCH ──────────────────────────────────────────────────────────────────
-with tab_research:
-    st.subheader("Stock Papers")
+# ── DOCUMENTS ─────────────────────────────────────────────────────────────────
+DOC_TYPES = ["Stock Paper", "Other Document"]
 
-    # ── Upload new paper ──
-    st.markdown("#### New Paper")
+with tab_research:
+    st.subheader("Documents")
+
+    # ── Upload new document ──
+    st.markdown("#### New Document")
     r_file = st.file_uploader(
         "Drop your PDF here or click to browse",
         type=["pdf"],
         help="PDF only. Max 200MB.",
     )
     with st.form("research_form", clear_on_submit=True):
-        r1, r2 = st.columns([3, 1])
+        r1, r2, r3_col = st.columns([2, 1, 1])
         with r1:
             r_title = st.text_input("★ Title")
         with r2:
+            r_doc_type = st.selectbox("Document Type", DOC_TYPES)
+        with r3_col:
             r_ticker = st.text_input("Ticker (optional)").strip().upper()
         r_summary = st.text_area("Summary (shown on the public page)", height=80)
         r3, r4 = st.columns(2)
@@ -599,25 +603,31 @@ with tab_research:
                     "file_url": url,
                     "status": r_status,
                     "published_at": str(r_date),
+                    "doc_type": r_doc_type,
                 })
                 st.success(f"✓ '{r_title}' saved as {r_status}.")
                 st.rerun()
 
     st.divider()
 
-    # ── Existing papers ──
+    # ── Existing documents ──
     papers = get_research()
     if not papers:
         st.info("No papers yet.")
     else:
         STATUS_COLORS = {"published": "#00D09C", "locked": "#FFA500", "hidden": "#666"}
         for p in papers:
-            col_info, col_status, col_del = st.columns([6, 2, 1])
+            col_info, col_type, col_status, col_del = st.columns([5, 1.5, 1.5, 0.5])
             with col_info:
                 ticker_tag = f"**{p['ticker']}** — " if p.get("ticker") else ""
                 st.markdown(f"{ticker_tag}{p['title']}  \n"
                             f"<span style='font-size:0.78rem; color:#666;'>{p.get('published_at','')}</span>",
                             unsafe_allow_html=True)
+            with col_type:
+                st.markdown(
+                    f"<span style='font-size:0.75rem; color:#888;'>{p.get('doc_type','Stock Paper')}</span>",
+                    unsafe_allow_html=True
+                )
             with col_status:
                 new_status = st.selectbox(
                     "Status", ["published", "locked", "hidden"],
