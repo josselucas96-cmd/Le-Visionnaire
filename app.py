@@ -597,7 +597,7 @@ if all_docs:
                     if d.get("file_url") and d["status"] == "published":
                         st.link_button("Read →", d["file_url"])
                     elif d["status"] == "locked":
-                        st.markdown("<span style='font-size:0.75rem; color:#4A5568; letter-spacing:0.3px;'>⚿ Restricted</span>", unsafe_allow_html=True)
+                        st.markdown("<span style='font-size:0.82rem; color:#6B7280; font-weight:600; letter-spacing:0.5px;'>🔒 RESTRICTED</span>", unsafe_allow_html=True)
                 st.write("")
 
         if other_docs:
@@ -617,7 +617,7 @@ if all_docs:
                     if d.get("file_url") and d["status"] == "published":
                         st.link_button("Open →", d["file_url"])
                     elif d["status"] == "locked":
-                        st.markdown("<span style='font-size:0.75rem; color:#4A5568; letter-spacing:0.3px;'>⚿ Restricted</span>", unsafe_allow_html=True)
+                        st.markdown("<span style='font-size:0.82rem; color:#6B7280; font-weight:600; letter-spacing:0.5px;'>🔒 RESTRICTED</span>", unsafe_allow_html=True)
                 st.write("")
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
