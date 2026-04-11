@@ -1,5 +1,14 @@
 import streamlit as st
+from supabase import create_client
 from utils.data import get_client
+
+
+@st.cache_resource
+def _get_admin_client():
+    """Service role client — bypasses RLS for admin writes."""
+    url = st.secrets["supabase_url"]
+    key = st.secrets.get("supabase_service_key") or st.secrets["supabase_key"]
+    return create_client(url, key)
 
 
 @st.cache_data(ttl=300)
@@ -12,7 +21,7 @@ def get_research(status_filter=None):
 
 
 def upsert_research(data: dict):
-    sb = get_client()
+    sb = _get_admin_client()
     if "id" in data and data["id"]:
         sb.table("research").update(data).eq("id", data["id"]).execute()
     else:
@@ -21,12 +30,12 @@ def upsert_research(data: dict):
 
 
 def delete_research(research_id: int):
-    sb = get_client()
+    sb = _get_admin_client()
     sb.table("research").delete().eq("id", research_id).execute()
 
 
 def upload_pdf(file_bytes: bytes, filename: str) -> str:
-    sb = get_client()
+    sb = _get_admin_client()
     path = filename
     sb.storage.from_("research-docs").upload(
         path, file_bytes, {"content-type": "application/pdf", "upsert": "true"}
