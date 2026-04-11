@@ -574,7 +574,7 @@ with st.expander("Risk Analysis", expanded=True):
             st.plotly_chart(fig_corr, use_container_width=True)
 
 # ── Documents ────────────────────────────────────────────────────────────────
-all_docs = [p for p in get_research() if p["status"] == "published"]
+all_docs = [p for p in get_research() if p["status"] in ("published", "locked")]
 if all_docs:
     st.divider()
     with st.expander("Documents", expanded=True):
@@ -594,8 +594,10 @@ if all_docs:
                         unsafe_allow_html=True,
                     )
                 with c2:
-                    if d.get("file_url"):
+                    if d.get("file_url") and d["status"] == "published":
                         st.link_button("Read →", d["file_url"])
+                    elif d["status"] == "locked":
+                        st.markdown("<span style='font-size:0.75rem; color:#555;'>🔒 Restricted</span>", unsafe_allow_html=True)
                 st.write("")
 
         if other_docs:
@@ -612,8 +614,10 @@ if all_docs:
                         unsafe_allow_html=True,
                     )
                 with c2:
-                    if d.get("file_url"):
+                    if d.get("file_url") and d["status"] == "published":
                         st.link_button("Open →", d["file_url"])
+                    elif d["status"] == "locked":
+                        st.markdown("<span style='font-size:0.75rem; color:#555;'>🔒 Restricted</span>", unsafe_allow_html=True)
                 st.write("")
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
