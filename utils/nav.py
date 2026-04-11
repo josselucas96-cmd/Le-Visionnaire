@@ -21,7 +21,13 @@ def render_nav(current: str):
 
     st.markdown(f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap');
+
+    /* Global font override */
+    html, body, [class*="css"], .stMarkdown, .stDataFrame,
+    .stMetric, .stExpander, p, div, span, td, th, label, button {{
+        font-family: "Avenir Next LT Pro", "Avenir Next", "Avenir", "Nunito", sans-serif !important;
+    }}
 
     [data-testid="stHeader"] {{ display: none !important; }}
 
@@ -38,12 +44,12 @@ def render_nav(current: str):
         align-items: center;
     }}
     .nav-logo {{
-        font-family: 'Cormorant Garamond', Georgia, serif;
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: #00D09C;
-        letter-spacing: 0.5px;
-        text-decoration: none;
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+        font-size: 1.25rem !important;
+        font-weight: 700 !important;
+        color: #00D09C !important;
+        letter-spacing: 0.5px !important;
+        text-decoration: none !important;
         flex-shrink: 0;
         margin-right: auto;
     }}
@@ -56,11 +62,11 @@ def render_nav(current: str):
         transform: translateX(-50%);
     }}
     .nav-link {{
-        font-family: 'Inter', sans-serif;
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: #EEF0F6;
-        text-decoration: none;
+        font-family: "Avenir Next LT Pro", "Avenir Next", "Avenir", sans-serif !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+        color: #EEF0F6 !important;
+        text-decoration: none !important;
         padding: 0.3rem 1rem;
         height: 52px;
         display: inline-flex;
@@ -70,11 +76,11 @@ def render_nav(current: str):
         letter-spacing: 0.2px;
     }}
     .nav-link:hover {{
-        color: #fff;
+        color: #ffffff !important;
         border-bottom-color: rgba(255,255,255,0.2);
     }}
     .nav-active {{
-        color: #fff !important;
+        color: #ffffff !important;
         border-bottom-color: #00D09C !important;
         font-weight: 600 !important;
     }}
