@@ -21,6 +21,8 @@ def render_nav(current: str):
 
     st.markdown(f"""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+
     [data-testid="stHeader"] {{ display: none !important; }}
 
     .nav-bar {{
@@ -29,31 +31,37 @@ def render_nav(current: str):
         z-index: 999999;
         background: rgba(6, 9, 18, 0.97);
         backdrop-filter: blur(14px);
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.07);
         padding: 0 2.5rem;
         height: 52px;
         display: flex;
         align-items: center;
-        gap: 0;
     }}
     .nav-logo {{
-        font-size: 0.9rem;
-        font-weight: 900;
-        color: #EEF0F6;
+        font-family: 'Cormorant Garamond', Georgia, serif;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #00D09C;
         letter-spacing: 0.5px;
-        text-transform: uppercase;
         text-decoration: none;
         flex-shrink: 0;
-        padding-right: 2rem;
-        margin-right: 1.5rem;
-        border-right: 1px solid rgba(255,255,255,0.1);
+        margin-right: auto;
+    }}
+    .nav-links {{
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
     }}
     .nav-link {{
+        font-family: 'Inter', sans-serif;
         font-size: 0.8rem;
         font-weight: 500;
-        color: #5A6478;
+        color: #EEF0F6;
         text-decoration: none;
-        padding: 0 1rem;
+        padding: 0.3rem 1rem;
         height: 52px;
         display: inline-flex;
         align-items: center;
@@ -62,18 +70,18 @@ def render_nav(current: str):
         letter-spacing: 0.2px;
     }}
     .nav-link:hover {{
-        color: #CBD5E1;
-        border-bottom-color: rgba(255,255,255,0.15);
+        color: #fff;
+        border-bottom-color: rgba(255,255,255,0.2);
     }}
     .nav-active {{
-        color: #EEF0F6 !important;
-        border-bottom-color: {NAV_ACTIVE_COLOR} !important;
+        color: #fff !important;
+        border-bottom-color: #00D09C !important;
         font-weight: 600 !important;
     }}
     .block-container {{ padding-top: 4.2rem !important; }}
 </style>
 <div class="nav-bar">
     <a href="/" target="_self" class="nav-logo">Le Visionnaire</a>
-    {links_html}
+    <div class="nav-links">{links_html}</div>
 </div>
 """, unsafe_allow_html=True)
