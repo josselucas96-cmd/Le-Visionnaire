@@ -64,6 +64,72 @@ with st.expander("Portfolio Settings"):
 
 st.divider()
 
+# ── Performance snapshot ──────────────────────────────────────────────────────
+with st.expander("Performance Snapshot", expanded=False):
+    from utils.market import get_history, get_prices as _get_prices
+    from utils.metrics import build_portfolio_index, daily_returns, sharpe_ratio, max_drawdown, beta_vs_spy
+    _positions_perf = get_positions()
+    if _positions_perf:
+        _inception = get_setting("inception_date", "2026-04-01")
+        _tickers_perf = tuple(p["ticker"] for p in _positions_perf)
+        _prices_perf = _get_prices(_tickers_perf)
+        for p in _positions_perf:
+            live = _prices_perf.get(p["ticker"], {})
+            p["current_price"] = live.get("price")
+            p["change_today"]  = live.get("change_pct")
+            if p["current_price"] and p["entry_price"]:
+                p["perf_pct"] = round((p["current_price"] - p["entry_price"]) / p["entry_price"] * 100, 2)
+            else:
+                p["perf_pct"] = None
+        _valid = [p for p in _positions_perf if p["perf_pct"] is not None]
+        _total_w = sum(p["weight"] for p in _valid) or 1
+        _port_perf = sum(p["weight"] * p["perf_pct"] / _total_w for p in _valid)
+        _history = get_history(_tickers_perf + ("SPY",), _inception)
+        _spy_perf = None
+        if not _history.empty:
+            _port_index = build_portfolio_index(_history, _positions_perf)
+            if "SPY" in _history.columns:
+                _spy_raw = _history["SPY"].dropna()
+                _spy_index = _spy_raw / _spy_raw.iloc[0] * 100
+                _spy_perf = round(_spy_index.iloc[-1] - 100, 2)
+            _port_ret = daily_returns(_port_index)
+            _spy_ret  = daily_returns(_spy_index) if _spy_perf is not None else None
+            _alpha = round(_port_perf - (_spy_perf or 0), 2)
+            _today_valid = [p for p in _positions_perf if p.get("change_today") is not None]
+            _today = sum(p["weight"] * p["change_today"] for p in _today_valid) / _total_w if _today_valid else None
+
+            pc1, pc2, pc3, pc4 = st.columns(4)
+            with pc1:
+                s = "+" if _port_perf >= 0 else ""
+                st.metric("Portfolio (inception)", f"{s}{_port_perf:.2f}%")
+            with pc2:
+                s = "+" if (_spy_perf or 0) >= 0 else ""
+                st.metric("S&P 500 (inception)", f"{s}{_spy_perf:.2f}%" if _spy_perf is not None else "—")
+            with pc3:
+                s = "+" if _alpha >= 0 else ""
+                st.metric("Alpha", f"{s}{_alpha:.2f}%")
+            with pc4:
+                if _today is not None:
+                    s = "+" if _today >= 0 else ""
+                    st.metric("Today", f"{s}{_today:.2f}%")
+                else:
+                    st.metric("Today", "—")
+
+            sr1, sr2, sr3 = st.columns(3)
+            with sr1:
+                s = sharpe_ratio(_port_ret)
+                st.metric("Sharpe (ann.)", f"{s:.2f}" if s is not None else "—")
+            with sr2:
+                md = max_drawdown(_port_index)
+                st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
+            with sr3:
+                b = beta_vs_spy(_port_ret, _spy_ret) if _spy_ret is not None else None
+                st.metric("Beta vs S&P 500", f"{b:.2f}" if b is not None else "—")
+    else:
+        st.info("No positions to compute performance.")
+
+st.divider()
+
 # ── Active positions ──────────────────────────────────────────────────────────
 positions = get_positions()
 st.subheader(f"Active Positions ({len(positions)})")
