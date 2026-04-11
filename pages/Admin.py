@@ -65,9 +65,12 @@ with st.expander("Portfolio Settings"):
 st.divider()
 
 # ── Performance snapshot ──────────────────────────────────────────────────────
-with st.expander("Performance Snapshot", expanded=False):
+with st.expander("Performance", expanded=False):
+    import plotly.graph_objects as go
     from utils.market import get_history, get_prices as _get_prices
-    from utils.metrics import build_portfolio_index, daily_returns, sharpe_ratio, max_drawdown, beta_vs_spy
+    from utils.metrics import (build_portfolio_index, daily_returns, sharpe_ratio,
+                               max_drawdown, beta_vs_spy, annualized_volatility, monthly_returns_table)
+    from utils.theme import PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR, BG, TEXT_MID, POSITIVE, NEGATIVE, TRIM
     _positions_perf = get_positions()
     if _positions_perf:
         _inception = get_setting("inception_date", "2026-04-01")
@@ -84,16 +87,21 @@ with st.expander("Performance Snapshot", expanded=False):
         _valid = [p for p in _positions_perf if p["perf_pct"] is not None]
         _total_w = sum(p["weight"] for p in _valid) or 1
         _port_perf = sum(p["weight"] * p["perf_pct"] / _total_w for p in _valid)
-        _history = get_history(_tickers_perf + ("SPY",), _inception)
+        _history = get_history(_tickers_perf + ("SPY", "QQQ"), _inception)
         _spy_perf = None
+        _spy_index = None
+        _qqq_index = None
         if not _history.empty:
             _port_index = build_portfolio_index(_history, _positions_perf)
             if "SPY" in _history.columns:
                 _spy_raw = _history["SPY"].dropna()
                 _spy_index = _spy_raw / _spy_raw.iloc[0] * 100
                 _spy_perf = round(_spy_index.iloc[-1] - 100, 2)
+            if "QQQ" in _history.columns:
+                _qqq_raw = _history["QQQ"].dropna()
+                _qqq_index = _qqq_raw / _qqq_raw.iloc[0] * 100
             _port_ret = daily_returns(_port_index)
-            _spy_ret  = daily_returns(_spy_index) if _spy_perf is not None else None
+            _spy_ret  = daily_returns(_spy_index) if _spy_index is not None else pd.Series()
             _alpha = round(_port_perf - (_spy_perf or 0), 2)
             _today_valid = [p for p in _positions_perf if p.get("change_today") is not None]
             _today = sum(p["weight"] * p["change_today"] for p in _today_valid) / _total_w if _today_valid else None
@@ -115,6 +123,39 @@ with st.expander("Performance Snapshot", expanded=False):
                 else:
                     st.metric("Today", "—")
 
+            # Chart
+            _fig = go.Figure()
+            _fig.add_trace(go.Scatter(
+                x=_port_index.index, y=_port_index.values, name="Le Visionnaire",
+                line=dict(color=PORTFOLIO_LINE, width=3, shape="spline", smoothing=0.8),
+                hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
+            ))
+            if _spy_index is not None:
+                _fig.add_trace(go.Scatter(
+                    x=_spy_index.index, y=_spy_index.values, name="S&P 500",
+                    line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot", shape="spline", smoothing=0.6),
+                    hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
+                ))
+            if _qqq_index is not None:
+                _fig.add_trace(go.Scatter(
+                    x=_qqq_index.index, y=_qqq_index.values, name="Nasdaq 100",
+                    visible="legendonly",
+                    line=dict(color="#A78BFA", width=1.5, dash="dash", shape="spline", smoothing=0.6),
+                    hovertemplate="%{x|%b %d, %Y}<br>Nasdaq 100: %{y:.1f}<extra></extra>",
+                ))
+            _fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
+            _fig.update_layout(
+                plot_bgcolor=BG, paper_bgcolor=BG,
+                font=dict(color=TEXT_MID, size=11),
+                height=340, hovermode="x unified",
+                yaxis=dict(title="Base 100", gridcolor="#161D2E", zeroline=False),
+                xaxis=dict(gridcolor="#161D2E"),
+                margin=dict(l=0, r=0, t=20, b=0),
+                legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5,
+                            font=dict(size=10), bgcolor="rgba(0,0,0,0)"),
+            )
+            st.plotly_chart(_fig, use_container_width=True)
+
             sr1, sr2, sr3 = st.columns(3)
             with sr1:
                 s = sharpe_ratio(_port_ret)
@@ -123,8 +164,21 @@ with st.expander("Performance Snapshot", expanded=False):
                 md = max_drawdown(_port_index)
                 st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
             with sr3:
-                b = beta_vs_spy(_port_ret, _spy_ret) if _spy_ret is not None else None
+                b = beta_vs_spy(_port_ret, _spy_ret)
                 st.metric("Beta vs S&P 500", f"{b:.2f}" if b is not None else "—")
+
+            # Monthly returns
+            st.write("")
+            st.markdown("**Monthly Returns (%)**")
+            _mrt = monthly_returns_table(_port_index)
+            if not _mrt.empty:
+                def _color_m(col):
+                    return ["color: #00D09C" if pd.notna(v) and v > 0
+                            else "color: #FF4B4B" if pd.notna(v) and v < 0
+                            else "" for v in col]
+                _fmt = {m: lambda v: f"{v:+.1f}" if pd.notna(v) else "" for m in _mrt.columns}
+                st.dataframe(_mrt.style.format(_fmt).apply(_color_m),
+                             use_container_width=True, height=38 + min(len(_mrt), 10) * 35)
     else:
         st.info("No positions to compute performance.")
 
