@@ -14,7 +14,7 @@ st.markdown("""
     .block-container { padding-top: 3.5rem; padding-bottom: 2rem; max-width: 760px; }
     .about-label {
         font-size: 0.7rem; font-weight: 700; letter-spacing: 2px;
-        color: #00D09C; text-transform: uppercase; margin-bottom: 0.6rem;
+        color: #F97316; text-transform: uppercase; margin-bottom: 0.6rem;
     }
     .about-title {
         font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;
@@ -39,39 +39,41 @@ render_nav("about")
 st.write("")
 
 st.markdown('<div class="about-label">Le Visionnaire</div>', unsafe_allow_html=True)
-st.markdown('<div class="about-title">About this portfolio</div>', unsafe_allow_html=True)
+st.markdown('<div class="about-title">Hello ! I\'m Lucas</div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div class="about-body">
 
-<div class="section-title">Who I am</div>
 <p>
-Independent investor and trader, focused on high-conviction equity positions at the intersection
-of technology, healthcare innovation, and emerging asset classes.
-This portfolio is a public, fully transparent paper trading simulation — every position,
-every move, and every result is visible in real time.
+My journey began with… <strong>anthropology</strong>. Studying the nature of money in primitive societies
+(shellfish used as currency?) naturally led me to follow the rise of <strong>cryptocurrencies</strong>
+(is this Bitcoin-thing for real?), then into traditional finance (Options can actually skew risk/reward?).
+After three years in Wealth Management Advisory in Geneva, I want to
+<strong>share my insights and convictions</strong> with anyone who might find them valuable.
 </p>
 
-<div class="section-title">Investment philosophy</div>
+<div class="section-title">On this website, you will find:</div>
 <p>
-I invest in companies I believe are building something durable — businesses with asymmetric
-upside, strong product-market fit, and a structural advantage that compounds over time.
-I favour concentrated positions over diversification for the sake of it.
-If I'm not willing to hold through a 40% drawdown, I won't take the position.
+<strong>Portfolio Management:</strong> simulated portfolios, each built around a defined strategy and
+risk profile, tracked in real time.<br><br>
+<strong>Equity Research:</strong> investment theses on the positions I hold and the ideas I find worth examining.<br><br>
+<strong>Articles:</strong> Personal thoughts on analytical frameworks, portfolio &amp; risk management,
+the macro and geopolitical environment, and stock selection.
 </p>
 
-<div class="section-title">Why publish it publicly?</div>
+<div class="section-title">Why go public?</div>
 <p>
-Accountability sharpens thinking. Publishing forces discipline — it's easy to have conviction
-in private. Doing it in public, with the numbers visible, is a different standard entirely.
-The goal is to build a real track record, not a curated one.
+A conviction held in private is easy. My goal is to demonstrate the validity of a global strategy
+over a 5-year horizon. If the thesis is correct, the numbers will show it. If it is wrong, it will
+be fully visible and documented in the <strong>Mistake Log</strong>. Being honest about errors is the
+most effective way to actually improve.
 </p>
 
-<div class="section-title">About the research</div>
+<div class="section-title">A Note on the Project</div>
 <p>
-The Stock Papers published here are independent analyses written for my own process first.
-They cover the equity positions in this portfolio and occasionally broader market themes.
-Nothing here is financial advice — these are my own views, documented publicly.
+This is a paper portfolio. No real money is at stake. What is real: the analysis, the decisions,
+the timestamps, and the accountability. Nothing here is financial advice. These are my personal
+views, documented publicly.
 </p>
 
 </div>
