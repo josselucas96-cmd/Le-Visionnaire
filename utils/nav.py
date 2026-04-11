@@ -23,9 +23,11 @@ def render_nav(current: str):
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap');
 
-    /* Global font override */
-    html, body, [class*="css"], .stMarkdown, .stDataFrame,
-    .stMetric, p, div, span, td, th, label {{
+    /* Global font override — exclude span to preserve expander glyphs */
+    html, body, p, div, td, th, label,
+    .stMarkdown, .stDataFrame, .stMetric,
+    [data-testid="stExpander"] summary p,
+    [data-testid="stExpander"] > div {{
         font-family: "Avenir Next LT Pro", "Avenir Next", "Avenir", "Nunito", sans-serif !important;
     }}
 
