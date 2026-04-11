@@ -23,7 +23,9 @@ def get_research(status_filter=None):
 def upsert_research(data: dict):
     sb = _get_admin_client()
     if "id" in data and data["id"]:
-        sb.table("research").update(data).eq("id", data["id"]).execute()
+        record_id = data["id"]
+        payload = {k: v for k, v in data.items() if k != "id"}
+        sb.table("research").update(payload).eq("id", record_id).execute()
     else:
         data.pop("id", None)
         sb.table("research").insert(data).execute()
