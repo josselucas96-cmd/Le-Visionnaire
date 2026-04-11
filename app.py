@@ -47,8 +47,8 @@ st.markdown("""
                   border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }
     /* Radio buttons accent color → orange */
     [data-testid="stRadio"] label div[data-testid="stMarkdownContainer"] { color: inherit; }
-    [data-baseweb="radio"] [data-checked="true"] div { background-color: #F97316 !important; border-color: #F97316 !important; }
-    [data-baseweb="radio"] div:focus-within { border-color: #F97316 !important; }
+    [data-baseweb="radio"] [data-checked="true"] div { background-color: #00D09C !important; border-color: #00D09C !important; }
+    [data-baseweb="radio"] div:focus-within { border-color: #00D09C !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -331,7 +331,7 @@ with st.expander("Positions", expanded=True):
         border-radius: 50%;
     "></div>
     <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
-                color:#F97316; text-transform:uppercase; margin-bottom:0.5rem;">
+                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
         Research · {papers_label}
     </div>
     <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
@@ -343,7 +343,7 @@ with st.expander("Positions", expanded=True):
 </div>
 <a href="/Research" target="_self" style="
     display: inline-block;
-    background: #F97316;
+    background: #00D09C;
     color: #0E1117;
     font-weight: 800;
     font-size: 0.95rem;

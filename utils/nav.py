@@ -27,41 +27,44 @@ def render_nav(current: str):
         position: fixed;
         top: 0; left: 0; right: 0;
         z-index: 999999;
-        background: rgba(8, 11, 20, 0.97);
-        backdrop-filter: blur(10px);
+        background: rgba(8, 11, 20, 0.98);
+        backdrop-filter: blur(12px);
         border-bottom: 1px solid {BORDER};
-        padding: 0 2rem;
-        height: 44px;
+        padding: 0 2.5rem;
+        height: 50px;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.25rem;
     }}
     .nav-logo {{
-        font-size: 0.82rem;
-        font-weight: 800;
+        font-size: 0.95rem;
+        font-weight: 900;
         color: #EEF0F6;
-        letter-spacing: -0.2px;
-        margin-right: 1.5rem;
+        letter-spacing: -0.5px;
+        margin-right: 2rem;
         text-decoration: none;
+        flex-shrink: 0;
     }}
     .nav-link {{
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: #4A5568;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #7A8599;
         text-decoration: none;
-        padding: 0.25rem 0.75rem;
+        padding: 0.35rem 0.9rem;
         border-radius: 6px;
-        transition: color 0.15s;
+        transition: color 0.15s, background 0.15s;
+        letter-spacing: 0.1px;
     }}
     .nav-link:hover {{
         color: #EEF0F6;
-        background: {BORDER};
+        background: rgba(255,255,255,0.06);
     }}
     .nav-active {{
-        color: {NAV_ACTIVE_COLOR} !important;
+        color: #EEF0F6 !important;
         background: {NAV_ACTIVE_BG} !important;
+        border: 1px solid rgba(129,140,248,0.25);
     }}
-    .block-container {{ padding-top: 4rem !important; }}
+    .block-container {{ padding-top: 4.2rem !important; }}
 </style>
 <div class="nav-bar">
     <a href="/" target="_self" class="nav-logo">Le Visionnaire</a>

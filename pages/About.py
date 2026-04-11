@@ -14,7 +14,7 @@ st.markdown("""
     .block-container { padding-top: 3.5rem; padding-bottom: 2rem; max-width: 760px; }
     .about-label {
         font-size: 0.7rem; font-weight: 700; letter-spacing: 2px;
-        color: #F97316; text-transform: uppercase; margin-bottom: 0.6rem;
+        color: #00D09C; text-transform: uppercase; margin-bottom: 0.6rem;
     }
     .about-title {
         font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;
