@@ -20,7 +20,7 @@ from utils.theme import (
     chart_layout,
 )
 
-_published_count = len([p for p in get_research() if p["status"] == "published"])
+_published_count = len([p for p in get_research() if p["status"] == "published" and p.get("doc_type", "Stock Paper") == "Stock Paper"])
 papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} published" if _published_count else "Coming soon"
 
 st.set_page_config(
