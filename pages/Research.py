@@ -1,3 +1,4 @@
+import html
 import streamlit as st
 from utils.research import get_research
 from utils.nav import render_nav
@@ -126,7 +127,7 @@ st.markdown("""
 st.write("")
 
 # ── Papers ────────────────────────────────────────────────────────────────────
-papers = [p for p in get_research() if p["status"] in ("published", "locked")]
+papers = [p for p in get_research() if p["status"] in ("published", "locked") and p.get("doc_type", "Stock Paper") == "Stock Paper"]
 
 if not papers:
     st.markdown(
@@ -141,9 +142,10 @@ for p in papers:
     card_class = "paper-card paper-card-locked" if is_locked else "paper-card"
     accent_class = "paper-accent paper-accent-locked" if is_locked else "paper-accent"
 
-    ticker_html = f'<div class="paper-ticker">{p["ticker"]}</div>' if p.get("ticker") else ""
-    date_html   = f'<div class="paper-meta">{p.get("published_at", "")}</div>' if p.get("published_at") else ""
-    summary_html = f'<div class="paper-summary">{p.get("summary", "")}</div>' if p.get("summary") else ""
+    ticker_html  = f'<div class="paper-ticker">{html.escape(p["ticker"])}</div>' if p.get("ticker") else ""
+    date_html    = f'<div class="paper-meta">{html.escape(str(p.get("published_at", "")))}</div>' if p.get("published_at") else ""
+    summary_html = f'<div class="paper-summary">{html.escape(str(p.get("summary", "")))}</div>' if p.get("summary") else ""
+    title_html   = html.escape(str(p.get("title", "")))
 
     locked_html = """
         <div class="locked-tag">🔒 &nbsp;Full access restricted</div>
@@ -153,7 +155,7 @@ for p in papers:
     <div class="{card_class}">
         <div class="{accent_class}"></div>
         {ticker_html}
-        <div class="paper-title">{p["title"]}</div>
+        <div class="paper-title">{title_html}</div>
         {summary_html}
         {locked_html}
         {date_html}
