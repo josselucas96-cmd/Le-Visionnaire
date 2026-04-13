@@ -120,6 +120,15 @@ def render_nav(current: str):
             flex-shrink: 0;
         }}
         .block-container {{ padding-top: 6.5rem !important; }}
+
+        /* Plotly charts: scrollable horizontally on mobile */
+        [data-testid="stPlotlyChart"] {{
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }}
+        [data-testid="stPlotlyChart"] > div {{
+            min-width: 520px !important;
+        }}
     }}
 </style>
 <div class="nav-bar">
