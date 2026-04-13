@@ -358,9 +358,9 @@ with st.expander("Allocation", expanded=True):
     if current_cash_pct > 0:
         cash_row = pd.DataFrame([{
             "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
-            "Entry": None, "Price": None, "Perf %": None, "Today %": None,
+            "Entry": None, "Price": None, "Total Return": None, "Today %": None,
             "Sector": "Cash/Equivalent", "Geography": "USD",
-            "Thematic": "Cash/Equivalent", "Thesis": "—",
+            "Thematic": "Cash/Equivalent",
         }])
         display_alloc = pd.concat([display_donut, cash_row], ignore_index=True)
     else:
@@ -514,8 +514,8 @@ with st.expander("Risk Analysis", expanded=True):
         )
         use_inception = corr_mode == "Since inception"
         h_for_corr = history if use_inception else history_corr
-        corr     = correlation_matrix(h_for_corr, positions, inception=True)
-        avg_corr = avg_pairwise_correlation(h_for_corr, positions, inception=True)
+        corr     = correlation_matrix(h_for_corr, positions, inception=use_inception)
+        avg_corr = avg_pairwise_correlation(h_for_corr, positions, inception=use_inception)
         if avg_corr is not None:
             if avg_corr < 0.3:
                 corr_label, corr_color = "Low — well diversified", POSITIVE
