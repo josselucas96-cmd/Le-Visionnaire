@@ -538,6 +538,17 @@ with st.expander("Risk Analysis", expanded=True):
         if not corr.empty:
             label = "trailing 12 months" if not use_inception else "since inception"
             st.markdown(f"**Correlation Matrix** (daily returns, {label})")
+            st.markdown("""
+<style>
+@media (max-width: 768px) and (orientation: portrait) {
+    .corr-rotate-hint { display: block !important; }
+}
+.corr-rotate-hint { display: none; }
+</style>
+<div class="corr-rotate-hint" style="font-size:0.75rem; color:#555; margin-bottom:0.5rem;">
+    Rotate your screen for a better view of the matrix.
+</div>
+""", unsafe_allow_html=True)
             fig_corr = go.Figure(data=go.Heatmap(
                 z=corr.values,
                 x=corr.columns.tolist(),
