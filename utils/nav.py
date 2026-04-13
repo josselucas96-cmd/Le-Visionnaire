@@ -87,6 +87,40 @@ def render_nav(current: str):
         font-weight: 600 !important;
     }}
     .block-container {{ padding-top: 4.2rem !important; }}
+
+    /* ── Mobile nav: stack logo above links ── */
+    @media (max-width: 768px) {{
+        .nav-bar {{
+            height: auto;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 0.65rem 1.2rem 0 1.2rem;
+        }}
+        .nav-logo {{
+            margin-right: 0;
+            margin-bottom: 0.1rem;
+        }}
+        .nav-links {{
+            position: static;
+            transform: none;
+            left: auto;
+            width: 100%;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            gap: 0;
+            scrollbar-width: none;
+        }}
+        .nav-links::-webkit-scrollbar {{ display: none; }}
+        .nav-link {{
+            height: 36px;
+            padding: 0 0.8rem;
+            font-size: 0.78rem !important;
+            border-bottom-width: 2px;
+            flex-shrink: 0;
+        }}
+        .block-container {{ padding-top: 6.5rem !important; }}
+    }}
 </style>
 <div class="nav-bar">
     <a href="/" target="_self" class="nav-logo">Le Visionnaire</a>
