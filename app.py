@@ -545,7 +545,7 @@ with st.expander("Risk Analysis", expanded=True):
 }
 .corr-rotate-hint { display: none; }
 </style>
-<div class="corr-rotate-hint" style="font-size:0.75rem; color:#555; margin-bottom:0.5rem;">
+<div class="corr-rotate-hint" style="font-size:0.75rem; color:#00D09C; margin-bottom:0.5rem;">
     Rotate your screen for a better view of the matrix.
 </div>
 """, unsafe_allow_html=True)
