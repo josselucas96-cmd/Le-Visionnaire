@@ -39,7 +39,9 @@ ACTION_COLORS  = action_colors()
 ACTION_LABELS  = {"IN": "Buy", "OUT": "Sell", "SWITCH": "Switch", "TRIM": "Trim"}
 
 # ── Load data ─────────────────────────────────────────────────────────────────
-all_positions  = get_positions(active_only=False)
+# Exclude positions deactivated without exit_price (portfolio resets, not real trades)
+all_positions  = [p for p in get_positions(active_only=False)
+                  if p.get("is_active") or p.get("exit_price")]
 active_pos     = [p for p in all_positions if p.get("is_active")]
 transactions   = get_transactions()
 
