@@ -33,6 +33,23 @@ st.set_page_config(
 render_nav("app")
 
 st.markdown("""
+<div style="
+    background: rgba(0,208,156,0.06);
+    border-bottom: 1px solid rgba(0,208,156,0.15);
+    padding: 0.55rem 2.5rem;
+    font-size: 0.72rem;
+    color: #7A8595;
+    line-height: 1.5;
+">
+    <strong style="color:#9EAAB8;">Disclaimer</strong> —
+    Le Visionnaire is a personal paper portfolio shared for educational and informational purposes only.
+    It does not constitute investment advice or a recommendation to buy or sell any security.
+    I am not a registered financial advisor. Past performance is not indicative of future results.
+    Always conduct your own due diligence before making any investment decision.
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("""
 <style>
     [data-testid="stSidebar"] { display: none; }
     .block-container { padding-top: 3.5rem; padding-bottom: 2rem; }
