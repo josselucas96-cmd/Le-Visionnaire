@@ -136,3 +136,26 @@ def switch_position(out_id: int, out_price: float, in_data: dict, date: str, rea
         "exit_date": date,
     }).eq("id", out_id).execute()
     sb.table("positions").insert(in_data).execute()
+
+
+def reset_portfolio(today_str: str, prices: dict):
+    """
+    Reinitialize portfolio for a fresh start:
+    - Reset entry_price and entry_date to today's price for all active positions
+    - Deactivate STRC cleanly (no exit transaction — it's a reset, not a trade)
+    - Update inception_date setting to today
+    """
+    sb = get_client()
+    positions = get_positions()
+    for p in positions:
+        ticker = p["ticker"]
+        if ticker == "STRC":
+            sb.table("positions").update({"is_active": False}).eq("id", p["id"]).execute()
+        else:
+            current_price = prices.get(ticker)
+            if current_price:
+                sb.table("positions").update({
+                    "entry_price": current_price,
+                    "entry_date": today_str,
+                }).eq("id", p["id"]).execute()
+    upsert_setting("inception_date", today_str)

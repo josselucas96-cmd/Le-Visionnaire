@@ -97,7 +97,6 @@ portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
 # current_value_i = entry_weight_i * (current_price_i / entry_price_i)
 # cash doesn't drift; total = sum(current_values) + initial_cash
 initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
-strc_weight   = sum(p["weight"] for p in positions if p.get("ticker") == "STRC")
 for p in positions:
     if p.get("current_price") and p.get("entry_price"):
         p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
@@ -106,10 +105,7 @@ for p in positions:
 total_current_value = sum(p["current_value"] for p in positions) + initial_cash
 for p in positions:
     p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
-current_cash_pct  = round(initial_cash / total_current_value * 100, 1)
-strc_current_pct  = round(sum(p["current_weight"] for p in positions if p.get("ticker") == "STRC"), 1)
-cash_equiv_initial = round(initial_cash + strc_weight, 1)
-cash_equiv_current = round(current_cash_pct + strc_current_pct, 1)
+current_cash_pct = round(initial_cash / total_current_value * 100, 1)
 
 chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
 history     = get_history(tickers, chart_start)
@@ -117,7 +113,7 @@ history     = get_history(tickers, chart_start)
 # Separate 1-year history for correlation (independent of inception date)
 from datetime import date, timedelta
 corr_start   = (date.today() - timedelta(days=365)).isoformat()
-corr_tickers = tuple(p["ticker"] for p in positions if p["ticker"] not in ("STRC",))
+corr_tickers = tickers
 history_corr = get_history(corr_tickers, corr_start)
 
 spy_perf  = None
@@ -285,11 +281,8 @@ with st.expander("Positions", expanded=True):
             else "" for v in col
         ]
 
-    # Add separator + STRC + Cash rows at the bottom
-    strc_row = display[display["Ticker"] == "STRC"].copy() if "STRC" in display["Ticker"].values else pd.DataFrame()
-    display_main = display[display["Ticker"] != "STRC"]
-
-    empty_row = pd.DataFrame([{c: "" for c in display_main.columns}])
+    # Add separator + Cash row at the bottom
+    empty_row = pd.DataFrame([{c: "" for c in display.columns}])
     cash_row_table = pd.DataFrame([{
         "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
         "Alloc.": current_cash_pct,
@@ -298,7 +291,7 @@ with st.expander("Positions", expanded=True):
         "Sector": "—", "Geography": "USD", "Thematic": "—",
     }])
 
-    display_full = pd.concat([display_main, empty_row, strc_row, cash_row_table], ignore_index=True)
+    display_full = pd.concat([display, empty_row, cash_row_table], ignore_index=True)
 
     styled = display_full.style.format({
         "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
@@ -308,10 +301,10 @@ with st.expander("Positions", expanded=True):
         "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
     }).apply(color_signed, subset=["Total Return", "Today %"])
 
-    table_height = 38 + (len(display_main) + 3) * 35
+    table_height = 38 + (len(display) + 3) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-    st.caption(f"Cash (+ STRC) — Current: {cash_equiv_current:.1f}%")
+    st.caption(f"Cash / Alternatives — Current: {current_cash_pct:.1f}%")
 
     st.write("")
     st.markdown(f"""
@@ -360,11 +353,7 @@ st.divider()
 # ── Allocation ────────────────────────────────────────────────────────────────
 with st.expander("Allocation", expanded=True):
     # Donuts use current (dynamic) weights
-    # Reclassify STRC as Cash/Equivalent for donut display
     display_donut = display.copy()
-    display_donut.loc[display_donut["Ticker"] == "STRC", "Sector"]   = "Cash/Equivalent"
-    display_donut.loc[display_donut["Ticker"] == "STRC", "Thematic"] = "Cash/Equivalent"
-    display_donut.loc[display_donut["Ticker"] == "STRC", "Geography"] = "USD"
 
     if current_cash_pct > 0:
         cash_row = pd.DataFrame([{

@@ -10,7 +10,7 @@ from datetime import date
 from utils.data import (
     get_positions, get_transactions,
     add_position, close_position, trim_position, switch_position,
-    get_setting, upsert_setting,
+    get_setting, upsert_setting, reset_portfolio,
 )
 from utils.market import get_prices
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
@@ -61,6 +61,35 @@ with st.expander("Portfolio Settings"):
         upsert_setting("initial_capital", str(capital))
         st.success("Saved.")
         st.cache_data.clear()
+
+    st.markdown("---")
+    st.markdown("**Reinitialize Portfolio**")
+    st.caption("Resets all entry prices to today's market prices, sets inception date to today, and removes STRC. Transactions history is preserved.")
+    if "confirm_reset" not in st.session_state:
+        st.session_state.confirm_reset = False
+    if not st.session_state.confirm_reset:
+        if st.button("Reinitialize Portfolio", type="secondary"):
+            st.session_state.confirm_reset = True
+            st.rerun()
+    else:
+        st.warning("Are you sure? This cannot be undone.")
+        col_yes, col_no = st.columns(2)
+        with col_yes:
+            if st.button("Yes, reset", type="primary"):
+                _pos = get_positions()
+                _tickers = tuple(p["ticker"] for p in _pos if p["ticker"] != "STRC")
+                from utils.market import get_prices as _gp
+                _raw = _gp(_tickers)
+                _prices = {t: _raw[t]["price"] for t in _tickers if _raw.get(t) and _raw[t].get("price")}
+                reset_portfolio(date.today().isoformat(), _prices)
+                st.cache_data.clear()
+                st.session_state.confirm_reset = False
+                st.success("Portfolio reinitialized.")
+                st.rerun()
+        with col_no:
+            if st.button("Cancel"):
+                st.session_state.confirm_reset = False
+                st.rerun()
 
 st.divider()
 
