@@ -553,18 +553,14 @@ with st.expander("Risk Analysis", expanded=True):
                 textfont=dict(size=11),
                 hovertemplate="%{y} / %{x}: %{z:.2f}<extra></extra>",
             ))
-            n = len(corr.columns)
-            cell_size = max(34, min(52, 520 // n))
             fig_corr.update_layout(
                 plot_bgcolor=BG, paper_bgcolor=BG,
-                font=dict(color=TEXT_MID, size=10),
-                width=max(520, n * cell_size),
-                height=max(400, n * cell_size),
+                font=dict(color=TEXT_MID),
+                height=380,
                 margin=dict(l=0, r=0, t=10, b=0),
-                xaxis=dict(side="bottom", tickfont=dict(size=9)),
-                yaxis=dict(tickfont=dict(size=9)),
+                xaxis=dict(side="bottom"),
             )
-            st.plotly_chart(fig_corr, use_container_width=False)
+            st.plotly_chart(fig_corr, use_container_width=True)
 
 # ── Documents ────────────────────────────────────────────────────────────────
 all_docs = [p for p in get_research() if p["status"] in ("published", "locked")]
