@@ -193,7 +193,7 @@ with metric_cols[3]:
 st.divider()
 
 # ── Performance ───────────────────────────────────────────────────────────────
-with st.expander("Performance", expanded=False):
+with st.expander("Performance", expanded=True):
     if port_index is not None and not port_index.empty:
         # Benchmarks toggled via Plotly legend (no Streamlit rerun)
         fig = go.Figure()
