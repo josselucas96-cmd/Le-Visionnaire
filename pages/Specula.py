@@ -115,7 +115,7 @@ st.markdown("""
         border-color: #4338CA;
     }
     .portfolio-card-soon {
-        opacity: 0.6;
+        opacity: 0.85;
         cursor: default;
     }
     .card-glow {
@@ -178,9 +178,9 @@ st.markdown("""
         border: 1px solid rgba(99, 102, 241, 0.3);
     }
     .badge-soon {
-        background: rgba(75, 85, 99, 0.2);
-        color: #6B7280;
-        border: 1px solid rgba(75, 85, 99, 0.3);
+        background: rgba(185, 28, 28, 0.12);
+        color: #F87171;
+        border: 1px solid rgba(185, 28, 28, 0.3);
     }
     .card-cta {
         display: inline-block;
@@ -274,8 +274,7 @@ st.markdown("""
     <div class="specula-eyebrow">Open Research Platform</div>
     <div class="specula-title">Specula</div>
     <div class="specula-tagline">
-        To observe from a high vantage point. To speculate before the consensus forms.<br>
-        Three portfolios. Three convictions. Everything in real time.
+        Sentinel for Risk. Scout for Reward.
     </div>
     <div class="specula-divider"></div>
 </div>
@@ -286,10 +285,10 @@ st.markdown("""
 <div class="philosophy-block">
     <div class="philosophy-label">Investment Philosophy</div>
     <div class="philosophy-text">
-        Specula is an open research platform built around three conviction-based portfolios.
-        Each portfolio follows a distinct philosophy — documented and published in real time.
-        <b>Concentration is intentional, not a flaw.</b> Diversification for its own sake dilutes conviction.
-        We hold fewer positions, with stronger theses, and we show our work.
+        Specula is an open research platform hosting a growing collection of public paper portfolios.
+        Each portfolio follows <b>its own logic</b> — a distinct thesis, a distinct time horizon, a distinct risk profile.
+        Together, they form a set of <b>complementary strategic optionalities</b>:
+        different markets, different instruments, different convictions — all documented and published in real time.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -306,31 +305,30 @@ st.markdown(
 '<div class="card-number" style="color:#6366F1;">PORTFOLIO I</div>'
 '<div class="card-name">Le Visionnaire</div>'
 '<div class="card-subtitle">High-Conviction Equity · Growth &amp; Disruption</div>'
-'<div class="card-description">Concentrated positions in companies rewriting their industries. '
-'AI, digital health, space, and next-generation platforms. '
-'Managed as a real paper portfolio since April 2026.</div>'
+'<div class="card-description">A public paper portfolio of concentrated positions in companies rewriting their industries. '
+'AI, digital health, space, and next-generation platforms. Live since April 2026.</div>'
 '<div class="card-badge-active badge-live">● Live</div>'
 '</div></a>'
-'<div class="portfolio-card portfolio-card-soon">'
-'<div class="card-glow" style="background:#F97316;"></div>'
+'<div class="portfolio-card portfolio-card-soon" style="border-color:#292116;">'
+'<div class="card-glow" style="background:#F59E0B;opacity:0.18;"></div>'
+'<div class="card-accent" style="background:linear-gradient(90deg,#F59E0B,#FCD34D);"></div>'
+'<div class="card-number" style="color:#F59E0B;">PORTFOLIO II</div>'
+'<div class="card-name">Le Bâtisseur</div>'
+'<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
+'<div class="card-description">The patient capital paper portfolio. Family-controlled businesses, '
+'exceptional capital allocators, and compounders built to last decades. '
+'Think Buffett — with a European lens.</div>'
+'<div class="card-badge-active badge-soon">◌ In construction</div>'
+'</div>'
+'<div class="portfolio-card portfolio-card-soon" style="border-color:#261C10;">'
+'<div class="card-glow" style="background:#F97316;opacity:0.18;"></div>'
 '<div class="card-accent" style="background:linear-gradient(90deg,#F97316,#FB923C);"></div>'
-'<div class="card-number" style="color:#F97316;">PORTFOLIO II</div>'
+'<div class="card-number" style="color:#F97316;">PORTFOLIO III</div>'
 '<div class="card-name">Le Nakamoto</div>'
 '<div class="card-subtitle">Digital Assets · Bitcoin Treasury Plays</div>'
 '<div class="card-description">Pure exposure to the Bitcoin ecosystem. Direct holdings, '
 'treasury companies (DATs), and digital asset infrastructure. '
-'Built on the conviction that Bitcoin is the hardest asset ever created.</div>'
-'<div class="card-badge-active badge-soon">◌ In construction</div>'
-'</div>'
-'<div class="portfolio-card portfolio-card-soon">'
-'<div class="card-glow" style="background:#F59E0B;"></div>'
-'<div class="card-accent" style="background:linear-gradient(90deg,#F59E0B,#FCD34D);"></div>'
-'<div class="card-number" style="color:#F59E0B;">PORTFOLIO III</div>'
-'<div class="card-name">Le Bâtisseur</div>'
-'<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
-'<div class="card-description">The patient capital portfolio. Family-controlled businesses, '
-'exceptional capital allocators, and compounders built to last decades. '
-'Think Buffett — with a European lens.</div>'
+'A paper portfolio built on the conviction that Bitcoin is the hardest asset ever created.</div>'
 '<div class="card-badge-active badge-soon">◌ In construction</div>'
 '</div>'
 '</div>',
