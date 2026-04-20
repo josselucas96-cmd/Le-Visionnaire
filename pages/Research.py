@@ -151,16 +151,17 @@ for p in papers:
         <div class="locked-tag">🔒 &nbsp;Full access restricted</div>
     """ if is_locked else ""
 
-    st.markdown(f"""
-    <div class="{card_class}">
-        <div class="{accent_class}"></div>
-        {ticker_html}
-        <div class="paper-title">{title_html}</div>
-        {summary_html}
-        {locked_html}
-        {date_html}
-    </div>
-    """, unsafe_allow_html=True)
+    card_html = (
+        f'<div class="{card_class}">'
+        f'<div class="{accent_class}"></div>'
+        f'{ticker_html}'
+        f'<div class="paper-title">{title_html}</div>'
+        f'{summary_html}'
+        f'{locked_html}'
+        f'{date_html}'
+        f'</div>'
+    )
+    st.markdown(card_html, unsafe_allow_html=True)
 
     if not is_locked and p.get("file_url"):
         st.link_button("Read the full paper →", p["file_url"])
