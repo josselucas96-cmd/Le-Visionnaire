@@ -158,7 +158,7 @@ alpha = round(portfolio_perf - (qqq_perf or 0), 2)
 # ── Header ────────────────────────────────────────────────────────────────────
 hcol1, hcol2 = st.columns([5, 1])
 with hcol1:
-    st.markdown(f'<p style="font-size:3rem; font-weight:900; letter-spacing:-1px; margin-bottom:0; line-height:1.1;">{portfolio_name}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="font-family:\'Cormorant Garamond\', Georgia, serif; font-size:3.5rem; font-weight:700; letter-spacing:-1px; margin-bottom:0; line-height:1.1;">{portfolio_name}</p>', unsafe_allow_html=True)
     st.caption(
         f"Paper Portfolio · Inception {inception_date} · "
         f"{len(positions)} positions · Benchmark: Nasdaq 100"
