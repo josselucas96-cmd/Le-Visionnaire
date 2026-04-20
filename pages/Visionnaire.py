@@ -100,6 +100,9 @@ st.markdown("""
 <style>
     [data-testid="stSidebar"] { display: none; }
     .block-container { padding-top: 6.8rem; padding-bottom: 2rem; }
+    @media (max-width: 768px) {
+        .block-container { padding-top: 10rem !important; }
+    }
     .portfolio-title { font-size: 3rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0; }
     .section-header { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px; }
     [data-testid="stExpander"] summary p {
