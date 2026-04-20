@@ -274,7 +274,8 @@ st.markdown("""
     <div class="specula-eyebrow">Open Research Platform</div>
     <div class="specula-title">Specula</div>
     <div class="specula-tagline">
-        Sentinel for Risk. Scout for Reward.
+        Observation is the edge. Conviction is the discipline.<br>
+        <span style="font-size:0.88rem; color:#4B5563; font-style:normal; letter-spacing:0.5px;">Merging the power of Qualitative and Quantitative depth.</span>
     </div>
     <div class="specula-divider"></div>
 </div>
@@ -315,9 +316,9 @@ st.markdown(
 '<div class="card-number" style="color:#F59E0B;">PORTFOLIO II</div>'
 '<div class="card-name">Le Bâtisseur</div>'
 '<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
-'<div class="card-description">The patient capital paper portfolio. Family-controlled businesses, '
-'exceptional capital allocators, and compounders built to last decades. '
-'Think Buffett — with a European lens.</div>'
+'<div class="card-description">The patient capital paper portfolio. Quality growth, unconstrained — '
+'think family-controlled businesses, exceptional capital allocators, compounders and category leaders. '
+'Long-term conviction, with a European lens.</div>'
 '<div class="card-badge-active badge-soon">◌ In construction</div>'
 '</div>'
 '<div class="portfolio-card portfolio-card-soon" style="border-color:#261C10;">'
@@ -326,9 +327,9 @@ st.markdown(
 '<div class="card-number" style="color:#F97316;">PORTFOLIO III</div>'
 '<div class="card-name">Le Nakamoto</div>'
 '<div class="card-subtitle">Digital Assets · Bitcoin Treasury Plays</div>'
-'<div class="card-description">Pure exposure to the Bitcoin ecosystem. Direct holdings, '
-'treasury companies (DATs), and digital asset infrastructure. '
-'A paper portfolio built on the conviction that Bitcoin is the hardest asset ever created.</div>'
+'<div class="card-description">A paper portfolio built around digital asset treasuries (DATs) — '
+'companies holding crypto assets on their balance sheet. '
+'Anchored in Bitcoin today, but anticipating a world where treasuries expand across new digital asset frontiers.</div>'
 '<div class="card-badge-active badge-soon">◌ In construction</div>'
 '</div>'
 '</div>',
