@@ -20,8 +20,8 @@ from utils.theme import (
     chart_layout,
 )
 
-_published_count = len([p for p in get_research() if p["status"] == "published" and p.get("doc_type", "Stock Paper") == "Stock Paper"])
-papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} published" if _published_count else "Coming soon"
+_published_count = len([p for p in get_research() if p["status"] in ("published", "locked") and p.get("doc_type", "Stock Paper") == "Stock Paper"])
+papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} available" if _published_count else "Research"
 
 st.set_page_config(
     page_title="Le Visionnaire",
@@ -592,34 +592,11 @@ with st.expander("Risk Analysis", expanded=True):
 
 # ── Documents ────────────────────────────────────────────────────────────────
 all_docs = [p for p in get_research() if p["status"] in ("published", "locked")]
-if all_docs:
+other_docs = [d for d in all_docs if d.get("doc_type", "Stock Paper") != "Stock Paper"]
+if other_docs:
     st.divider()
     with st.expander("Documents", expanded=True):
-        stock_papers = [d for d in all_docs if d.get("doc_type", "Stock Paper") == "Stock Paper"]
-        other_docs   = [d for d in all_docs if d.get("doc_type", "Stock Paper") != "Stock Paper"]
-
-        if stock_papers:
-            st.markdown("**Stock Papers**")
-            for d in stock_papers:
-                c1, c2 = st.columns([6, 1])
-                with c1:
-                    ticker_tag = f"`{d['ticker']}` — " if d.get("ticker") else ""
-                    st.markdown(
-                        f"{ticker_tag}**{d['title']}**  \n"
-                        f"<span style='font-size:0.78rem; color:#555;'>{d.get('published_at','')}"
-                        f"{(' · ' + d['summary'][:80] + '…') if d.get('summary') else ''}</span>",
-                        unsafe_allow_html=True,
-                    )
-                with c2:
-                    if d.get("file_url") and d["status"] == "published":
-                        st.link_button("Read →", d["file_url"])
-                    elif d["status"] == "locked":
-                        st.markdown("<span style='display:inline-flex; align-items:center; gap:6px; color:#6B7280; font-size:0.8rem; font-weight:600; letter-spacing:0.5px;'><svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#6B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'></rect><path d='M7 11V7a5 5 0 0 1 10 0v4'></path></svg>RESTRICTED</span>", unsafe_allow_html=True)
-                st.write("")
-
         if other_docs:
-            if stock_papers:
-                st.markdown("---")
             st.markdown("**Other Documents**")
             for d in other_docs:
                 c1, c2 = st.columns([6, 1])
