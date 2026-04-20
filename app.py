@@ -299,7 +299,10 @@ with st.expander("Positions", expanded=True):
         ]
 
     # Add separator + Cash row at the bottom
-    empty_row = pd.DataFrame([{c: "" for c in display.columns}])
+    _numeric_cols = {"Alloc.", "Entry", "Price", "Total Return", "Today %"}
+    empty_row = pd.DataFrame([{
+        c: None if c in _numeric_cols else "" for c in display.columns
+    }])
     cash_row_table = pd.DataFrame([{
         "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
         "Alloc.": current_cash_pct,
