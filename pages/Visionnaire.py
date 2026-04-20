@@ -65,6 +65,24 @@ st.markdown("""
     color: #7A8595;
     line-height: 1.5;
 }
+@media (max-width: 768px) {
+    .disc-sum {
+        top: 85px; right: 0;
+        height: 28px; width: 36px;
+        justify-content: center;
+        background: rgba(6,9,18,0.97);
+        border-left: 1px solid rgba(0,208,156,0.1);
+        border-bottom: 1px solid rgba(0,208,156,0.1);
+        border-radius: 0 0 0 6px;
+    }
+    .disc-wrap[open] .disc-sum::after { content: "✕"; }
+    .disc-wrap:not([open]) .disc-sum::after { content: "i"; }
+    .disc-body {
+        top: 85px;
+        padding: 0.4rem 2.8rem 0.4rem 1rem;
+        font-size: 0.65rem;
+    }
+}
 </style>
 <details class="disc-wrap" open>
 <summary class="disc-sum"></summary>

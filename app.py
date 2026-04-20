@@ -91,6 +91,12 @@ st.markdown("""
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 1.2rem;
+    }
+    @media (max-width: 768px) {
+        .portfolios-grid { grid-template-columns: 1fr; }
+        .research-teaser { flex-direction: column; gap: 1rem; }
+    }
+    .portfolios-grid {
         margin-bottom: 5rem;
     }
     .portfolio-card {
