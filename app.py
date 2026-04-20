@@ -33,20 +33,64 @@ st.set_page_config(
 render_nav("app")
 
 st.markdown("""
-<div style="
+<input type="checkbox" id="disc-cb" checked style="display:none; position:absolute; left:-9999px;">
+<style>
+.disc-bar {
     background: rgba(0,208,156,0.06);
     border-bottom: 1px solid rgba(0,208,156,0.15);
-    padding: 0.55rem 2.5rem;
+    padding: 0.5rem 3.5rem 0.5rem 2.5rem;
     font-size: 0.72rem;
     color: #7A8595;
     line-height: 1.5;
-">
+    position: relative;
+    max-height: 80px;
+    overflow: hidden;
+    opacity: 1;
+    transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.25s ease;
+}
+.disc-toggle {
+    position: absolute;
+    right: 0.9rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 0.62rem;
+    color: #4A5568;
+    padding: 2px 7px;
+    border: 1px solid #1F2937;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.25);
+    user-select: none;
+    white-space: nowrap;
+}
+.disc-toggle:hover { color: #9CA3AF; border-color: #374151; }
+.disc-show {
+    display: none;
+    cursor: pointer;
+    font-size: 0.62rem;
+    color: #4A5568;
+    padding: 2px 10px 3px 10px;
+    border: 1px solid rgba(0,208,156,0.12);
+    border-top: none;
+    border-radius: 0 0 5px 5px;
+    background: rgba(0,208,156,0.03);
+    user-select: none;
+    margin-left: 2.5rem;
+}
+.disc-show:hover { color: #7A8595; }
+#disc-cb:not(:checked) ~ .disc-bar { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
+#disc-cb:checked ~ .disc-show { display: none; }
+#disc-cb:not(:checked) ~ .disc-show { display: inline-block; }
+</style>
+<div class="disc-bar">
     <strong style="color:#9EAAB8;">Disclaimer</strong> —
     Le Visionnaire is a personal paper portfolio shared for educational and informational purposes only.
     It does not constitute investment advice or a recommendation to buy or sell any security.
     I am not a registered financial advisor. Past performance is not indicative of future results.
     Always conduct your own due diligence before making any investment decision.
+    <label for="disc-cb" class="disc-toggle">▲ hide</label>
 </div>
+<label for="disc-cb" class="disc-show">▼ Disclaimer</label>
 """, unsafe_allow_html=True)
 
 st.markdown("""
