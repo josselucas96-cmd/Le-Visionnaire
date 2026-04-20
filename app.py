@@ -34,39 +34,40 @@ render_nav("app")
 
 st.markdown("""
 <style>
-.disc-details {
+.disc-wrap { margin: 0; padding: 0; }
+.disc-sum {
     position: fixed;
-    top: 52px; left: 0; right: 0;
-    z-index: 99998;
-    background: rgba(6, 9, 18, 0.97);
-    border-bottom: 1px solid rgba(0,208,156,0.15);
-}
-.disc-details summary {
-    list-style: none;
+    top: 0; right: 1.5rem;
+    height: 52px;
+    z-index: 9999999;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding: 0.18rem 1rem;
+    list-style: none;
     cursor: pointer;
     font-size: 0.6rem;
     color: #374151;
     user-select: none;
-    background: transparent;
+    padding: 0 0.4rem;
+    gap: 4px;
 }
-.disc-details summary::-webkit-details-marker { display: none; }
-.disc-details summary:hover { color: #6B7280; }
-.disc-details[open] summary::after { content: "▲ hide"; }
-.disc-details:not([open]) summary::after { content: "▼ disclaimer"; }
+.disc-sum::-webkit-details-marker { display: none; }
+.disc-sum:hover { color: #6B7280; }
+.disc-wrap[open] .disc-sum::after { content: "▼ disclaimer"; }
+.disc-wrap:not([open]) .disc-sum::after { content: "▲ disclaimer"; }
 .disc-body {
+    position: fixed;
+    top: 52px; left: 0; right: 0;
+    z-index: 99998;
+    background: rgba(6, 9, 18, 0.97);
+    border-bottom: 1px solid rgba(0,208,156,0.12);
     padding: 0.45rem 2.5rem 0.5rem 2.5rem;
     font-size: 0.72rem;
     color: #7A8595;
     line-height: 1.5;
-    border-top: 1px solid rgba(0,208,156,0.08);
 }
 </style>
-<details class="disc-details" open>
-<summary></summary>
+<details class="disc-wrap" open>
+<summary class="disc-sum"></summary>
 <div class="disc-body">
 <strong style="color:#9EAAB8;">Disclaimer</strong> —
 Le Visionnaire is a personal paper portfolio shared for educational and informational purposes only.
