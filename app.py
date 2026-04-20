@@ -171,7 +171,6 @@ with hcol2:
         unsafe_allow_html=True,
     )
 
-st.write("")
 metric_cols = st.columns(4)
 
 with metric_cols[0]:
@@ -191,8 +190,6 @@ with metric_cols[3]:
         st.metric("Today", f"{s}{avg_today:.2f}%")
     else:
         st.metric("Today", "—")
-
-st.divider()
 
 # ── Performance ───────────────────────────────────────────────────────────────
 with st.expander("Performance", expanded=True):
@@ -229,11 +226,12 @@ with st.expander("Performance", expanded=True):
         layout["yaxis"]["title"] = "Base 100"
         layout["legend"] = dict(
             orientation="h",
-            yanchor="top", y=-0.08,
+            yanchor="top", y=-0.18,
             xanchor="center", x=0.5,
             font=dict(size=10),
             bgcolor="rgba(0,0,0,0)",
         )
+        layout["margin"]["b"] = 60
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True)
 
