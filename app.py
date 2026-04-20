@@ -136,6 +136,7 @@ history_corr = get_history(corr_tickers, corr_start)
 spy_perf  = None
 spy_index = None
 qqq_index = None
+qqq_perf  = None
 
 if not history.empty:
     port_index = build_portfolio_index(history, positions)
@@ -146,12 +147,13 @@ if not history.empty:
     if "QQQ" in history.columns:
         qqq_raw   = history["QQQ"].dropna()
         qqq_index = qqq_raw / qqq_raw.iloc[0] * 100
+        qqq_perf  = round(qqq_index.iloc[-1] - 100, 2)
     last_updated = history.index[-1].strftime("%b %d, %Y")
 else:
     port_index   = None
     last_updated = "—"
 
-alpha = round(portfolio_perf - (spy_perf or 0), 2)
+alpha = round(portfolio_perf - (qqq_perf or 0), 2)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 hcol1, hcol2 = st.columns([5, 1])
@@ -159,7 +161,7 @@ with hcol1:
     st.markdown(f'<p style="font-size:3rem; font-weight:900; letter-spacing:-1px; margin-bottom:0; line-height:1.1;">{portfolio_name}</p>', unsafe_allow_html=True)
     st.caption(
         f"Paper Portfolio · Inception {inception_date} · "
-        f"{len(positions)} positions · Benchmark: S&P 500"
+        f"{len(positions)} positions · Benchmark: Nasdaq 100"
     )
 with hcol2:
     st.markdown(
@@ -176,8 +178,8 @@ with metric_cols[0]:
     sign = "+" if portfolio_perf >= 0 else ""
     st.metric("Portfolio (inception)", f"{sign}{portfolio_perf:.2f}%")
 with metric_cols[1]:
-    s = "+" if (spy_perf or 0) >= 0 else ""
-    st.metric("S&P 500 (inception)", f"{s}{spy_perf:.2f}%" if spy_perf is not None else "—")
+    s = "+" if (qqq_perf or 0) >= 0 else ""
+    st.metric("Nasdaq 100 (inception)", f"{s}{qqq_perf:.2f}%" if qqq_perf is not None else "—")
 with metric_cols[2]:
     a = "+" if alpha >= 0 else ""
     st.metric("Alpha", f"{a}{alpha:.2f}%")
@@ -207,7 +209,7 @@ with st.expander("Performance", expanded=True):
             fig.add_trace(go.Scatter(
                 x=spy_index.index, y=spy_index.values,
                 name="S&P 500",
-                visible=True,
+                visible="legendonly",
                 line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot",
                           shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
@@ -216,7 +218,7 @@ with st.expander("Performance", expanded=True):
             fig.add_trace(go.Scatter(
                 x=qqq_index.index, y=qqq_index.values,
                 name="Nasdaq 100",
-                visible="legendonly",
+                visible=True,
                 line=dict(color="#A78BFA", width=1.5, dash="dash",
                           shape="spline", smoothing=0.6),
                 hovertemplate="%{x|%b %d, %Y}<br>Nasdaq 100: %{y:.1f}<extra></extra>",
