@@ -5,11 +5,11 @@ from utils.theme import NAV_ACTIVE_COLOR, NAV_ACTIVE_BG, BG, BORDER
 def render_nav(current: str):
     """
     Renders a top navigation bar.
-    current: one of 'specula', 'app', 'history', 'research', 'about'
+    current: one of 'specula', 'visionnaire', 'history', 'research', 'about'
     """
     pages = [
-        ("Accueil",        "/Specula",         "specula"),
-        ("Portfolio",     "/",                "app"),
+        ("Accueil",       "/",                "specula"),
+        ("Portfolio",     "/Visionnaire",     "visionnaire"),
         ("History",       "/HistoryAnalysis", "history"),
         ("Stock Papers",  "/Research",        "research"),
         ("About",         "/About",           "about"),
@@ -125,7 +125,7 @@ def render_nav(current: str):
     }}
 </style>
 <div class="nav-bar">
-    <a href="/Specula" target="_self" class="nav-logo">Specula</a>
+    <a href="/" target="_self" class="nav-logo">Specula</a>
     <div class="nav-links">{links_html}</div>
 </div>
 """, unsafe_allow_html=True)

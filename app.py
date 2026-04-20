@@ -1,658 +1,362 @@
 import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-
-from utils.data import get_positions, get_setting
-from utils.market import get_prices, get_history, get_total_return_factor
-from utils.metrics import (
-    build_portfolio_index, daily_returns,
-    sharpe_ratio, max_drawdown, beta_vs_spy,
-    annualized_volatility, var_95, correlation_matrix, avg_pairwise_correlation,
-    monthly_returns_table,
-)
-from utils.research import get_research
 from utils.nav import render_nav
-from utils.theme import (
-    BG, GRID, BORDER, ACCENT, POSITIVE, NEGATIVE, SWITCH, TRIM,
-    TEXT_MID, TEXT_DIM, PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR,
-    CASH_COLOR, POSITION_COLORS, SECTOR_COLORS, GEO_COLORS, THEMATIC_COLORS,
-    chart_layout,
-)
-
-_published_count = len([p for p in get_research() if p["status"] in ("published", "locked") and p.get("doc_type", "Stock Paper") == "Stock Paper"])
-papers_label = f"{_published_count} paper{'s' if _published_count != 1 else ''} available" if _published_count else "Research"
 
 st.set_page_config(
-    page_title="Le Visionnaire",
-    page_icon="📡",
+    page_title="Specula — The Speculative Thesis",
+    page_icon="🔭",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-render_nav("app")
-
-st.markdown("""
-<style>
-.disc-wrap { margin: 0; padding: 0; }
-.disc-sum {
-    position: fixed;
-    top: 0; right: 1.5rem;
-    height: 52px;
-    z-index: 9999999;
-    display: flex;
-    align-items: center;
-    list-style: none;
-    cursor: pointer;
-    font-size: 0.6rem;
-    color: #374151;
-    user-select: none;
-    padding: 0 0.4rem;
-    gap: 4px;
-}
-.disc-sum::-webkit-details-marker { display: none; }
-.disc-sum:hover { color: #6B7280; }
-.disc-wrap[open] .disc-sum::after { content: "▼ disclaimer"; }
-.disc-wrap:not([open]) .disc-sum::after { content: "▲ disclaimer"; }
-.disc-body {
-    position: fixed;
-    top: 52px; left: 0; right: 0;
-    z-index: 99998;
-    background: rgba(6, 9, 18, 0.97);
-    border-bottom: 1px solid rgba(0,208,156,0.12);
-    padding: 0.45rem 2.5rem 0.5rem 2.5rem;
-    font-size: 0.72rem;
-    color: #7A8595;
-    line-height: 1.5;
-}
-</style>
-<details class="disc-wrap" open>
-<summary class="disc-sum"></summary>
-<div class="disc-body">
-<strong style="color:#9EAAB8;">Disclaimer</strong> —
-Le Visionnaire is a personal paper portfolio shared for educational and informational purposes only.
-It does not constitute investment advice or a recommendation to buy or sell any security.
-I am not a registered financial advisor. Past performance is not indicative of future results.
-Always conduct your own due diligence before making any investment decision.
-</div>
-</details>
-""", unsafe_allow_html=True)
-
 st.markdown("""
 <style>
     [data-testid="stSidebar"] { display: none; }
-    .block-container { padding-top: 6.8rem; padding-bottom: 2rem; }
-    .portfolio-title { font-size: 3rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0; }
-    .section-header { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px; }
-    [data-testid="stExpander"] summary p {
-        font-size: 1.35rem !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.3px !important;
+    .block-container { padding-top: 3.5rem; padding-bottom: 0; max-width: 1100px; }
+
+    /* ── Hero ── */
+    .specula-hero {
+        text-align: center;
+        padding: 5rem 2rem 3.5rem 2rem;
     }
-    .disclaimer { font-size: 0.72rem; color: #4A5568; margin-top: 3rem;
-                  border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }
-    /* Radio buttons accent color → orange */
-    [data-testid="stRadio"] label div[data-testid="stMarkdownContainer"] { color: inherit; }
-    [data-baseweb="radio"] [data-checked="true"] div { background-color: #00D09C !important; border-color: #00D09C !important; }
-    [data-baseweb="radio"] div:focus-within { border-color: #00D09C !important; }
-</style>
-""", unsafe_allow_html=True)
+    .specula-eyebrow {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 4px;
+        color: #4B5563;
+        text-transform: uppercase;
+        margin-bottom: 1.4rem;
+    }
+    .specula-title {
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+        font-size: 5rem;
+        font-weight: 700;
+        letter-spacing: -2px;
+        line-height: 1;
+        color: #F9FAFB;
+        margin-bottom: 1.2rem;
+    }
+    .specula-tagline {
+        font-size: 1.05rem;
+        color: #6B7280;
+        max-width: 560px;
+        margin: 0 auto 2.8rem auto;
+        line-height: 1.75;
+        font-style: italic;
+    }
+    .specula-divider {
+        width: 48px;
+        height: 2px;
+        background: linear-gradient(90deg, #6366F1, #F97316);
+        margin: 0 auto 3.5rem auto;
+        border-radius: 2px;
+    }
 
-# ── Data ──────────────────────────────────────────────────────────────────────
-positions      = get_positions()
-portfolio_name = get_setting("portfolio_name", "Le Visionnaire")
-inception_date = get_setting("inception_date", "2026-04-01")
+    /* ── Philosophy ── */
+    .philosophy-block {
+        max-width: 720px;
+        margin: 0 auto 5rem auto;
+        text-align: center;
+    }
+    .philosophy-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 3px;
+        color: #374151;
+        text-transform: uppercase;
+        margin-bottom: 1.2rem;
+    }
+    .philosophy-text {
+        font-size: 1.05rem;
+        color: #9CA3AF;
+        line-height: 1.85;
+    }
+    .philosophy-text b {
+        color: #E5E7EB;
+        font-weight: 600;
+    }
 
-if not positions:
-    st.title(portfolio_name)
-    st.info("No positions loaded yet. Check back soon.")
-    st.stop()
+    /* ── Section title ── */
+    .section-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 3px;
+        color: #374151;
+        text-transform: uppercase;
+        text-align: center;
+        margin-bottom: 2.2rem;
+    }
 
-tickers = tuple(p["ticker"] for p in positions)
-prices  = get_prices(tickers)
-
-# ── Total Return (price + reinvested dividends) ───────────────────────────────
-entry_dates    = tuple(p["entry_date"] for p in positions)
-entry_prices_t = tuple(float(p["entry_price"]) for p in positions)
-tr_factors     = get_total_return_factor(tickers, entry_dates, entry_prices_t)
-
-for p in positions:
-    live = prices.get(p["ticker"], {})
-    p["current_price"] = live.get("price")
-    p["change_today"]  = live.get("change_pct")
-
-    factor = tr_factors.get(p["ticker"], {"shares_factor": 1.0, "div_return_pct": 0.0})
-    p["div_return"] = factor["div_return_pct"]
-
-    if p["current_price"] and p["entry_price"]:
-        price_return       = (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100
-        # Total return = price gain on reinvested shares + div accumulation
-        total_return       = (factor["shares_factor"] * p["current_price"] / p["entry_price"] - 1) * 100
-        p["price_return"]  = round(price_return, 2)
-        p["perf_pct"]      = round(total_return, 2)
-    else:
-        p["perf_pct"]     = None
-        p["price_return"] = None
-        p["div_return"]   = None
-
-valid   = [p for p in positions if p["perf_pct"] is not None]
-total_w = sum(p["weight"] for p in valid) or 1
-portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
-
-# ── Dynamic weights ────────────────────────────────────────────────────────────
-# current_value_i = entry_weight_i * (current_price_i / entry_price_i)
-# cash doesn't drift; total = sum(current_values) + initial_cash
-initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
-for p in positions:
-    if p.get("current_price") and p.get("entry_price"):
-        p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
-    else:
-        p["current_value"] = p["weight"]
-total_current_value = sum(p["current_value"] for p in positions) + initial_cash
-for p in positions:
-    p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
-current_cash_pct = round(initial_cash / total_current_value * 100, 1)
-
-chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
-history     = get_history(tickers, chart_start)
-
-# Separate 1-year history for correlation (independent of inception date)
-from datetime import date, timedelta
-corr_start   = (date.today() - timedelta(days=365)).isoformat()
-corr_tickers = tickers
-history_corr = get_history(corr_tickers, corr_start)
-
-spy_perf  = None
-spy_index = None
-qqq_index = None
-qqq_perf  = None
-
-if not history.empty:
-    port_index = build_portfolio_index(history, positions)
-    if "SPY" in history.columns:
-        spy_raw   = history["SPY"].dropna()
-        spy_index = spy_raw / spy_raw.iloc[0] * 100
-        spy_perf  = round(spy_index.iloc[-1] - 100, 2)
-    if "QQQ" in history.columns:
-        qqq_raw   = history["QQQ"].dropna()
-        qqq_index = qqq_raw / qqq_raw.iloc[0] * 100
-        qqq_perf  = round(qqq_index.iloc[-1] - 100, 2)
-    last_updated = history.index[-1].strftime("%b %d, %Y")
-else:
-    port_index   = None
-    last_updated = "—"
-
-alpha = round(portfolio_perf - (qqq_perf or 0), 2)
-
-# ── Header ────────────────────────────────────────────────────────────────────
-hcol1, hcol2 = st.columns([5, 1])
-with hcol1:
-    st.markdown(f'<p style="font-family:\'Cormorant Garamond\', Georgia, serif; font-size:3.5rem; font-weight:700; letter-spacing:-1px; margin-bottom:0; line-height:1.1;">{portfolio_name}</p>', unsafe_allow_html=True)
-    st.caption(
-        f"Paper Portfolio · Inception {inception_date} · "
-        f"{len(positions)} positions · Benchmark: Nasdaq 100"
-    )
-with hcol2:
-    st.markdown(
-        f"<div style='text-align:right; padding-top:0.4rem;'>"
-        f"<span style='font-size:0.7rem; color:#555;'>Last updated</span><br>"
-        f"<span style='font-size:0.82rem; color:#888;'>{last_updated}</span></div>",
-        unsafe_allow_html=True,
-    )
-
-metric_cols = st.columns(4)
-
-with metric_cols[0]:
-    sign = "+" if portfolio_perf >= 0 else ""
-    st.metric("Portfolio (inception)", f"{sign}{portfolio_perf:.2f}%")
-with metric_cols[1]:
-    s = "+" if (qqq_perf or 0) >= 0 else ""
-    st.metric("Nasdaq 100 (inception)", f"{s}{qqq_perf:.2f}%" if qqq_perf is not None else "—")
-with metric_cols[2]:
-    a = "+" if alpha >= 0 else ""
-    st.metric("Alpha", f"{a}{alpha:.2f}%")
-with metric_cols[3]:
-    today_valid = [p for p in positions if p["change_today"] is not None]
-    if today_valid:
-        avg_today = sum(p["weight"] * p["change_today"] for p in today_valid) / total_w
-        s = "+" if avg_today >= 0 else ""
-        st.metric("Today", f"{s}{avg_today:.2f}%")
-    else:
-        st.metric("Today", "—")
-
-# ── Performance ───────────────────────────────────────────────────────────────
-with st.expander("Performance", expanded=True):
-    if port_index is not None and not port_index.empty:
-        # Benchmarks toggled via Plotly legend (no Streamlit rerun)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=port_index.index, y=port_index.values,
-            name=portfolio_name,
-            line=dict(color=PORTFOLIO_LINE, width=3, shape="spline", smoothing=0.8),
-            hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
-        ))
-        if spy_index is not None:
-            fig.add_trace(go.Scatter(
-                x=spy_index.index, y=spy_index.values,
-                name="S&P 500",
-                visible="legendonly",
-                line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot",
-                          shape="spline", smoothing=0.6),
-                hovertemplate="%{x|%b %d, %Y}<br>S&P 500: %{y:.1f}<extra></extra>",
-            ))
-        if qqq_index is not None:
-            fig.add_trace(go.Scatter(
-                x=qqq_index.index, y=qqq_index.values,
-                name="Nasdaq 100",
-                visible=True,
-                line=dict(color="#A78BFA", width=1.5, dash="dash",
-                          shape="spline", smoothing=0.6),
-                hovertemplate="%{x|%b %d, %Y}<br>Nasdaq 100: %{y:.1f}<extra></extra>",
-            ))
-        fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
-        layout = chart_layout(height=380)
-        layout["hovermode"] = "x unified"
-        layout["yaxis"]["title"] = "Base 100"
-        layout["legend"] = dict(
-            orientation="h",
-            yanchor="top", y=-0.18,
-            xanchor="center", x=0.5,
-            font=dict(size=10),
-            bgcolor="rgba(0,0,0,0)",
-        )
-        layout["margin"]["b"] = 60
-        fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True)
-
-        port_ret = daily_returns(port_index)
-        spy_ret  = daily_returns(spy_index) if spy_index is not None else pd.Series()
-
-        r1, r2, r3 = st.columns(3)
-        with r1:
-            s = sharpe_ratio(port_ret)
-            st.metric("Sharpe Ratio (ann.)", f"{s:.2f}" if s is not None else "—",
-                      help="Annualized Sharpe, risk-free rate 5%")
-        with r2:
-            md = max_drawdown(port_index)
-            st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
-        with r3:
-            b = beta_vs_spy(port_ret, spy_ret)
-            st.metric("Beta vs S&P 500", f"{b:.2f}" if b is not None else "—")
-
-        # Monthly returns table
-        st.write("")
-        st.markdown("**Monthly Returns (%)**")
-        mrt = monthly_returns_table(port_index)
-        if not mrt.empty:
-            def color_monthly(col):
-                return [
-                    "color: #00D09C" if pd.notna(v) and v > 0
-                    else "color: #FF4B4B" if pd.notna(v) and v < 0
-                    else "" for v in col
-                ]
-            fmt = {m: lambda v: f"{v:+.1f}" if pd.notna(v) else "" for m in mrt.columns}
-            styled_mrt = mrt.style.format(fmt).apply(color_monthly)
-            st.dataframe(styled_mrt, use_container_width=True, height=38 + min(len(mrt), 10) * 35)
-
-st.divider()
-
-# ── Positions ─────────────────────────────────────────────────────────────────
-with st.expander("Positions", expanded=True):
-    df = pd.DataFrame(positions)
-    df = df.sort_values("current_weight", ascending=False)
-    display = df[[c for c in [
-        "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
-        "perf_pct", "change_today",
-        "sector", "geography", "thematic", "thesis_short"
-    ] if c in df.columns]].rename(columns={
-        "ticker":         "Ticker",
-        "name":           "Name",
-        "layer":          "Layer",
-        "current_weight": "Alloc.",
-        "entry_price":    "Entry",
-        "current_price":  "Price",
-        "perf_pct":       "Total Return",
-        "change_today":   "Today %",
-        "sector":         "Sector",
-        "geography":      "Geography",
-        "thematic":       "Thematic",
-        "thesis_short":   "Thesis",
-    })
-    display = display.drop(columns=["Thesis"], errors="ignore")
-
-    def color_signed(col):
-        return [
-            f"color: {POSITIVE}" if isinstance(v, (int, float)) and v > 0
-            else f"color: {NEGATIVE}" if isinstance(v, (int, float)) and v < 0
-            else "" for v in col
-        ]
-
-    # Add separator + Cash row at the bottom
-    _numeric_cols = {"Alloc.", "Entry", "Price", "Total Return", "Today %"}
-    empty_row = pd.DataFrame([{
-        c: None if c in _numeric_cols else "" for c in display.columns
-    }])
-    cash_row_table = pd.DataFrame([{
-        "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
-        "Alloc.": current_cash_pct,
-        "Entry": None, "Price": None,
-        "Total Return": None, "Today %": None,
-        "Sector": "—", "Geography": "USD", "Thematic": "—",
-    }])
-
-    display_full = pd.concat([display, empty_row, cash_row_table], ignore_index=True)
-
-    styled = display_full.style.format({
-        "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
-        "Entry":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Price":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-        "Total Return": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-        "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-    }).apply(color_signed, subset=["Total Return", "Today %"])
-
-    table_height = 38 + (len(display) + 3) * 35
-    st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
-
-    st.caption(f"Cash / Equivalent — Current: {current_cash_pct:.1f}%")
-
-    st.write("")
-    st.markdown(f"""
-<div style="
-    background: linear-gradient(135deg, #0D1F2D 0%, #0E1117 70%);
-    border: 1px solid #1C2E3D;
-    border-radius: 14px;
-    padding: 2.2rem 2.4rem;
-    margin: 1rem 0 0.5rem 0;
-    position: relative;
-    overflow: hidden;
-">
-    <div style="
-        position: absolute; top: -50px; right: -50px;
-        width: 220px; height: 220px;
-        background: radial-gradient(circle, rgba(0,208,156,0.07) 0%, transparent 70%);
+    /* ── Portfolio cards ── */
+    .portfolios-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.2rem;
+        margin-bottom: 5rem;
+    }
+    .portfolio-card {
+        background: #0D1117;
+        border: 1px solid #1F2937;
+        border-radius: 16px;
+        padding: 2rem 1.8rem 1.8rem 1.8rem;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s, transform 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+    .portfolio-card:hover {
+        transform: translateY(-3px);
+    }
+    .portfolio-card-active {
+        border-color: #312E81;
+        cursor: pointer;
+    }
+    .portfolio-card-active:hover {
+        border-color: #4338CA;
+    }
+    .portfolio-card-soon {
+        opacity: 0.85;
+        cursor: default;
+    }
+    .card-glow {
+        position: absolute;
+        top: -80px; right: -80px;
+        width: 200px; height: 200px;
         border-radius: 50%;
-    "></div>
-    <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
-                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
-        Research · {papers_label}
-    </div>
-    <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
-        Stock Papers
-    </div>
-    <div style="font-size:0.88rem; color:#888; line-height:1.65; max-width:480px;">
-        In-depth equity analysis on portfolio positions and market themes.
-    </div>
-</div>
-<a href="/Research" target="_self" style="
-    display: inline-block;
-    background: #00D09C;
-    color: #0E1117;
-    font-weight: 800;
-    font-size: 0.95rem;
-    padding: 0.65rem 1.6rem;
-    border-radius: 8px;
-    text-decoration: none;
-    letter-spacing: 0.2px;
-    margin-bottom: 0.5rem;
-">Read the papers →</a>
-""", unsafe_allow_html=True)
-
-st.divider()
-
-# ── Allocation ────────────────────────────────────────────────────────────────
-with st.expander("Allocation", expanded=True):
-    # Donuts use current (dynamic) weights
-    display_donut = display.copy()
-
-    if current_cash_pct > 0:
-        cash_row = pd.DataFrame([{
-            "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
-            "Entry": None, "Price": None, "Total Return": None, "Today %": None,
-            "Sector": "Cash/Equivalent", "Geography": "USD",
-            "Thematic": "Cash/Equivalent",
-        }])
-        display_alloc = pd.concat([display_donut, cash_row], ignore_index=True)
-    else:
-        display_alloc = display_donut
-
-    _THEMATIC = {
-        "AI / Semi":              "#1E40AF",
-        "Crypto Currencies Play": "#F97316",
-        "Biotech":                "#059669",
-        "Space / Defense":        "#374151",
-        "Consumer Growth":        "#FCA5A5",
-        "Robotics / Automation":  "#6B7280",
-        "Fintech / Payments":     "#60A5FA",
-        "Energy Transition":      "#FCD34D",
-        "Software / SaaS":        "#818CF8",
-        "Cybersecurity":          "#F472B6",
-        "Cloud / Infrastructure": "#6366F1",
-        "Clean Energy":           "#4ADE80",
-        "Digital Health":         "#34D399",
-        "Social Platform":        "#F472B6",
-        "EV / China":             "#86EFAC",
-        "Other":                  "#94A3B8",
-        "Cash":                   "#CBD5E1",
-        "Cash/Equivalent":        "#CBD5E1",
+        filter: blur(60px);
+        opacity: 0.12;
     }
-    _SECTOR = {
-        "Tech":          "#1E40AF",
-        "Healthcare":    "#34D399",
-        "Finance":       "#6366F1",
-        "Communication": "#60A5FA",
-        "Industrials":   "#6B7280",
-        "Consumer":      "#FCD34D",
-        "Energy":        "#FB923C",
-        "Materials":     "#A8A29E",
-        "Real Estate":   "#818CF8",
-        "Utilities":     "#94A3B8",
-        "Cash":          "#CBD5E1",
-        "Cash/Equivalent": "#CBD5E1",
+    .card-accent {
+        width: 36px;
+        height: 3px;
+        border-radius: 2px;
+        margin-bottom: 1.4rem;
     }
-    _GEO = {
-        "USA":              "#1E40AF",
-        "Europe":           "#93C5FD",
-        "Japan":            "#FDBA74",
-        "Asia ex-Japan":    "#FDE68A",
-        "China":            "#991B1B",
-        "Emerging Markets": "#FCD34D",
-        "LatAm":            "#86EFAC",
-        "Global":           "#C084FC",
-        "Other":            "#6B7280",
-        "USD":              "#CBD5E1",
+    .card-number {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 2px;
+        margin-bottom: 0.5rem;
     }
-    COLOR_MAPS = {
-        "Sector":    _SECTOR,
-        "Geography": _GEO,
-        "Thematic":  _THEMATIC,
+    .card-name {
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+        font-size: 1.8rem;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        color: #F9FAFB;
+        margin-bottom: 0.4rem;
+        line-height: 1.1;
     }
+    .card-subtitle {
+        font-size: 0.78rem;
+        color: #6B7280;
+        margin-bottom: 1.2rem;
+        letter-spacing: 0.3px;
+    }
+    .card-description {
+        font-size: 0.88rem;
+        color: #6B7280;
+        line-height: 1.7;
+        flex: 1;
+        margin-bottom: 1.4rem;
+    }
+    .card-badge-active {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        padding: 4px 12px;
+        border-radius: 20px;
+        align-self: flex-start;
+    }
+    .badge-live {
+        background: rgba(99, 102, 241, 0.15);
+        color: #818CF8;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+    .badge-soon {
+        background: rgba(185, 28, 28, 0.12);
+        color: #F87171;
+        border: 1px solid rgba(185, 28, 28, 0.3);
+    }
+    .card-cta {
+        display: inline-block;
+        margin-top: 1rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #818CF8;
+        text-decoration: none;
+        letter-spacing: 0.3px;
+    }
+    .card-cta:hover { color: #A5B4FC; }
 
-    def donut_chart(df, col, title):
-        grouped = df.groupby(col)["Alloc."].sum().reset_index()
-        cmap = COLOR_MAPS.get(col, {})
-        color_map = {cat: cmap.get(cat, "#6B7280") for cat in grouped[col].unique()}
-        fig = px.pie(
-            grouped, values="Alloc.", names=col, title=title,
-            hole=0.52, color=col, color_discrete_map=color_map,
-        )
-        fig.update_traces(
-            textinfo="percent",
-            hovertemplate="%{label}: %{value:.2f}%<extra></extra>",
-        )
-        fig.update_layout(
-            plot_bgcolor=BG, paper_bgcolor=BG,
-            font=dict(color=TEXT_MID),
-            margin=dict(l=0, r=0, t=40, b=0),
-            legend=dict(font=dict(size=11)),
-            title_font_size=14,
-        )
-        return fig
-
-    LAYER_COLORS = {
-        "Core":             "#1E40AF",
-        "Conviction":       "#F97316",
-        "Moonshot":         "#34D399",
-        "Cash":             "#CBD5E1",
-        "Cash/Equivalent":  "#CBD5E1",
+    /* ── Research teaser ── */
+    .research-teaser {
+        background: #0D1117;
+        border: 1px solid #1F2937;
+        border-radius: 16px;
+        padding: 2.5rem 3rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 2rem;
+        margin-bottom: 4rem;
+    }
+    .teaser-left {}
+    .teaser-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 3px;
+        color: #374151;
+        text-transform: uppercase;
+        margin-bottom: 0.6rem;
+    }
+    .teaser-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #F9FAFB;
+        margin-bottom: 0.5rem;
+    }
+    .teaser-sub {
+        font-size: 0.88rem;
+        color: #6B7280;
+        line-height: 1.65;
+        max-width: 480px;
+    }
+    .teaser-cta {
+        display: inline-block;
+        background: #111827;
+        border: 1px solid #374151;
+        color: #D1D5DB;
+        font-size: 0.82rem;
+        font-weight: 600;
+        padding: 0.65rem 1.6rem;
+        border-radius: 8px;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: border-color 0.15s, color 0.15s;
+        flex-shrink: 0;
+    }
+    .teaser-cta:hover {
+        border-color: #6B7280;
+        color: #F9FAFB;
     }
 
-    def layer_donut(df):
-        if "Layer" not in df.columns:
-            return None
-        df_layer = df.copy()
-        df_layer["Layer"] = df_layer["Layer"].replace("Cash", "Cash/Equivalent")
-        grouped = df_layer.groupby("Layer")["Alloc."].sum().reset_index()
-        if grouped.empty:
-            return None
-        color_map = {c: LAYER_COLORS.get(c, "#6B7280") for c in grouped["Layer"].unique()}
-        fig = px.pie(grouped, values="Alloc.", names="Layer", title="Portfolio Layer",
-                     hole=0.52, color="Layer", color_discrete_map=color_map)
-        fig.update_traces(textinfo="percent",
-                          hovertemplate="%{label}: %{value:.2f}%<extra></extra>")
-        fig.update_layout(plot_bgcolor=BG, paper_bgcolor=BG, font=dict(color=TEXT_MID),
-                          margin=dict(l=0, r=0, t=40, b=0),
-                          legend=dict(font=dict(size=11)), title_font_size=14)
-        return fig
-
-    a1, a2, a3, a4 = st.columns(4)
-    layer_fig = layer_donut(display_alloc)
-    if layer_fig:
-        with a1:
-            st.plotly_chart(layer_fig, use_container_width=True)
-    for col_name, title, container in [
-        ("Sector",    "Sector",    a2),
-        ("Geography", "Geography", a3),
-        ("Thematic",  "Thematic",  a4),
-    ]:
-        if col_name in display_alloc.columns:
-            with container:
-                st.plotly_chart(donut_chart(display_alloc, col_name, title), use_container_width=True)
-
-st.divider()
-
-# ── Risk Analysis ─────────────────────────────────────────────────────────────
-with st.expander("Risk Analysis", expanded=True):
-    if port_index is not None and not port_index.empty:
-        port_ret = daily_returns(port_index)
-        spy_ret  = daily_returns(spy_index) if spy_index is not None else pd.Series()
-
-        ra1, ra2, ra3, ra4 = st.columns(4)
-        with ra1:
-            pv = annualized_volatility(port_ret)
-            st.metric("Portfolio Volatility (ann.)", f"{pv:.1f}%" if pv is not None else "—",
-                      help="Annualized standard deviation of daily returns")
-        with ra2:
-            sv = annualized_volatility(spy_ret)
-            st.metric("S&P 500 Volatility (ann.)", f"{sv:.1f}%" if sv is not None else "—")
-        with ra3:
-            v = var_95(port_ret)
-            st.metric("VaR 95% (1-day)", f"{v:.2f}%" if v is not None else "—",
-                      help="Historical VaR: worst daily loss in 95% of scenarios")
-        with ra4:
-            top3 = display.nlargest(3, "Alloc.")[["Ticker", "Alloc."]]
-            top3_pct = top3["Alloc."].sum()
-            st.metric("Top 3 Concentration", f"{top3_pct:.1f}%",
-                      help=" · ".join(top3["Ticker"].tolist()) + " (current weights)")
-
-        corr_mode = st.radio(
-            "Correlation window",
-            ["Trailing 12 months", "Since inception"],
-            horizontal=True,
-            index=0,
-            label_visibility="collapsed",
-        )
-        use_inception = corr_mode == "Since inception"
-        h_for_corr = history if use_inception else history_corr
-        corr     = correlation_matrix(h_for_corr, positions, inception=use_inception)
-        avg_corr = avg_pairwise_correlation(h_for_corr, positions, inception=use_inception)
-        if avg_corr is not None:
-            if avg_corr < 0.3:
-                corr_label, corr_color = "Low — well diversified", POSITIVE
-            elif avg_corr < 0.6:
-                corr_label, corr_color = "Moderate", TRIM
-            else:
-                corr_label, corr_color = "High — concentrated risk", NEGATIVE
-            st.markdown(
-                f"**Avg Pairwise Correlation** &nbsp; "
-                f"<span style='font-size:1.6rem; font-weight:800;'>{avg_corr}</span>"
-                f"&nbsp; <span style='color:{corr_color}; font-size:0.85rem;'>{corr_label}</span>"
-                f"<br><span style='font-size:0.75rem; color:#666;'>"
-                f"Average correlation between all position pairs. "
-                f"Closer to 0 = positions move independently (better diversification). "
-                f"Closer to 1 = positions move together (concentrated risk)."
-                f"</span>",
-                unsafe_allow_html=True,
-            )
-
-        if not corr.empty:
-            label = "trailing 12 months" if not use_inception else "since inception"
-            st.markdown(f"**Correlation Matrix** (daily returns, {label})")
-            st.markdown("""
-<style>
-@media (max-width: 768px) and (orientation: portrait) {
-    .corr-rotate-hint { display: block !important; }
-}
-.corr-rotate-hint { display: none; }
+    /* ── Footer ── */
+    .specula-footer {
+        text-align: center;
+        padding: 2rem 0 3rem 0;
+        border-top: 1px solid #111827;
+    }
+    .footer-logo {
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #374151;
+        margin-bottom: 0.5rem;
+    }
+    .footer-text {
+        font-size: 0.72rem;
+        color: #374151;
+        line-height: 1.6;
+    }
 </style>
-<div class="corr-rotate-hint" style="font-size:0.75rem; color:#00D09C; margin-bottom:0.5rem;">
-    Rotate your screen for a better view of the matrix.
+""", unsafe_allow_html=True)
+
+render_nav("specula")
+
+# ── Hero ──────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="specula-hero">
+    <div class="specula-eyebrow">Open Research Platform</div>
+    <div class="specula-title">Specula</div>
+    <div class="specula-tagline">
+        Observation is the edge. Conviction is the discipline.<br>
+        <span style="font-size:0.88rem; color:#4B5563; font-style:normal; letter-spacing:0.5px;">Merging the power of Qualitative and Quantitative depth.</span>
+    </div>
+    <div class="specula-divider"></div>
 </div>
 """, unsafe_allow_html=True)
-            fig_corr = go.Figure(data=go.Heatmap(
-                z=corr.values,
-                x=corr.columns.tolist(),
-                y=corr.index.tolist(),
-                colorscale=[
-                    [0.0, NEGATIVE],
-                    [0.5, BG],
-                    [1.0, ACCENT],
-                ],
-                zmin=-1, zmax=1,
-                text=corr.values.round(2),
-                texttemplate="%{text}",
-                textfont=dict(size=11),
-                hovertemplate="%{y} / %{x}: %{z:.2f}<extra></extra>",
-            ))
-            fig_corr.update_layout(
-                plot_bgcolor=BG, paper_bgcolor=BG,
-                font=dict(color=TEXT_MID),
-                height=380,
-                margin=dict(l=0, r=0, t=10, b=0),
-                xaxis=dict(side="bottom"),
-            )
-            st.plotly_chart(fig_corr, use_container_width=True)
 
-# ── Documents ────────────────────────────────────────────────────────────────
-all_docs = [p for p in get_research() if p["status"] in ("published", "locked")]
-other_docs = [d for d in all_docs if d.get("doc_type", "Stock Paper") != "Stock Paper"]
-if other_docs:
-    st.divider()
-    with st.expander("Documents", expanded=True):
-        if other_docs:
-            st.markdown("**Other Documents**")
-            for d in other_docs:
-                c1, c2 = st.columns([6, 1])
-                with c1:
-                    st.markdown(
-                        f"**{d['title']}**  \n"
-                        f"<span style='font-size:0.78rem; color:#555;'>{d.get('published_at','')}"
-                        f"{(' · ' + d['summary'][:80] + '…') if d.get('summary') else ''}</span>",
-                        unsafe_allow_html=True,
-                    )
-                with c2:
-                    if d.get("file_url") and d["status"] == "published":
-                        st.link_button("Open →", d["file_url"])
-                    elif d["status"] == "locked":
-                        st.markdown("<span style='display:inline-flex; align-items:center; gap:6px; color:#6B7280; font-size:0.8rem; font-weight:600; letter-spacing:0.5px;'><svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#6B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2' ry='2'></rect><path d='M7 11V7a5 5 0 0 1 10 0v4'></path></svg>RESTRICTED</span>", unsafe_allow_html=True)
-                st.write("")
-
-# ── Disclaimer ────────────────────────────────────────────────────────────────
+# ── Philosophy ────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="disclaimer">
-<strong>Disclaimer:</strong> This is a paper trading simulation and does not involve real financial assets.
-All content published here is for educational and informational purposes only and does not constitute
-financial, investment, or legal advice. I am not a registered financial advisor. Investing in equities
-involves significant risk, including the possible loss of principal. Always conduct your own due diligence
-before making any investment decisions.
+<div class="philosophy-block">
+    <div class="philosophy-label">Investment Philosophy</div>
+    <div class="philosophy-text">
+        Specula is an open research platform hosting a growing collection of public paper portfolios.
+        Each portfolio follows <b>its own logic</b> — a distinct thesis, a distinct time horizon, a distinct risk profile.
+        Together, they form a set of <b>complementary strategic optionalities</b>:
+        different markets, different instruments, different convictions — all documented and published in real time.
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Portfolios ────────────────────────────────────────────────────────────────
+st.markdown('<div class="section-label">The Portfolios</div>', unsafe_allow_html=True)
+
+st.markdown(
+'<div class="portfolios-grid">'
+'<a href="/Visionnaire" target="_self" style="text-decoration:none;">'
+'<div class="portfolio-card portfolio-card-active">'
+'<div class="card-glow" style="background:#6366F1;"></div>'
+'<div class="card-accent" style="background:linear-gradient(90deg,#6366F1,#818CF8);"></div>'
+'<div class="card-number" style="color:#6366F1;">PORTFOLIO I</div>'
+'<div class="card-name">Le Visionnaire</div>'
+'<div class="card-subtitle">High-Conviction Equity · Growth &amp; Disruption</div>'
+'<div class="card-description">A public paper portfolio of high-conviction, concentrated positions in companies rewriting their industries. '
+'AI, digital health, new space, and next-generation platforms — each held with a clear written thesis, documented and tracked in real time. Live since April 2026.</div>'
+'<div class="card-badge-active badge-live">● Live</div>'
+'</div></a>'
+'<div class="portfolio-card portfolio-card-soon" style="border-color:#292116;">'
+'<div class="card-glow" style="background:#F59E0B;opacity:0.18;"></div>'
+'<div class="card-accent" style="background:linear-gradient(90deg,#F59E0B,#FCD34D);"></div>'
+'<div class="card-number" style="color:#F59E0B;">PORTFOLIO II</div>'
+'<div class="card-name">Le Bâtisseur</div>'
+'<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
+'<div class="card-description">The patient capital paper portfolio. Quality growth, unconstrained — '
+'think family-controlled businesses, exceptional capital allocators, compounders and category leaders. '
+'Long-term conviction, with a European lens.</div>'
+'<div class="card-badge-active badge-soon">◌ In construction</div>'
+'</div>'
+'<div class="portfolio-card portfolio-card-soon" style="border-color:#261C10;">'
+'<div class="card-glow" style="background:#F97316;opacity:0.18;"></div>'
+'<div class="card-accent" style="background:linear-gradient(90deg,#F97316,#FB923C);"></div>'
+'<div class="card-number" style="color:#F97316;">PORTFOLIO III</div>'
+'<div class="card-name">Le Nakamoto</div>'
+'<div class="card-subtitle">Digital Assets · Bitcoin Treasury Plays</div>'
+'<div class="card-description">A paper portfolio built around digital asset treasuries (DATs) — '
+'companies holding crypto assets on their balance sheet. '
+'Anchored in Bitcoin today, but anticipating a world where treasuries expand across new digital asset frontiers.</div>'
+'<div class="card-badge-active badge-soon">◌ In construction</div>'
+'</div>'
+'</div>',
+unsafe_allow_html=True)
+
+# ── Research teaser ───────────────────────────────────────────────────────────
+st.markdown("""
+<div class="research-teaser">
+    <div class="teaser-left">
+        <div class="teaser-label">Research</div>
+        <div class="teaser-title">Stock Papers</div>
+        <div class="teaser-sub">
+            In-depth equity analysis on portfolio positions and market themes.
+            Every position we hold has a written thesis — published and signed.
+        </div>
+    </div>
+    <a href="/Research" target="_self" class="teaser-cta">Read the papers →</a>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Footer ────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="specula-footer">
+    <div class="footer-logo">Specula</div>
+    <div class="footer-text">
+        Personal paper portfolios shared for educational and informational purposes only.<br>
+        Not financial advice. Not investment advice. Always conduct your own due diligence.
+    </div>
 </div>
 """, unsafe_allow_html=True)
