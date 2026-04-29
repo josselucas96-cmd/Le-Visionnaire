@@ -138,6 +138,21 @@ def switch_position(out_id: int, out_price: float, in_data: dict, date: str, rea
     sb.table("positions").insert(in_data).execute()
 
 
+def get_events():
+    sb = get_client()
+    return sb.table("events").select("*").order("event_date").execute().data
+
+
+def add_event(data: dict):
+    sb = get_client()
+    sb.table("events").insert(data).execute()
+
+
+def delete_event(event_id: int):
+    sb = get_client()
+    sb.table("events").delete().eq("id", event_id).execute()
+
+
 def reset_portfolio(today_str: str, prices: dict):
     """
     Reinitialize portfolio for a fresh start:

@@ -11,6 +11,7 @@ from utils.data import (
     get_positions, get_transactions,
     add_position, close_position, trim_position, switch_position,
     get_setting, upsert_setting, reset_portfolio,
+    get_events, add_event, delete_event,
 )
 from utils.market import get_prices
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
@@ -372,23 +373,60 @@ def fetch_upcoming_earnings(tickers: tuple) -> list:
     return events
 
 
+EVENT_TYPES = ["Earnings", "Investor Day", "Product Launch", "FDA / Regulatory",
+               "Conference", "FOMC / Macro", "Index Rebalance", "Other"]
+
 with st.expander("📅 Earnings & Events Calendar", expanded=False):
-    st.caption("Upcoming earnings dates from Yahoo Finance — plan ahead for quarterly news.")
+    st.caption("Auto-pulled earnings + your custom events. Plan ahead for catalysts.")
+
     if not positions:
         st.info("No active positions.")
     else:
         with st.spinner("Loading earnings calendar…"):
-            events = fetch_upcoming_earnings(tuple(p["ticker"] for p in positions))
+            auto_events = fetch_upcoming_earnings(tuple(p["ticker"] for p in positions))
+
+        # Custom events (from Supabase)
+        try:
+            custom_raw = get_events()
+        except Exception:
+            custom_raw = []
+            st.warning("Custom events unavailable — has the `events` table been created in Supabase?")
+
+        today_ts = pd.Timestamp.today().normalize()
+        custom_events = []
+        for e in custom_raw:
+            try:
+                d_ts = pd.Timestamp(e["event_date"])
+                if d_ts >= today_ts:
+                    custom_events.append({
+                        "id":       e["id"],
+                        "Source":   "manual",
+                        "Ticker":   e.get("ticker") or "—",
+                        "Type":     e["event_type"],
+                        "Title":    e.get("title") or "",
+                        "Date":     d_ts.strftime("%Y-%m-%d"),
+                        "Days":     (d_ts - today_ts).days,
+                        "EPS Est.": None,
+                        "Notes":    e.get("notes") or "",
+                    })
+            except Exception:
+                continue
+
+        for e in auto_events:
+            e["Source"] = "auto"
+            e["Title"]  = "Earnings release"
+            e["Notes"]  = ""
+
+        all_events = sorted(auto_events + custom_events, key=lambda x: x["Days"])
 
         # Tickers we couldn't find earnings for
-        found_tickers = {e["Ticker"] for e in events}
+        found_tickers = {e["Ticker"] for e in auto_events}
         missing = [p["ticker"] for p in positions if p["ticker"] not in found_tickers]
 
-        if not events:
-            st.info("No upcoming earnings dates found in the next 6 months.")
+        if not all_events:
+            st.info("No upcoming events.")
         else:
-            events.sort(key=lambda e: e["Days"])
-            df_e = pd.DataFrame(events)
+            df_all = pd.DataFrame(all_events)[["Source", "Ticker", "Type", "Title", "Date", "Days", "EPS Est."]]
 
             def _color_urgency(row):
                 d = row["Days"]
@@ -398,23 +436,69 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
                     return ["background-color: rgba(255, 165, 0, 0.10)"] * len(row)
                 return [""] * len(row)
 
-            styled_e = df_e.style.apply(_color_urgency, axis=1).format({
+            styled_e = df_all.style.apply(_color_urgency, axis=1).format({
                 "Days":     lambda v: f"{int(v)}d" if pd.notna(v) else "—",
                 "EPS Est.": lambda v: f"${v:.2f}" if pd.notna(v) else "—",
             })
-            h_e = 38 + min(len(events), 20) * 35
+            h_e = 38 + min(len(all_events), 25) * 35
             st.dataframe(styled_e, use_container_width=True, hide_index=True, height=h_e)
 
-            within_7  = sum(1 for e in events if e["Days"] <= 7)
-            within_30 = sum(1 for e in events if e["Days"] <= 30)
+            within_7  = sum(1 for e in all_events if e["Days"] <= 7)
+            within_30 = sum(1 for e in all_events if e["Days"] <= 30)
             st.caption(
-                f"📅 {len(events)} upcoming · "
+                f"📅 {len(all_events)} upcoming · "
                 f"🔴 {within_7} within 7 days · "
                 f"🟠 {within_30 - within_7} within 8–30 days"
             )
 
         if missing:
-            st.caption(f"_No earnings data for: {', '.join(missing)}_")
+            st.caption(f"_No auto earnings data for: {', '.join(missing)}_")
+
+        # ── Add custom event ──
+        st.markdown("---")
+        st.markdown("**➕ Add a custom event**")
+        with st.form("event_add_form", clear_on_submit=True):
+            ec1, ec2, ec3 = st.columns([1, 1.5, 1.5])
+            with ec1:
+                ev_ticker = st.text_input("Ticker (optional)", placeholder="TSLA").strip().upper()
+            with ec2:
+                ev_type = st.selectbox("Event Type", EVENT_TYPES, index=1)
+            with ec3:
+                ev_date = st.date_input("Event Date", value=date.today())
+            ev_title = st.text_input("Title *", placeholder="e.g. Tesla Investor Day 2026")
+            ev_notes = st.text_area("Notes (optional)", height=60)
+
+            if st.form_submit_button("Add Event", type="primary"):
+                if not ev_title:
+                    st.error("Title is required.")
+                else:
+                    try:
+                        add_event({
+                            "ticker":     ev_ticker or None,
+                            "event_type": ev_type,
+                            "event_date": str(ev_date),
+                            "title":      ev_title,
+                            "notes":      ev_notes or None,
+                        })
+                        st.success(f"✓ {ev_title} added.")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Could not save: {e}")
+
+        # ── Manage existing custom events ──
+        if custom_events:
+            st.markdown("**🗂 Manage custom events**")
+            for ce in custom_events:
+                mc1, mc2, mc3, mc4 = st.columns([1, 1.5, 5, 0.5])
+                with mc1: st.markdown(f"`{ce['Ticker']}`")
+                with mc2: st.markdown(f"_{ce['Date']}_ · {ce['Type']}")
+                with mc3: st.markdown(ce["Title"])
+                with mc4:
+                    if st.button("🗑", key=f"del_evt_{ce['id']}", help="Delete"):
+                        delete_event(ce["id"])
+                        st.cache_data.clear()
+                        st.rerun()
 
 st.divider()
 
