@@ -293,7 +293,7 @@ st.markdown("""
     <div class="philosophy-label">Investment Philosophy</div>
     <div class="philosophy-text">
         Specula is an open research platform hosting a growing collection of public paper portfolios.
-        Each portfolio follows <b>its own logic</b> — a distinct thesis, a distinct time horizon, a distinct risk profile.
+        Each portfolio follows <b>its own logic</b> — a distinct thesis, a distinct strategy, a distinct risk profile.
         Together, they form a set of <b>complementary strategic optionalities</b>:
         different markets, different instruments, different convictions — all documented and published in real time.
     </div>

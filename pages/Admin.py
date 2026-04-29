@@ -315,9 +315,9 @@ st.divider()
 
 # ── Earnings & Events Calendar ────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
-def fetch_upcoming_earnings_v2(tickers: tuple) -> tuple:
-    """Pull next earnings date for each ticker via yfinance. Cached 1h.
-    Returns (events_list, errors_dict) so we can surface failures.
+def fetch_upcoming_earnings_v3(tickers: tuple) -> tuple:
+    """Pull next earnings date + EPS + Revenue estimate per ticker. Cached 1h.
+    .calendar gives EPS Avg + Revenue Avg; .earnings_dates is a fallback for date/EPS.
     """
     today = pd.Timestamp.today().normalize()
     horizon = today + pd.Timedelta(days=180)
@@ -327,59 +327,71 @@ def fetch_upcoming_earnings_v2(tickers: tuple) -> tuple:
     for t in tickers:
         event_date = None
         eps_est = None
+        rev_est = None
         err_msg = None
 
-        # 1) Primary: .earnings_dates — DataFrame, has EPS estimate
+        # 1) Primary: .calendar — has both EPS Avg and Revenue Avg
         try:
-            yt = yf.Ticker(t)
-            ed_df = yt.earnings_dates
-            if ed_df is not None and not ed_df.empty:
-                idx = ed_df.index
-                # Normalize to naive timestamps for comparison
-                if hasattr(idx, "tz") and idx.tz is not None:
-                    idx = idx.tz_localize(None)
-                idx_norm = pd.DatetimeIndex(idx).normalize()
-                mask = idx_norm >= today
-                if mask.any():
-                    first_ts = pd.Timestamp(idx_norm[mask][0])
-                    event_date = first_ts
-                    if "EPS Estimate" in ed_df.columns:
-                        eps_val = ed_df["EPS Estimate"].iloc[int(mask.argmax())]
-                        if pd.notna(eps_val):
-                            eps_est = float(eps_val)
+            cal = yf.Ticker(t).calendar
+            if isinstance(cal, dict) and "Earnings Date" in cal:
+                dates = cal["Earnings Date"]
+                if dates:
+                    for d in dates:
+                        d_ts = pd.Timestamp(d).normalize()
+                        if d_ts >= today:
+                            event_date = d_ts
+                            if cal.get("Earnings Average") is not None:
+                                eps_est = float(cal["Earnings Average"])
+                            if cal.get("Revenue Average") is not None:
+                                rev_est = float(cal["Revenue Average"])
+                            break
         except Exception as e:
-            err_msg = f"earnings_dates: {type(e).__name__}: {str(e)[:60]}"
+            err_msg = f"calendar: {type(e).__name__}: {str(e)[:60]}"
 
-        # 2) Fallback: .calendar dict
+        # 2) Fallback for date (revenue stays None): .earnings_dates
         if event_date is None:
             try:
-                cal = yf.Ticker(t).calendar
-                if isinstance(cal, dict) and "Earnings Date" in cal:
-                    dates = cal["Earnings Date"]
-                    if dates:
-                        for d in dates:
-                            d_ts = pd.Timestamp(d).normalize()
-                            if d_ts >= today:
-                                event_date = d_ts
-                                if cal.get("Earnings Average") is not None:
-                                    eps_est = float(cal["Earnings Average"])
-                                break
+                ed_df = yf.Ticker(t).earnings_dates
+                if ed_df is not None and not ed_df.empty:
+                    idx = ed_df.index
+                    if hasattr(idx, "tz") and idx.tz is not None:
+                        idx = idx.tz_localize(None)
+                    idx_norm = pd.DatetimeIndex(idx).normalize()
+                    mask = idx_norm >= today
+                    if mask.any():
+                        event_date = pd.Timestamp(idx_norm[mask][0])
+                        if "EPS Estimate" in ed_df.columns:
+                            eps_val = ed_df["EPS Estimate"].iloc[int(mask.argmax())]
+                            if pd.notna(eps_val):
+                                eps_est = float(eps_val)
             except Exception as e:
                 if err_msg is None:
-                    err_msg = f"calendar: {type(e).__name__}: {str(e)[:60]}"
+                    err_msg = f"earnings_dates: {type(e).__name__}: {str(e)[:60]}"
 
         if event_date is not None and today <= event_date <= horizon:
             events.append({
-                "Ticker": t,
-                "Type": "Earnings",
-                "Date": event_date.strftime("%Y-%m-%d"),
-                "Days": int((event_date - today).days),
+                "Ticker":   t,
+                "Type":     "Earnings",
+                "Date":     event_date.strftime("%Y-%m-%d"),
+                "Days":     int((event_date - today).days),
                 "EPS Est.": eps_est,
+                "Rev Est.": rev_est,
             })
         elif err_msg:
             errors[t] = err_msg
 
     return events, errors
+
+
+def _fmt_revenue(v):
+    """Format revenue in $X.XB / $XXXM."""
+    if v is None or not isinstance(v, (int, float)) or pd.isna(v):
+        return "—"
+    if abs(v) >= 1e9:
+        return f"${v / 1e9:.2f}B"
+    if abs(v) >= 1e6:
+        return f"${v / 1e6:.0f}M"
+    return f"${v:,.0f}"
 
 
 EVENT_TYPES = ["Earnings", "Investor Day", "Product Launch", "FDA / Regulatory",
@@ -391,14 +403,14 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
         st.caption("Auto-pulled earnings + your custom events. Plan ahead for catalysts.")
     with btn_col:
         if st.button("↻ Refresh", key="refresh_earnings", help="Bypass cache and re-fetch"):
-            fetch_upcoming_earnings_v2.clear()
+            fetch_upcoming_earnings_v3.clear()
             st.rerun()
 
     if not positions:
         st.info("No active positions.")
     else:
         with st.spinner("Loading earnings calendar…"):
-            auto_events, fetch_errors = fetch_upcoming_earnings_v2(tuple(p["ticker"] for p in positions))
+            auto_events, fetch_errors = fetch_upcoming_earnings_v3(tuple(p["ticker"] for p in positions))
 
         # Custom events (from Supabase)
         try:
@@ -415,22 +427,19 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
                 if d_ts >= today_ts:
                     custom_events.append({
                         "id":       e["id"],
-                        "Source":   "manual",
                         "Ticker":   e.get("ticker") or "—",
                         "Type":     e["event_type"],
                         "Title":    e.get("title") or "",
                         "Date":     d_ts.strftime("%Y-%m-%d"),
                         "Days":     (d_ts - today_ts).days,
                         "EPS Est.": None,
-                        "Notes":    e.get("notes") or "",
+                        "Rev Est.": None,
                     })
             except Exception:
                 continue
 
         for e in auto_events:
-            e["Source"] = "auto"
-            e["Title"]  = "Earnings release"
-            e["Notes"]  = ""
+            e["Title"] = "Earnings release"
 
         all_events = sorted(auto_events + custom_events, key=lambda x: x["Days"])
 
@@ -441,7 +450,7 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
         if not all_events:
             st.info("No upcoming events.")
         else:
-            df_all = pd.DataFrame(all_events)[["Source", "Ticker", "Type", "Title", "Date", "Days", "EPS Est."]]
+            df_all = pd.DataFrame(all_events)[["Date", "Days", "Ticker", "Type", "Title", "EPS Est.", "Rev Est."]]
 
             def _color_urgency(row):
                 d = row["Days"]
@@ -454,6 +463,7 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
             styled_e = df_all.style.apply(_color_urgency, axis=1).format({
                 "Days":     lambda v: f"{int(v)}d" if pd.notna(v) else "—",
                 "EPS Est.": lambda v: f"${v:.2f}" if pd.notna(v) else "—",
+                "Rev Est.": _fmt_revenue,
             })
             h_e = 38 + min(len(all_events), 25) * 35
             st.dataframe(styled_e, use_container_width=True, hide_index=True, height=h_e)
