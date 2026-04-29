@@ -315,75 +315,90 @@ st.divider()
 
 # ── Earnings & Events Calendar ────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
-def fetch_upcoming_earnings(tickers: tuple) -> list:
-    """Pull next earnings date for each ticker via yfinance. Cached 1h."""
+def fetch_upcoming_earnings_v2(tickers: tuple) -> tuple:
+    """Pull next earnings date for each ticker via yfinance. Cached 1h.
+    Returns (events_list, errors_dict) so we can surface failures.
+    """
     today = pd.Timestamp.today().normalize()
     horizon = today + pd.Timedelta(days=180)
     events = []
+    errors = {}
+
     for t in tickers:
+        event_date = None
+        eps_est = None
+        err_msg = None
+
+        # 1) Primary: .earnings_dates — DataFrame, has EPS estimate
         try:
             yt = yf.Ticker(t)
-            event_date = None
-            eps_est = None
+            ed_df = yt.earnings_dates
+            if ed_df is not None and not ed_df.empty:
+                idx = ed_df.index
+                # Normalize to naive timestamps for comparison
+                if hasattr(idx, "tz") and idx.tz is not None:
+                    idx = idx.tz_localize(None)
+                idx_norm = pd.DatetimeIndex(idx).normalize()
+                mask = idx_norm >= today
+                if mask.any():
+                    first_ts = pd.Timestamp(idx_norm[mask][0])
+                    event_date = first_ts
+                    if "EPS Estimate" in ed_df.columns:
+                        eps_val = ed_df["EPS Estimate"].iloc[int(mask.argmax())]
+                        if pd.notna(eps_val):
+                            eps_est = float(eps_val)
+        except Exception as e:
+            err_msg = f"earnings_dates: {type(e).__name__}: {str(e)[:60]}"
 
-            # Try .calendar (modern yfinance returns a dict)
+        # 2) Fallback: .calendar dict
+        if event_date is None:
             try:
-                cal = yt.calendar
+                cal = yf.Ticker(t).calendar
                 if isinstance(cal, dict) and "Earnings Date" in cal:
                     dates = cal["Earnings Date"]
                     if dates:
                         for d in dates:
-                            d_ts = pd.Timestamp(d)
+                            d_ts = pd.Timestamp(d).normalize()
                             if d_ts >= today:
                                 event_date = d_ts
-                                eps_est = cal.get("Earnings Average")
+                                if cal.get("Earnings Average") is not None:
+                                    eps_est = float(cal["Earnings Average"])
                                 break
-                elif hasattr(cal, "loc") and cal is not None and "Earnings Date" in getattr(cal, "index", []):
-                    ed = cal.loc["Earnings Date"]
-                    event_date = pd.Timestamp(ed.iloc[0] if hasattr(ed, "iloc") else ed)
-            except Exception:
-                pass
+            except Exception as e:
+                if err_msg is None:
+                    err_msg = f"calendar: {type(e).__name__}: {str(e)[:60]}"
 
-            # Fallback: .earnings_dates DataFrame
-            if event_date is None:
-                try:
-                    ed_df = yt.earnings_dates
-                    if ed_df is not None and not ed_df.empty:
-                        idx = ed_df.index
-                        if idx.tz is not None:
-                            idx = idx.tz_localize(None)
-                        upcoming_mask = idx >= today
-                        if upcoming_mask.any():
-                            event_date = pd.Timestamp(idx[upcoming_mask][0])
-                            if "EPS Estimate" in ed_df.columns:
-                                eps_est = ed_df["EPS Estimate"].iloc[upcoming_mask.argmax()]
-                except Exception:
-                    pass
+        if event_date is not None and today <= event_date <= horizon:
+            events.append({
+                "Ticker": t,
+                "Type": "Earnings",
+                "Date": event_date.strftime("%Y-%m-%d"),
+                "Days": int((event_date - today).days),
+                "EPS Est.": eps_est,
+            })
+        elif err_msg:
+            errors[t] = err_msg
 
-            if event_date is not None and today <= event_date <= horizon:
-                events.append({
-                    "Ticker": t,
-                    "Type": "Earnings",
-                    "Date": event_date.strftime("%Y-%m-%d"),
-                    "Days": (event_date - today).days,
-                    "EPS Est.": float(eps_est) if (eps_est is not None and pd.notna(eps_est)) else None,
-                })
-        except Exception:
-            pass
-    return events
+    return events, errors
 
 
 EVENT_TYPES = ["Earnings", "Investor Day", "Product Launch", "FDA / Regulatory",
                "Conference", "FOMC / Macro", "Index Rebalance", "Other"]
 
 with st.expander("📅 Earnings & Events Calendar", expanded=False):
-    st.caption("Auto-pulled earnings + your custom events. Plan ahead for catalysts.")
+    cap_col, btn_col = st.columns([5, 1])
+    with cap_col:
+        st.caption("Auto-pulled earnings + your custom events. Plan ahead for catalysts.")
+    with btn_col:
+        if st.button("↻ Refresh", key="refresh_earnings", help="Bypass cache and re-fetch"):
+            fetch_upcoming_earnings_v2.clear()
+            st.rerun()
 
     if not positions:
         st.info("No active positions.")
     else:
         with st.spinner("Loading earnings calendar…"):
-            auto_events = fetch_upcoming_earnings(tuple(p["ticker"] for p in positions))
+            auto_events, fetch_errors = fetch_upcoming_earnings_v2(tuple(p["ticker"] for p in positions))
 
         # Custom events (from Supabase)
         try:
@@ -453,6 +468,11 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
 
         if missing:
             st.caption(f"_No auto earnings data for: {', '.join(missing)}_")
+
+        if fetch_errors:
+            with st.expander("⚠ Fetch errors (debug)", expanded=False):
+                for tk, err in fetch_errors.items():
+                    st.text(f"{tk}: {err}")
 
         # ── Add custom event ──
         st.markdown("---")
