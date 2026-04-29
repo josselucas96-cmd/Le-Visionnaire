@@ -312,6 +312,112 @@ else:
 
 st.divider()
 
+# ── Earnings & Events Calendar ────────────────────────────────────────────────
+@st.cache_data(ttl=3600)
+def fetch_upcoming_earnings(tickers: tuple) -> list:
+    """Pull next earnings date for each ticker via yfinance. Cached 1h."""
+    today = pd.Timestamp.today().normalize()
+    horizon = today + pd.Timedelta(days=180)
+    events = []
+    for t in tickers:
+        try:
+            yt = yf.Ticker(t)
+            event_date = None
+            eps_est = None
+
+            # Try .calendar (modern yfinance returns a dict)
+            try:
+                cal = yt.calendar
+                if isinstance(cal, dict) and "Earnings Date" in cal:
+                    dates = cal["Earnings Date"]
+                    if dates:
+                        for d in dates:
+                            d_ts = pd.Timestamp(d)
+                            if d_ts >= today:
+                                event_date = d_ts
+                                eps_est = cal.get("Earnings Average")
+                                break
+                elif hasattr(cal, "loc") and cal is not None and "Earnings Date" in getattr(cal, "index", []):
+                    ed = cal.loc["Earnings Date"]
+                    event_date = pd.Timestamp(ed.iloc[0] if hasattr(ed, "iloc") else ed)
+            except Exception:
+                pass
+
+            # Fallback: .earnings_dates DataFrame
+            if event_date is None:
+                try:
+                    ed_df = yt.earnings_dates
+                    if ed_df is not None and not ed_df.empty:
+                        idx = ed_df.index
+                        if idx.tz is not None:
+                            idx = idx.tz_localize(None)
+                        upcoming_mask = idx >= today
+                        if upcoming_mask.any():
+                            event_date = pd.Timestamp(idx[upcoming_mask][0])
+                            if "EPS Estimate" in ed_df.columns:
+                                eps_est = ed_df["EPS Estimate"].iloc[upcoming_mask.argmax()]
+                except Exception:
+                    pass
+
+            if event_date is not None and today <= event_date <= horizon:
+                events.append({
+                    "Ticker": t,
+                    "Type": "Earnings",
+                    "Date": event_date.strftime("%Y-%m-%d"),
+                    "Days": (event_date - today).days,
+                    "EPS Est.": float(eps_est) if (eps_est is not None and pd.notna(eps_est)) else None,
+                })
+        except Exception:
+            pass
+    return events
+
+
+with st.expander("📅 Earnings & Events Calendar", expanded=False):
+    st.caption("Upcoming earnings dates from Yahoo Finance — plan ahead for quarterly news.")
+    if not positions:
+        st.info("No active positions.")
+    else:
+        with st.spinner("Loading earnings calendar…"):
+            events = fetch_upcoming_earnings(tuple(p["ticker"] for p in positions))
+
+        # Tickers we couldn't find earnings for
+        found_tickers = {e["Ticker"] for e in events}
+        missing = [p["ticker"] for p in positions if p["ticker"] not in found_tickers]
+
+        if not events:
+            st.info("No upcoming earnings dates found in the next 6 months.")
+        else:
+            events.sort(key=lambda e: e["Days"])
+            df_e = pd.DataFrame(events)
+
+            def _color_urgency(row):
+                d = row["Days"]
+                if d <= 7:
+                    return ["background-color: rgba(255, 75, 75, 0.15); font-weight: 600"] * len(row)
+                if d <= 30:
+                    return ["background-color: rgba(255, 165, 0, 0.10)"] * len(row)
+                return [""] * len(row)
+
+            styled_e = df_e.style.apply(_color_urgency, axis=1).format({
+                "Days":     lambda v: f"{int(v)}d" if pd.notna(v) else "—",
+                "EPS Est.": lambda v: f"${v:.2f}" if pd.notna(v) else "—",
+            })
+            h_e = 38 + min(len(events), 20) * 35
+            st.dataframe(styled_e, use_container_width=True, hide_index=True, height=h_e)
+
+            within_7  = sum(1 for e in events if e["Days"] <= 7)
+            within_30 = sum(1 for e in events if e["Days"] <= 30)
+            st.caption(
+                f"📅 {len(events)} upcoming · "
+                f"🔴 {within_7} within 7 days · "
+                f"🟠 {within_30 - within_7} within 8–30 days"
+            )
+
+        if missing:
+            st.caption(f"_No earnings data for: {', '.join(missing)}_")
+
+st.divider()
+
 LAYERS     = ["Core", "Conviction", "Moonshot", "Cash/Equivalent"]
 SECTORS    = ["Tech", "Healthcare", "Consumer", "Finance", "Communication",
               "Industrials", "Energy", "Materials", "Real Estate", "Utilities"]
