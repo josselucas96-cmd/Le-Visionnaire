@@ -203,7 +203,16 @@ else:
     port_index   = None
     last_updated = "—"
 
+# Use the same base-100 index methodology for the headline metric
+# so it stays consistent with the chart and with the QQQ benchmark.
+if port_index is not None and not port_index.empty:
+    portfolio_perf = round(float(port_index.iloc[-1] - 100), 2)
+
 alpha = round(portfolio_perf - (qqq_perf or 0), 2)
+
+# Number of daily returns since inception (used to gate statistical metrics)
+_n_returns = len(port_index.pct_change().dropna()) if (port_index is not None and not port_index.empty) else 0
+_MIN_DAYS_STATS = 60
 
 # ── Header ────────────────────────────────────────────────────────────────────
 hcol1, hcol2 = st.columns([5, 1])
@@ -289,16 +298,24 @@ with st.expander("Performance", expanded=True):
         spy_ret  = daily_returns(spy_index) if spy_index is not None else pd.Series()
 
         r1, r2, r3 = st.columns(3)
+        _stats_ready = _n_returns >= _MIN_DAYS_STATS
+        _stats_help = f"Available after {_MIN_DAYS_STATS} trading days (currently {_n_returns})"
         with r1:
-            s = sharpe_ratio(port_ret)
-            st.metric("Sharpe Ratio (ann.)", f"{s:.2f}" if s is not None else "—",
-                      help="Annualized Sharpe, risk-free rate 5%")
+            if _stats_ready:
+                s = sharpe_ratio(port_ret)
+                st.metric("Sharpe Ratio (ann.)", f"{s:.2f}" if s is not None else "—",
+                          help="Annualized Sharpe, risk-free rate 5%")
+            else:
+                st.metric("Sharpe Ratio (ann.)", "—", help=_stats_help)
         with r2:
             md = max_drawdown(port_index)
             st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
         with r3:
-            b = beta_vs_spy(port_ret, spy_ret)
-            st.metric("Beta vs S&P 500", f"{b:.2f}" if b is not None else "—")
+            if _stats_ready:
+                b = beta_vs_spy(port_ret, spy_ret)
+                st.metric("Beta vs S&P 500", f"{b:.2f}" if b is not None else "—")
+            else:
+                st.metric("Beta vs S&P 500", "—", help=_stats_help)
 
         # Monthly returns table
         st.write("")
@@ -558,17 +575,28 @@ with st.expander("Risk Analysis", expanded=True):
         spy_ret  = daily_returns(spy_index) if spy_index is not None else pd.Series()
 
         ra1, ra2, ra3, ra4 = st.columns(4)
+        _stats_ready = _n_returns >= _MIN_DAYS_STATS
+        _stats_help = f"Available after {_MIN_DAYS_STATS} trading days (currently {_n_returns})"
         with ra1:
-            pv = annualized_volatility(port_ret)
-            st.metric("Portfolio Volatility (ann.)", f"{pv:.1f}%" if pv is not None else "—",
-                      help="Annualized standard deviation of daily returns")
+            if _stats_ready:
+                pv = annualized_volatility(port_ret)
+                st.metric("Portfolio Volatility (ann.)", f"{pv:.1f}%" if pv is not None else "—",
+                          help="Annualized standard deviation of daily returns")
+            else:
+                st.metric("Portfolio Volatility (ann.)", "—", help=_stats_help)
         with ra2:
-            sv = annualized_volatility(spy_ret)
-            st.metric("S&P 500 Volatility (ann.)", f"{sv:.1f}%" if sv is not None else "—")
+            if _stats_ready:
+                sv = annualized_volatility(spy_ret)
+                st.metric("S&P 500 Volatility (ann.)", f"{sv:.1f}%" if sv is not None else "—")
+            else:
+                st.metric("S&P 500 Volatility (ann.)", "—", help=_stats_help)
         with ra3:
-            v = var_95(port_ret)
-            st.metric("VaR 95% (1-day)", f"{v:.2f}%" if v is not None else "—",
-                      help="Historical VaR: worst daily loss in 95% of scenarios")
+            if _stats_ready:
+                v = var_95(port_ret)
+                st.metric("VaR 95% (1-day)", f"{v:.2f}%" if v is not None else "—",
+                          help="Historical VaR: worst daily loss in 95% of scenarios")
+            else:
+                st.metric("VaR 95% (1-day)", "—", help=_stats_help)
         with ra4:
             top3 = display.nlargest(3, "Alloc.")[["Ticker", "Alloc."]]
             top3_pct = top3["Alloc."].sum()
