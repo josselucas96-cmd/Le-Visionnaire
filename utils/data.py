@@ -7,19 +7,45 @@ def get_client():
     return create_client(st.secrets["supabase_url"], st.secrets["supabase_key"])
 
 
-def get_positions(active_only=True):
+# ── Portfolios ────────────────────────────────────────────────────────────────
+def get_portfolios(active_only=True):
+    """List all portfolios, ordered by display_order."""
     sb = get_client()
-    query = sb.table("positions").select("*")
+    query = sb.table("portfolios").select("*").order("display_order")
+    if active_only:
+        query = query.eq("is_active", True)
+    return query.execute().data
+
+
+def get_portfolio(portfolio_id: str):
+    """Fetch a single portfolio's metadata by id (slug)."""
+    sb = get_client()
+    result = sb.table("portfolios").select("*").eq("id", portfolio_id).execute().data
+    return result[0] if result else None
+
+
+# ── Positions ─────────────────────────────────────────────────────────────────
+def get_positions(active_only=True, portfolio_id: str = "visionnaire"):
+    sb = get_client()
+    query = sb.table("positions").select("*").eq("portfolio_id", portfolio_id)
     if active_only:
         query = query.eq("is_active", True)
     return query.order("ticker").execute().data
 
 
-def get_transactions():
+def get_transactions(portfolio_id: str = "visionnaire"):
     sb = get_client()
-    return sb.table("transactions").select("*").order("date", desc=True).execute().data
+    return (
+        sb.table("transactions")
+        .select("*")
+        .eq("portfolio_id", portfolio_id)
+        .order("date", desc=True)
+        .execute()
+        .data
+    )
 
 
+# ── Settings (global for now; will scope later if needed) ─────────────────────
 def get_setting(key, default=None):
     sb = get_client()
     result = sb.table("settings").select("value").eq("key", key).execute().data
@@ -31,11 +57,16 @@ def upsert_setting(key, value):
     sb.table("settings").upsert({"key": key, "value": str(value)}).execute()
 
 
-def add_position(data: dict):
+# ── Position write operations ─────────────────────────────────────────────────
+def add_position(data: dict, portfolio_id: str = "visionnaire"):
     sb = get_client()
+    # Ensure portfolio_id is on the inserted row
+    data = {**data, "portfolio_id": portfolio_id}
+
     existing = (
         sb.table("positions")
         .select("id, weight, entry_price")
+        .eq("portfolio_id", portfolio_id)
         .eq("ticker", data["ticker"])
         .eq("is_active", True)
         .execute()
@@ -43,18 +74,17 @@ def add_position(data: dict):
     )
     if existing:
         ex = existing[0]
-        old_w  = float(ex["weight"])
-        new_w  = float(data["weight"])
+        old_w = float(ex["weight"])
+        new_w = float(data["weight"])
         total_w = old_w + new_w
         pru = round((old_w * float(ex["entry_price"]) + new_w * float(data["entry_price"])) / total_w, 4)
         update_data = {"weight": total_w, "entry_price": pru}
-        # Only update thesis if a new one was explicitly provided
         new_thesis = (data.get("thesis_short") or "").strip()
         if new_thesis:
             update_data["thesis_short"] = new_thesis
-        # name, sector, geography, thematic: always keep existing
         sb.table("positions").update(update_data).eq("id", ex["id"]).execute()
         sb.table("transactions").insert({
+            "portfolio_id": portfolio_id,
             "date": data.get("entry_date"),
             "action": "IN",
             "ticker_in": data["ticker"],
@@ -65,6 +95,7 @@ def add_position(data: dict):
     else:
         sb.table("positions").insert(data).execute()
         sb.table("transactions").insert({
+            "portfolio_id": portfolio_id,
             "date": data.get("entry_date"),
             "action": "IN",
             "ticker_in": data.get("ticker"),
@@ -81,6 +112,7 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float, exit_
     new_weight = round(pos["weight"] - weight_sold, 4)
     sb.table("positions").update({"weight": new_weight}).eq("id", position_id).execute()
     sb.table("transactions").insert({
+        "portfolio_id": pos.get("portfolio_id", "visionnaire"),
         "date": exit_date,
         "action": "TRIM",
         "ticker_out": pos["ticker"],
@@ -97,6 +129,7 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
     pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
     perf = round((exit_price - pos["entry_price"]) / pos["entry_price"] * 100, 2)
     sb.table("transactions").insert({
+        "portfolio_id": pos.get("portfolio_id", "visionnaire"),
         "date": exit_date,
         "action": "OUT",
         "ticker_out": pos["ticker"],
@@ -116,8 +149,10 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
 def switch_position(out_id: int, out_price: float, in_data: dict, date: str, reason: str):
     sb = get_client()
     pos_out = sb.table("positions").select("*").eq("id", out_id).execute().data[0]
+    portfolio_id = pos_out.get("portfolio_id", "visionnaire")
     perf = round((out_price - pos_out["entry_price"]) / pos_out["entry_price"] * 100, 2)
     sb.table("transactions").insert({
+        "portfolio_id": portfolio_id,
         "date": date,
         "action": "SWITCH",
         "ticker_out": pos_out["ticker"],
@@ -135,9 +170,11 @@ def switch_position(out_id: int, out_price: float, in_data: dict, date: str, rea
         "exit_price": out_price,
         "exit_date": date,
     }).eq("id", out_id).execute()
-    sb.table("positions").insert(in_data).execute()
+    # Ensure new position carries the same portfolio_id as the one being switched out
+    sb.table("positions").insert({**in_data, "portfolio_id": portfolio_id}).execute()
 
 
+# ── Events (global for now) ───────────────────────────────────────────────────
 def get_events():
     sb = get_client()
     return sb.table("events").select("*").order("event_date").execute().data
@@ -153,15 +190,16 @@ def delete_event(event_id: int):
     sb.table("events").delete().eq("id", event_id).execute()
 
 
-def reset_portfolio(today_str: str, prices: dict):
+# ── Reset ─────────────────────────────────────────────────────────────────────
+def reset_portfolio(today_str: str, prices: dict, portfolio_id: str = "visionnaire"):
     """
     Reinitialize portfolio for a fresh start:
     - Reset entry_price and entry_date to today's price for all active positions
     - Deactivate STRC cleanly (no exit transaction — it's a reset, not a trade)
-    - Update inception_date setting to today
+    - Update inception_date in both settings (legacy) and portfolios table.
     """
     sb = get_client()
-    positions = get_positions()
+    positions = get_positions(portfolio_id=portfolio_id)
     for p in positions:
         ticker = p["ticker"]
         if ticker == "STRC":
@@ -173,4 +211,6 @@ def reset_portfolio(today_str: str, prices: dict):
                     "entry_price": current_price,
                     "entry_date": today_str,
                 }).eq("id", p["id"]).execute()
+    # Update both legacy settings and portfolios table
     upsert_setting("inception_date", today_str)
+    sb.table("portfolios").update({"inception_date": today_str}).eq("id", portfolio_id).execute()
