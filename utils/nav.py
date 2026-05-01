@@ -8,8 +8,9 @@ def render_nav(current: str):
     current: one of 'specula', 'visionnaire', 'nakamoto', 'history', 'research', 'about'
 
     Portfolio button is a dropdown with Le Visionnaire + Le Nakamoto.
-    All links use target="_top" to force a real URL update (bypasses Streamlit's
-    in-app link interception that was leaving the URL stale).
+    Links use target="_self" so clicks work (target="_top" was breaking clicks
+    on Streamlit Cloud). The URL bar may not update on click due to Streamlit's
+    internal navigation, but bookmarks via direct URL still work.
     """
     portfolio_keys = {"visionnaire", "nakamoto"}
     is_portfolio_active = current in portfolio_keys
@@ -19,11 +20,11 @@ def render_nav(current: str):
     # Build the dropdown menu HTML on a single line (avoids Markdown code-block trap)
     portfolio_dropdown_html = (
         '<div class="dropdown-menu">'
-        f'<a href="/Visionnaire" target="_top" class="dropdown-item {v_active}">'
+        f'<a href="/Visionnaire" target="_self" class="dropdown-item {v_active}">'
         '<span class="dropdown-portfolio-name">Le Visionnaire</span>'
         '<span class="dropdown-portfolio-tag">High-Conviction Equity</span>'
         '</a>'
-        f'<a href="/Nakamoto" target="_top" class="dropdown-item {n_active}">'
+        f'<a href="/Nakamoto" target="_self" class="dropdown-item {n_active}">'
         '<span class="dropdown-portfolio-name">Le Nakamoto</span>'
         '<span class="dropdown-portfolio-tag">Digital Asset Treasuries</span>'
         '</a>'
@@ -47,12 +48,12 @@ def render_nav(current: str):
     ]
     accueil_label, accueil_href, accueil_key = simple_pages[0]
     accueil_active = "nav-active" if accueil_key == current else ""
-    accueil_html = f'<a href="{accueil_href}" target="_top" class="nav-link {accueil_active}">{accueil_label}</a>'
+    accueil_html = f'<a href="{accueil_href}" target="_self" class="nav-link {accueil_active}">{accueil_label}</a>'
 
     other_links_html = ""
     for label, href, key in simple_pages[1:]:
         active = "nav-active" if key == current else ""
-        other_links_html += f'<a href="{href}" target="_top" class="nav-link {active}">{label}</a>'
+        other_links_html += f'<a href="{href}" target="_self" class="nav-link {active}">{label}</a>'
 
     links_html = accueil_html + portfolio_html + other_links_html
 
@@ -226,7 +227,7 @@ def render_nav(current: str):
     }}
 </style>
 <div class="nav-bar">
-    <a href="/" target="_top" class="nav-logo">Specula</a>
+    <a href="/" target="_self" class="nav-logo">Specula</a>
     <div class="nav-links">{links_html}</div>
 </div>
 """, unsafe_allow_html=True)
