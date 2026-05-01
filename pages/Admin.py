@@ -12,6 +12,7 @@ from utils.data import (
     add_position, close_position, trim_position, switch_position,
     get_setting, upsert_setting, reset_portfolio,
     get_events, add_event, delete_event,
+    get_portfolios,
 )
 from utils.market import get_prices
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
@@ -939,7 +940,32 @@ with tab_history:
         st.info("No transactions yet.")
 
 # ── DOCUMENTS ─────────────────────────────────────────────────────────────────
-DOC_TYPES = ["Stock Paper", "Other Document"]
+# Build doc-type options dynamically: Stock Paper + one entry per portfolio.
+# When a new portfolio is inserted in the portfolios table, it appears here automatically.
+_portfolios_for_docs = get_portfolios()
+DOC_TYPE_OPTIONS = ["Stock Paper"] + [f"{p['name']} Document" for p in _portfolios_for_docs]
+
+
+def _resolve_doc_type(label: str):
+    """Map a UI label to (doc_type, portfolio_id) for storage."""
+    if label == "Stock Paper":
+        return ("Stock Paper", None)
+    for p in _portfolios_for_docs:
+        if label == f"{p['name']} Document":
+            return ("Portfolio Document", p["id"])
+    return ("Stock Paper", None)
+
+
+def _label_for_doc(doc: dict) -> str:
+    """Reverse: derive a human label from a stored doc dict."""
+    if doc.get("doc_type") == "Stock Paper":
+        return "Stock Paper"
+    pid = doc.get("portfolio_id")
+    for p in _portfolios_for_docs:
+        if p["id"] == pid:
+            return f"{p['name']} Document"
+    return doc.get("doc_type") or "—"
+
 
 with tab_research:
     st.subheader("Documents")
@@ -956,7 +982,7 @@ with tab_research:
         with r1:
             r_title = st.text_input("★ Title")
         with r2:
-            r_doc_type = st.selectbox("Document Type", DOC_TYPES)
+            r_doc_type_label = st.selectbox("Document Type", DOC_TYPE_OPTIONS)
         with r3_col:
             r_ticker = st.text_input("Ticker (optional)").strip().upper()
         r_summary = st.text_area("Summary (shown on the public page)", height=80)
@@ -977,6 +1003,7 @@ with tab_research:
                     slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", r_title).encode("ascii", "ignore").decode().lower()).strip("-")
                     filename = f"{r_date}_{slug}.pdf"
                     url = upload_pdf(r_file.read(), filename)
+                doc_type, doc_pid = _resolve_doc_type(r_doc_type_label)
                 upsert_research({
                     "title": r_title,
                     "ticker": r_ticker or None,
@@ -984,9 +1011,10 @@ with tab_research:
                     "file_url": url,
                     "status": r_status,
                     "published_at": str(r_date),
-                    "doc_type": r_doc_type,
+                    "doc_type": doc_type,
+                    "portfolio_id": doc_pid,
                 })
-                st.success(f"✓ '{r_title}' saved as {r_status}.")
+                st.success(f"✓ '{r_title}' saved as {r_status} ({r_doc_type_label}).")
                 st.rerun()
 
     st.divider()
@@ -1007,7 +1035,7 @@ with tab_research:
                             unsafe_allow_html=True)
             with col_type:
                 st.markdown(
-                    f"<span style='font-size:0.75rem; color:#888;'>{p.get('doc_type','Stock Paper')}</span>",
+                    f"<span style='font-size:0.75rem; color:#888;'>{_label_for_doc(p)}</span>",
                     unsafe_allow_html=True
                 )
             with col_status:

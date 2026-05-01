@@ -787,21 +787,20 @@ Always conduct your own due diligence before making any investment decision.
                     )
                     st.plotly_chart(fig_corr, use_container_width=True)
 
-    # ── Documents (additional, non Stock Paper) ───────────────────────────────
+    # ── Documents (portfolio-specific only) ───────────────────────────────────
     if show_documents_section:
         all_docs = [p for p in get_research() if p["status"] in ("published", "locked")]
-        other_docs = [d for d in all_docs if d.get("doc_type", "Stock Paper") != "Stock Paper"]
-        if other_docs:
+        portfolio_docs = [d for d in all_docs if d.get("portfolio_id") == portfolio_id]
+        if portfolio_docs:
             st.divider()
             with st.expander("Documents", expanded=True):
-                st.markdown("**Other Documents**")
-                for d in other_docs:
+                for d in portfolio_docs:
                     c1, c2 = st.columns([6, 1])
                     with c1:
                         st.markdown(
                             f"**{d['title']}**  \n"
                             f"<span style='font-size:0.78rem; color:#555;'>{d.get('published_at','')}"
-                            f"{(' · ' + d['summary'][:80] + '…') if d.get('summary') else ''}</span>",
+                            f"{(' · ' + (d.get('summary') or '')[:80] + '…') if d.get('summary') else ''}</span>",
                             unsafe_allow_html=True,
                         )
                     with c2:
