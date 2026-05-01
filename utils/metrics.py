@@ -20,6 +20,7 @@ def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
         return pd.Series(dtype=float)
 
     portfolio = pd.Series(0.0, index=history.index)
+    contributed = False
 
     for p in positions:
         ticker = p["ticker"]
@@ -49,6 +50,13 @@ def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
         full = full.reindex(history.index).ffill().bfill()
 
         portfolio += full * w
+        contributed = True
+
+    # Degenerate case: no position has data after its entry_date.
+    # E.g. inception = today and yfinance hasn't returned today's data yet.
+    # Return an empty Series so the caller can detect "no data" and skip rendering.
+    if not contributed:
+        return pd.Series(dtype=float)
 
     return portfolio
 

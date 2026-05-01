@@ -11,6 +11,4 @@ st.set_page_config(
 render_portfolio_page("nakamoto", options={
     "show_donuts": ["Geography"],
     "show_risk_analysis": False,
-    "show_research_teaser": False,
-    "show_documents_section": False,
 })
