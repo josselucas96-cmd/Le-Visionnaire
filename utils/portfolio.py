@@ -303,6 +303,24 @@ Always conduct your own due diligence before making any investment decision.
         text-transform: uppercase;
         margin-bottom: 0.6rem;
     }}
+
+    /* Expander section headers: themed border instead of teal default */
+    [data-testid="stExpander"] details {{
+        border: 1px solid {_hex_to_rgba(accent, 0.25)} !important;
+    }}
+    [data-testid="stExpander"] details:hover {{
+        border-color: {_hex_to_rgba(accent, 0.45)} !important;
+    }}
+    [data-testid="stExpander"] details[open] {{
+        border-color: {accent} !important;
+    }}
+    [data-testid="stExpander"] summary:focus-visible {{
+        outline: 2px solid {accent} !important;
+        outline-offset: 2px;
+    }}
+    [data-testid="stExpander"] summary p {{
+        color: #F9FAFB !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
