@@ -13,50 +13,46 @@ def render_nav(current: str):
     """
     portfolio_keys = {"visionnaire", "nakamoto"}
     is_portfolio_active = current in portfolio_keys
+    v_active = "dropdown-active" if current == "visionnaire" else ""
+    n_active = "dropdown-active" if current == "nakamoto" else ""
 
-    # Determine which portfolio is highlighted in the dropdown
-    portfolio_dropdown_html = f"""
-    <div class="dropdown-menu">
-        <a href="/Visionnaire" target="_top" class="dropdown-item {'dropdown-active' if current == 'visionnaire' else ''}">
-            <span class="dropdown-portfolio-name">Le Visionnaire</span>
-            <span class="dropdown-portfolio-tag">High-Conviction Equity</span>
-        </a>
-        <a href="/Nakamoto" target="_top" class="dropdown-item {'dropdown-active' if current == 'nakamoto' else ''}">
-            <span class="dropdown-portfolio-name">Le Nakamoto</span>
-            <span class="dropdown-portfolio-tag">Digital Asset Treasuries</span>
-        </a>
-    </div>
-    """
+    # Build the dropdown menu HTML on a single line (avoids Markdown code-block trap)
+    portfolio_dropdown_html = (
+        '<div class="dropdown-menu">'
+        f'<a href="/Visionnaire" target="_top" class="dropdown-item {v_active}">'
+        '<span class="dropdown-portfolio-name">Le Visionnaire</span>'
+        '<span class="dropdown-portfolio-tag">High-Conviction Equity</span>'
+        '</a>'
+        f'<a href="/Nakamoto" target="_top" class="dropdown-item {n_active}">'
+        '<span class="dropdown-portfolio-name">Le Nakamoto</span>'
+        '<span class="dropdown-portfolio-tag">Digital Asset Treasuries</span>'
+        '</a>'
+        '</div>'
+    )
 
-    # Other top-level nav items (single links)
+    portfolio_active = "nav-active" if is_portfolio_active else ""
+    portfolio_html = (
+        '<div class="nav-dropdown">'
+        f'<span class="nav-link nav-link-dropdown {portfolio_active}">Portfolio <span class="caret">▾</span></span>'
+        f'{portfolio_dropdown_html}'
+        '</div>'
+    )
+
+    # Single-link entries before and after the Portfolio dropdown
     simple_pages = [
         ("Accueil",      "/",                "specula"),
         ("History",      "/HistoryAnalysis", "history"),
         ("Stock Papers", "/Research",        "research"),
         ("About",        "/About",           "about"),
     ]
-
-    # Build nav links HTML, with Portfolio inserted as a dropdown after Accueil
     accueil_label, accueil_href, accueil_key = simple_pages[0]
     accueil_active = "nav-active" if accueil_key == current else ""
-    accueil_html = (
-        f'<a href="{accueil_href}" target="_top" class="nav-link {accueil_active}">{accueil_label}</a>'
-    )
-
-    portfolio_active = "nav-active" if is_portfolio_active else ""
-    portfolio_html = f"""
-    <div class="nav-dropdown">
-        <span class="nav-link nav-link-dropdown {portfolio_active}">Portfolio <span class="caret">▾</span></span>
-        {portfolio_dropdown_html}
-    </div>
-    """
+    accueil_html = f'<a href="{accueil_href}" target="_top" class="nav-link {accueil_active}">{accueil_label}</a>'
 
     other_links_html = ""
     for label, href, key in simple_pages[1:]:
         active = "nav-active" if key == current else ""
-        other_links_html += (
-            f'<a href="{href}" target="_top" class="nav-link {active}">{label}</a>'
-        )
+        other_links_html += f'<a href="{href}" target="_top" class="nav-link {active}">{label}</a>'
 
     links_html = accueil_html + portfolio_html + other_links_html
 
