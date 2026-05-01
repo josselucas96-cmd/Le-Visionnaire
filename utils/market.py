@@ -23,14 +23,17 @@ def get_prices(tickers: tuple) -> dict:
 
 
 @st.cache_data(ttl=3600)  # Refresh every hour
-def get_history(tickers: tuple, start: str) -> pd.DataFrame:
+def get_history(tickers: tuple, start: str, benchmarks: tuple = ("SPY", "QQQ")) -> pd.DataFrame:
     """
-    Daily closing prices for all tickers + SPY from start to today.
+    Daily closing prices for tickers + benchmarks from start to today.
     Returns a DataFrame with tickers as columns, date as index.
     Missing tickers are silently dropped.
+
+    `benchmarks` defaults to ('SPY', 'QQQ') for backwards compat (Visionnaire).
+    Pass ('BTC-USD', 'MSTR') for Le Nakamoto, etc.
     """
     end = datetime.today().strftime("%Y-%m-%d")
-    all_tickers = list(set(list(tickers) + ["SPY", "QQQ"]))
+    all_tickers = list(set(list(tickers) + list(benchmarks)))
 
     try:
         raw = yf.download(all_tickers, start=start, end=end,

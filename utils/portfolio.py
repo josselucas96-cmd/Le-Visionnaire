@@ -294,11 +294,12 @@ Always conduct your own due diligence before making any investment decision.
     current_cash_pct = round(initial_cash / total_current_value * 100, 1)
 
     chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
-    history     = get_history(tickers, chart_start)
+    benchmarks  = tuple(b for b in [bench_pri, bench_sec] if b)
+    history     = get_history(tickers, chart_start, benchmarks=benchmarks)
 
-    # 1-year history for correlation
+    # 1-year history for correlation (no benchmarks needed)
     corr_start   = (date.today() - timedelta(days=365)).isoformat()
-    history_corr = get_history(tickers, corr_start)
+    history_corr = get_history(tickers, corr_start, benchmarks=())
 
     # Build portfolio index + benchmark indices (parameterized)
     primary_perf  = None
