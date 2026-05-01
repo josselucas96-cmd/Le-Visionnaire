@@ -325,7 +325,7 @@ st.markdown(
 '<div class="card-description">An unconstrained equity paper portfolio focused on quality and risk management. '
 'The core is quality compounding — high-grade businesses, exceptional capital allocators, category leaders — '
 'paired with a tactical layer of thematic plays and select opportunities.</div>'
-'<div class="card-badge-active badge-soon">◌ In construction</div>'
+'<div class="card-badge-active badge-soon">◌ In progress</div>'
 '</div>'
 '<div class="portfolio-card portfolio-card-soon" style="border-color:#261C10;">'
 '<div class="card-glow" style="background:#F97316;opacity:0.18;"></div>'
@@ -336,7 +336,7 @@ st.markdown(
 '<div class="card-description">A paper portfolio specialized in amplified Bitcoin exposure through digital asset treasuries (DATs) — '
 'companies holding BTC on their balance sheet. '
 'An innovative investment vehicle built on amplification mechanisms, designed to deliver a more advantageous risk/reward profile for Bitcoin exposure.</div>'
-'<div class="card-badge-active badge-soon">◌ In construction</div>'
+'<div class="card-badge-active badge-soon">◌ In progress</div>'
 '</div>'
 '</div>',
 unsafe_allow_html=True)

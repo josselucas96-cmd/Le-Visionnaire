@@ -18,16 +18,17 @@ def render_nav(current: str):
     n_active = "dropdown-active" if current == "nakamoto" else ""
 
     # Build the dropdown menu HTML on a single line (avoids Markdown code-block trap)
+    # Le Nakamoto is visible but disabled (In progress) until official launch.
     portfolio_dropdown_html = (
         '<div class="dropdown-menu">'
         f'<a href="/Visionnaire" target="_self" class="dropdown-item {v_active}">'
         '<span class="dropdown-portfolio-name">Le Visionnaire</span>'
         '<span class="dropdown-portfolio-tag">High-Conviction Equity</span>'
         '</a>'
-        f'<a href="/Nakamoto" target="_self" class="dropdown-item {n_active}">'
+        '<div class="dropdown-item dropdown-item-disabled">'
         '<span class="dropdown-portfolio-name">Le Nakamoto</span>'
-        '<span class="dropdown-portfolio-tag">Digital Asset Treasuries</span>'
-        '</a>'
+        '<span class="dropdown-portfolio-tag">Digital Asset Treasuries  ·  In progress</span>'
+        '</div>'
         '</div>'
     )
 
@@ -169,6 +170,14 @@ def render_nav(current: str):
     }}
     .dropdown-active {{
         background: rgba(0, 208, 156, 0.08);
+    }}
+    .dropdown-item-disabled {{
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+    }}
+    .dropdown-item-disabled:hover {{
+        background: transparent !important;
     }}
     .dropdown-portfolio-name {{
         font-family: 'Cormorant Garamond', Georgia, serif !important;
