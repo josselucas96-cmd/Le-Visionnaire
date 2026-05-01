@@ -91,6 +91,12 @@ _COLOR_MAPS = {
     "Layer":     _LAYER_COLORS,
 }
 
+# Eyebrow text per portfolio (matches the IPS document tagline)
+_EYEBROW = {
+    "visionnaire": "HIGH CONVICTION EQUITY  ·  PAPER PORTFOLIO",
+    "nakamoto":    "DIGITAL ASSET TREASURIES  ·  PAPER PORTFOLIO",
+}
+
 
 def _donut_chart(df, col, title):
     grouped = df.groupby(col)["Alloc."].sum().reset_index()
@@ -246,12 +252,39 @@ Always conduct your own due diligence before making any investment decision.
     [data-baseweb="radio"] [data-checked="true"] div {{ background-color: #00D09C !important; border-color: #00D09C !important; }}
     [data-baseweb="radio"] div:focus-within {{ border-color: #00D09C !important; }}
 
-    /* ── Portfolio accent: title + metric labels & values ── */
-    .pf-title {{ color: {accent} !important; }}
-    [data-testid="stMetric"] [data-testid="stMetricLabel"] {{ color: {accent} !important; }}
-    [data-testid="stMetric"] [data-testid="stMetricLabel"] p {{ color: {accent} !important; }}
-    [data-testid="stMetric"] [data-testid="stMetricValue"] {{ color: {accent} !important; }}
-    .pf-section-label {{ color: {accent} !important; font-weight: 700; }}
+    /* ── Portfolio accent (IPS-inspired): eyebrow + title + metric labels ── */
+    .pf-eyebrow {{
+        color: {accent};
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-bottom: 0.7rem;
+        margin-top: 0.2rem;
+    }}
+    .pf-title {{
+        color: {accent} !important;
+    }}
+    /* Metric labels: accent, uppercase, letter-spaced (eyebrow style) */
+    [data-testid="stMetric"] [data-testid="stMetricLabel"] p {{
+        color: {accent} !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1.5px !important;
+        font-size: 0.68rem !important;
+        font-weight: 700 !important;
+    }}
+    /* Metric values: stay bright white for contrast */
+    [data-testid="stMetric"] [data-testid="stMetricValue"] {{
+        color: #F9FAFB !important;
+    }}
+    .pf-section-label {{
+        color: {accent} !important;
+        font-weight: 700;
+        font-size: 0.78rem;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        margin-bottom: 0.6rem;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -344,15 +377,17 @@ Always conduct your own due diligence before making any investment decision.
     # ── Header ────────────────────────────────────────────────────────────────
     hcol1, hcol2 = st.columns([5, 1])
     with hcol1:
+        eyebrow = _EYEBROW.get(portfolio_id, "PAPER PORTFOLIO")
         st.markdown(
+            f'<div class="pf-eyebrow">{eyebrow}</div>'
             f'<p class="pf-title" style="font-family:\'Cormorant Garamond\', Georgia, serif; '
             f'font-size:3.5rem; font-weight:700; letter-spacing:-1px; '
             f'margin-bottom:0; line-height:1.1;">{portfolio_name}</p>',
             unsafe_allow_html=True,
         )
         st.caption(
-            f"Paper Portfolio · Inception {inception_date} · "
-            f"{len(positions)} positions · Benchmark: {bench_pri_lbl}"
+            f"Inception {inception_date} · {len(positions)} positions · "
+            f"Benchmark: {bench_pri_lbl}"
         )
     with hcol2:
         st.markdown(
