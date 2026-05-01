@@ -595,12 +595,13 @@ Always conduct your own due diligence before making any investment decision.
         # Research teaser (optional)
         if show_research_teaser:
             st.write("")
-            accent_radial = _hex_to_rgba(accent, 0.10)
-            accent_border_subtle = _hex_to_rgba(accent, 0.18)
+            gradient_tint   = _hex_to_rgba(accent, 0.18)  # accent-tinted dark for gradient start
+            accent_radial   = _hex_to_rgba(accent, 0.12)
+            accent_border_subtle = _hex_to_rgba(accent, 0.25)
             btn_text_color = "#0E1117" if _is_light_color(accent) else "#FFFFFF"
             st.markdown(f"""
 <div style="
-    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, #0E1117 70%);
+    background: linear-gradient(135deg, {gradient_tint} 0%, #0E1117 60%);
     border: 1px solid {accent_border_subtle};
     border-radius: 14px;
     padding: 2.2rem 2.4rem;
@@ -609,8 +610,8 @@ Always conduct your own due diligence before making any investment decision.
     overflow: hidden;
 ">
     <div style="
-        position: absolute; top: -50px; right: -50px;
-        width: 220px; height: 220px;
+        position: absolute; top: -60px; right: -60px;
+        width: 280px; height: 280px;
         background: radial-gradient(circle, {accent_radial} 0%, transparent 70%);
         border-radius: 50%;
     "></div>
