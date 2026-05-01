@@ -322,7 +322,7 @@ st.markdown(
 '<div class="card-number" style="color:#F59E0B;">PORTFOLIO II</div>'
 '<div class="card-name">Le Bâtisseur</div>'
 '<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
-'<div class="card-description">An opportunistic paper portfolio aiming to outperform the S&amp;P 500. '
+'<div class="card-description">An unconstrained equity paper portfolio focused on quality and risk management. '
 'The core is quality compounding — high-grade businesses, exceptional capital allocators, category leaders — '
 'paired with a tactical layer of thematic plays and select opportunities.</div>'
 '<div class="card-badge-active badge-soon">◌ In construction</div>'
@@ -335,7 +335,7 @@ st.markdown(
 '<div class="card-subtitle">Digital Assets · Bitcoin Treasury Plays</div>'
 '<div class="card-description">A paper portfolio specialized in amplified Bitcoin exposure through digital asset treasuries (DATs) — '
 'companies holding BTC on their balance sheet. '
-'Built with one objective: to outperform Bitcoin spot.</div>'
+'An innovative investment vehicle built on amplification mechanisms, designed to deliver a more advantageous risk/reward profile for Bitcoin exposure.</div>'
 '<div class="card-badge-active badge-soon">◌ In construction</div>'
 '</div>'
 '</div>',
