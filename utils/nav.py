@@ -4,21 +4,61 @@ from utils.theme import NAV_ACTIVE_COLOR, NAV_ACTIVE_BG, BG, BORDER
 
 def render_nav(current: str):
     """
-    Renders a top navigation bar.
-    current: one of 'specula', 'visionnaire', 'history', 'research', 'about'
+    Renders the top navigation bar.
+    current: one of 'specula', 'visionnaire', 'nakamoto', 'history', 'research', 'about'
+
+    Portfolio button is a dropdown with Le Visionnaire + Le Nakamoto.
+    All links use target="_top" to force a real URL update (bypasses Streamlit's
+    in-app link interception that was leaving the URL stale).
     """
-    pages = [
-        ("Accueil",       "/",                "specula"),
-        ("Portfolio",     "/Visionnaire",     "visionnaire"),
-        ("History",       "/HistoryAnalysis", "history"),
-        ("Stock Papers",  "/Research",        "research"),
-        ("About",         "/About",           "about"),
+    portfolio_keys = {"visionnaire", "nakamoto"}
+    is_portfolio_active = current in portfolio_keys
+
+    # Determine which portfolio is highlighted in the dropdown
+    portfolio_dropdown_html = f"""
+    <div class="dropdown-menu">
+        <a href="/Visionnaire" target="_top" class="dropdown-item {'dropdown-active' if current == 'visionnaire' else ''}">
+            <span class="dropdown-portfolio-name">Le Visionnaire</span>
+            <span class="dropdown-portfolio-tag">High-Conviction Equity</span>
+        </a>
+        <a href="/Nakamoto" target="_top" class="dropdown-item {'dropdown-active' if current == 'nakamoto' else ''}">
+            <span class="dropdown-portfolio-name">Le Nakamoto</span>
+            <span class="dropdown-portfolio-tag">Digital Asset Treasuries</span>
+        </a>
+    </div>
+    """
+
+    # Other top-level nav items (single links)
+    simple_pages = [
+        ("Accueil",      "/",                "specula"),
+        ("History",      "/HistoryAnalysis", "history"),
+        ("Stock Papers", "/Research",        "research"),
+        ("About",        "/About",           "about"),
     ]
 
-    links_html = ""
-    for label, href, key in pages:
+    # Build nav links HTML, with Portfolio inserted as a dropdown after Accueil
+    accueil_label, accueil_href, accueil_key = simple_pages[0]
+    accueil_active = "nav-active" if accueil_key == current else ""
+    accueil_html = (
+        f'<a href="{accueil_href}" target="_top" class="nav-link {accueil_active}">{accueil_label}</a>'
+    )
+
+    portfolio_active = "nav-active" if is_portfolio_active else ""
+    portfolio_html = f"""
+    <div class="nav-dropdown">
+        <span class="nav-link nav-link-dropdown {portfolio_active}">Portfolio <span class="caret">▾</span></span>
+        {portfolio_dropdown_html}
+    </div>
+    """
+
+    other_links_html = ""
+    for label, href, key in simple_pages[1:]:
         active = "nav-active" if key == current else ""
-        links_html += f'<a href="{href}" target="_self" class="nav-link {active}">{label}</a>'
+        other_links_html += (
+            f'<a href="{href}" target="_top" class="nav-link {active}">{label}</a>'
+        )
+
+    links_html = accueil_html + portfolio_html + other_links_html
 
     st.markdown(f"""
 <style>
@@ -77,6 +117,7 @@ def render_nav(current: str):
         border-bottom: 2px solid transparent;
         transition: color 0.15s, border-color 0.15s;
         letter-spacing: 0.2px;
+        cursor: pointer;
     }}
     .nav-link:hover {{
         color: #ffffff !important;
@@ -87,6 +128,65 @@ def render_nav(current: str):
         border-bottom-color: #00D09C !important;
         font-weight: 600 !important;
     }}
+    .nav-link-dropdown .caret {{
+        font-size: 0.7rem;
+        margin-left: 0.3rem;
+        opacity: 0.7;
+    }}
+
+    /* ── Dropdown ── */
+    .nav-dropdown {{
+        position: relative;
+        height: 52px;
+        display: flex;
+        align-items: center;
+    }}
+    .dropdown-menu {{
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        min-width: 240px;
+        background: rgba(6, 9, 18, 0.98);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        padding: 0.5rem;
+        margin-top: 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }}
+    .nav-dropdown:hover .dropdown-menu {{
+        display: block;
+    }}
+    .dropdown-item {{
+        display: flex;
+        flex-direction: column;
+        padding: 0.6rem 0.9rem;
+        text-decoration: none !important;
+        border-radius: 6px;
+        transition: background 0.15s;
+    }}
+    .dropdown-item:hover {{
+        background: rgba(255,255,255,0.05);
+    }}
+    .dropdown-active {{
+        background: rgba(0, 208, 156, 0.08);
+    }}
+    .dropdown-portfolio-name {{
+        font-family: 'Cormorant Garamond', Georgia, serif !important;
+        font-size: 1.05rem !important;
+        font-weight: 700 !important;
+        color: #F9FAFB !important;
+        line-height: 1.2;
+    }}
+    .dropdown-portfolio-tag {{
+        font-size: 0.68rem;
+        color: #6B7280;
+        margin-top: 0.15rem;
+        letter-spacing: 0.3px;
+    }}
+
     .block-container {{ padding-top: 4.2rem !important; }}
 
     /* ── Mobile nav: stack logo above links ── */
@@ -120,12 +220,17 @@ def render_nav(current: str):
             border-bottom-width: 2px;
             flex-shrink: 0;
         }}
+        .nav-dropdown {{ height: 36px; }}
+        .dropdown-menu {{
+            min-width: 200px;
+            left: 0;
+            transform: none;
+        }}
         .block-container {{ padding-top: 6.5rem !important; }}
-
     }}
 </style>
 <div class="nav-bar">
-    <a href="/" target="_self" class="nav-logo">Specula</a>
+    <a href="/" target="_top" class="nav-logo">Specula</a>
     <div class="nav-links">{links_html}</div>
 </div>
 """, unsafe_allow_html=True)
