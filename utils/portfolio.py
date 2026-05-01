@@ -224,26 +224,34 @@ Always conduct your own due diligence before making any investment decision.
 </details>
 """, unsafe_allow_html=True)
 
-    # ── Page styles ───────────────────────────────────────────────────────────
-    st.markdown("""
+    # ── Page styles (with portfolio-specific accent color) ───────────────────
+    accent = pf.get("color_primary") or "#A78BFA"
+    st.markdown(f"""
 <style>
-    [data-testid="stSidebar"] { display: none; }
-    .block-container { padding-top: 6.8rem; padding-bottom: 2rem; }
-    @media (max-width: 768px) {
-        .block-container { padding-top: 10rem !important; }
-    }
-    .portfolio-title { font-size: 3rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0; }
-    .section-header { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px; }
-    [data-testid="stExpander"] summary p {
+    [data-testid="stSidebar"] {{ display: none; }}
+    .block-container {{ padding-top: 6.8rem; padding-bottom: 2rem; }}
+    @media (max-width: 768px) {{
+        .block-container {{ padding-top: 10rem !important; }}
+    }}
+    .portfolio-title {{ font-size: 3rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0; }}
+    .section-header {{ font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px; }}
+    [data-testid="stExpander"] summary p {{
         font-size: 1.35rem !important;
         font-weight: 800 !important;
         letter-spacing: -0.3px !important;
-    }
-    .disclaimer { font-size: 0.72rem; color: #4A5568; margin-top: 3rem;
-                  border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }
-    [data-testid="stRadio"] label div[data-testid="stMarkdownContainer"] { color: inherit; }
-    [data-baseweb="radio"] [data-checked="true"] div { background-color: #00D09C !important; border-color: #00D09C !important; }
-    [data-baseweb="radio"] div:focus-within { border-color: #00D09C !important; }
+    }}
+    .disclaimer {{ font-size: 0.72rem; color: #4A5568; margin-top: 3rem;
+                  border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }}
+    [data-testid="stRadio"] label div[data-testid="stMarkdownContainer"] {{ color: inherit; }}
+    [data-baseweb="radio"] [data-checked="true"] div {{ background-color: #00D09C !important; border-color: #00D09C !important; }}
+    [data-baseweb="radio"] div:focus-within {{ border-color: #00D09C !important; }}
+
+    /* ── Portfolio accent: title + metric labels & values ── */
+    .pf-title {{ color: {accent} !important; }}
+    [data-testid="stMetric"] [data-testid="stMetricLabel"] {{ color: {accent} !important; }}
+    [data-testid="stMetric"] [data-testid="stMetricLabel"] p {{ color: {accent} !important; }}
+    [data-testid="stMetric"] [data-testid="stMetricValue"] {{ color: {accent} !important; }}
+    .pf-section-label {{ color: {accent} !important; font-weight: 700; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -337,7 +345,7 @@ Always conduct your own due diligence before making any investment decision.
     hcol1, hcol2 = st.columns([5, 1])
     with hcol1:
         st.markdown(
-            f'<p style="font-family:\'Cormorant Garamond\', Georgia, serif; '
+            f'<p class="pf-title" style="font-family:\'Cormorant Garamond\', Georgia, serif; '
             f'font-size:3.5rem; font-weight:700; letter-spacing:-1px; '
             f'margin-bottom:0; line-height:1.1;">{portfolio_name}</p>',
             unsafe_allow_html=True,
@@ -448,7 +456,7 @@ Always conduct your own due diligence before making any investment decision.
 
             # Monthly returns
             st.write("")
-            st.markdown("**Monthly Returns (%)**")
+            st.markdown('<div class="pf-section-label">Monthly Returns (%)</div>', unsafe_allow_html=True)
             mrt = monthly_returns_table(port_index)
             if not mrt.empty:
                 def color_monthly(col):
