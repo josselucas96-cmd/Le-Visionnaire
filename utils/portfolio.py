@@ -98,6 +98,21 @@ _EYEBROW = {
 }
 
 
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert #RRGGBB to rgba(r, g, b, a) for CSS."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def _is_light_color(hex_color: str) -> bool:
+    """Return True if the color is light (use dark text on it)."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return luminance > 0.55
+
+
 def _donut_chart(df, col, title):
     grouped = df.groupby(col)["Alloc."].sum().reset_index()
     cmap = _COLOR_MAPS.get(col, {})
@@ -166,6 +181,9 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
 
     # ── Disclaimer banner (collapsible, fixed) ───────────────────────────────
     if show_disclaimer_banner:
+        accent_color = pf.get("color_primary") or "#A78BFA"
+        accent_border = _hex_to_rgba(accent_color, 0.15)
+        accent_border_light = _hex_to_rgba(accent_color, 0.10)
         st.markdown(f"""
 <style>
 .disc-wrap {{ margin: 0; padding: 0; }}
@@ -193,7 +211,7 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
     top: 52px; left: 0; right: 0;
     z-index: 99998;
     background: rgba(6, 9, 18, 0.97);
-    border-bottom: 1px solid rgba(0,208,156,0.12);
+    border-bottom: 1px solid {accent_border};
     padding: 0.45rem 2.5rem 0.5rem 2.5rem;
     font-size: 0.72rem;
     color: #7A8595;
@@ -205,8 +223,8 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
         height: 28px; width: 36px;
         justify-content: center;
         background: rgba(6,9,18,0.97);
-        border-left: 1px solid rgba(0,208,156,0.1);
-        border-bottom: 1px solid rgba(0,208,156,0.1);
+        border-left: 1px solid {accent_border_light};
+        border-bottom: 1px solid {accent_border_light};
         border-radius: 0 0 0 6px;
     }}
     .disc-wrap[open] .disc-sum::after {{ content: "✕"; }}
@@ -249,8 +267,8 @@ Always conduct your own due diligence before making any investment decision.
     .disclaimer {{ font-size: 0.72rem; color: #4A5568; margin-top: 3rem;
                   border-top: 1px solid #161D2E; padding-top: 1rem; line-height: 1.5; }}
     [data-testid="stRadio"] label div[data-testid="stMarkdownContainer"] {{ color: inherit; }}
-    [data-baseweb="radio"] [data-checked="true"] div {{ background-color: #00D09C !important; border-color: #00D09C !important; }}
-    [data-baseweb="radio"] div:focus-within {{ border-color: #00D09C !important; }}
+    [data-baseweb="radio"] [data-checked="true"] div {{ background-color: {accent} !important; border-color: {accent} !important; }}
+    [data-baseweb="radio"] div:focus-within {{ border-color: {accent} !important; }}
 
     /* ── Portfolio accent (IPS-inspired): eyebrow + title + metric labels ── */
     .pf-eyebrow {{
@@ -424,26 +442,26 @@ Always conduct your own due diligence before making any investment decision.
             fig.add_trace(go.Scatter(
                 x=port_index.index, y=port_index.values,
                 name=portfolio_name,
-                line=dict(color=PORTFOLIO_LINE, width=3, shape="spline", smoothing=0.8),
+                line=dict(color=accent, width=3, shape="spline", smoothing=0.8),
                 hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
             ))
-            # Secondary benchmark (legend-only by default)
+            # Secondary benchmark (legend-only by default) — light grey
             if secondary_index is not None:
                 fig.add_trace(go.Scatter(
                     x=secondary_index.index, y=secondary_index.values,
                     name=bench_sec_lbl,
                     visible="legendonly",
-                    line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot",
+                    line=dict(color="#6B7280", width=1.5, dash="dot",
                               shape="spline", smoothing=0.6),
                     hovertemplate=f"%{{x|%b %d, %Y}}<br>{bench_sec_lbl}: %{{y:.1f}}<extra></extra>",
                 ))
-            # Primary benchmark (visible by default)
+            # Primary benchmark (visible by default) — light, dashed
             if primary_index is not None:
                 fig.add_trace(go.Scatter(
                     x=primary_index.index, y=primary_index.values,
                     name=bench_pri_lbl,
                     visible=True,
-                    line=dict(color="#A78BFA", width=1.5, dash="dash",
+                    line=dict(color="#9CA3AF", width=1.5, dash="dash",
                               shape="spline", smoothing=0.6),
                     hovertemplate=f"%{{x|%b %d, %Y}}<br>{bench_pri_lbl}: %{{y:.1f}}<extra></extra>",
                 ))
@@ -566,10 +584,13 @@ Always conduct your own due diligence before making any investment decision.
         # Research teaser (optional)
         if show_research_teaser:
             st.write("")
+            accent_radial = _hex_to_rgba(accent, 0.10)
+            accent_border_subtle = _hex_to_rgba(accent, 0.18)
+            btn_text_color = "#0E1117" if _is_light_color(accent) else "#FFFFFF"
             st.markdown(f"""
 <div style="
-    background: linear-gradient(135deg, #0D1F2D 0%, #0E1117 70%);
-    border: 1px solid #1C2E3D;
+    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, #0E1117 70%);
+    border: 1px solid {accent_border_subtle};
     border-radius: 14px;
     padding: 2.2rem 2.4rem;
     margin: 1rem 0 0.5rem 0;
@@ -579,11 +600,11 @@ Always conduct your own due diligence before making any investment decision.
     <div style="
         position: absolute; top: -50px; right: -50px;
         width: 220px; height: 220px;
-        background: radial-gradient(circle, rgba(0,208,156,0.07) 0%, transparent 70%);
+        background: radial-gradient(circle, {accent_radial} 0%, transparent 70%);
         border-radius: 50%;
     "></div>
     <div style="font-size:0.7rem; font-weight:700; letter-spacing:2px;
-                color:#00D09C; text-transform:uppercase; margin-bottom:0.5rem;">
+                color:{accent}; text-transform:uppercase; margin-bottom:0.5rem;">
         Research · {papers_label}
     </div>
     <div style="font-size:1.6rem; font-weight:800; letter-spacing:-0.5px; margin-bottom:0.6rem;">
@@ -595,8 +616,8 @@ Always conduct your own due diligence before making any investment decision.
 </div>
 <a href="/Research" target="_self" style="
     display: inline-block;
-    background: #00D09C;
-    color: #0E1117;
+    background: {accent};
+    color: {btn_text_color};
     font-weight: 800;
     font-size: 0.95rem;
     padding: 0.65rem 1.6rem;
@@ -724,14 +745,14 @@ Always conduct your own due diligence before making any investment decision.
                 if not corr.empty:
                     label = "trailing 12 months" if not use_inception else "since inception"
                     st.markdown(f"**Correlation Matrix** (daily returns, {label})")
-                    st.markdown("""
+                    st.markdown(f"""
 <style>
-@media (max-width: 768px) and (orientation: portrait) {
-    .corr-rotate-hint { display: block !important; }
-}
-.corr-rotate-hint { display: none; }
+@media (max-width: 768px) and (orientation: portrait) {{
+    .corr-rotate-hint {{ display: block !important; }}
+}}
+.corr-rotate-hint {{ display: none; }}
 </style>
-<div class="corr-rotate-hint" style="font-size:0.75rem; color:#00D09C; margin-bottom:0.5rem;">
+<div class="corr-rotate-hint" style="font-size:0.75rem; color:{accent}; margin-bottom:0.5rem;">
     Rotate your screen for a better view of the matrix.
 </div>
 """, unsafe_allow_html=True)
