@@ -1,3 +1,4 @@
+"""Supabase data layer with portfolio scoping (multi-portfolio aware)."""
 import streamlit as st
 from supabase import create_client
 
