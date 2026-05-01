@@ -311,13 +311,15 @@ Always conduct your own due diligence before making any investment decision.
         port_index = build_portfolio_index(history, positions)
         if bench_pri and bench_pri in history.columns:
             raw = history[bench_pri].dropna()
-            primary_index = raw / raw.iloc[0] * 100
-            primary_perf  = round(primary_index.iloc[-1] - 100, 2)
+            if not raw.empty:
+                primary_index = raw / raw.iloc[0] * 100
+                primary_perf  = round(primary_index.iloc[-1] - 100, 2)
         if bench_sec and bench_sec in history.columns:
             raw = history[bench_sec].dropna()
-            secondary_index = raw / raw.iloc[0] * 100
-            secondary_perf  = round(secondary_index.iloc[-1] - 100, 2)
-        last_updated = history.index[-1].strftime("%b %d, %Y")
+            if not raw.empty:
+                secondary_index = raw / raw.iloc[0] * 100
+                secondary_perf  = round(secondary_index.iloc[-1] - 100, 2)
+        last_updated = history.index[-1].strftime("%b %d, %Y") if not history.empty else "—"
     else:
         port_index   = None
         last_updated = "—"
