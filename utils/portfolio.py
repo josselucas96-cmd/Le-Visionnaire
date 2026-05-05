@@ -95,6 +95,7 @@ _COLOR_MAPS = {
 _EYEBROW = {
     "visionnaire": "HIGH CONVICTION EQUITY  ·  PAPER PORTFOLIO",
     "nakamoto":    "DIGITAL ASSET TREASURIES  ·  PAPER PORTFOLIO",
+    "batisseur":   "QUALITY COMPOUNDERS  ·  PAPER PORTFOLIO",
 }
 
 

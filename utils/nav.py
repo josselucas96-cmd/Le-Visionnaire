@@ -12,19 +12,22 @@ def render_nav(current: str):
     on Streamlit Cloud). The URL bar may not update on click due to Streamlit's
     internal navigation, but bookmarks via direct URL still work.
     """
-    portfolio_keys = {"visionnaire", "nakamoto"}
+    portfolio_keys = {"visionnaire", "nakamoto", "batisseur"}
     is_portfolio_active = current in portfolio_keys
     v_active = "dropdown-active" if current == "visionnaire" else ""
-    n_active = "dropdown-active" if current == "nakamoto" else ""
 
     # Build the dropdown menu HTML on a single line (avoids Markdown code-block trap)
-    # Le Nakamoto is visible but disabled (In progress) until official launch.
+    # Order matches Specula landing: Visionnaire (live) → Bâtisseur → Nakamoto (both In progress).
     portfolio_dropdown_html = (
         '<div class="dropdown-menu">'
         f'<a href="/Visionnaire" target="_self" class="dropdown-item {v_active}">'
         '<span class="dropdown-portfolio-name">Le Visionnaire</span>'
         '<span class="dropdown-portfolio-tag">High-Conviction Equity</span>'
         '</a>'
+        '<div class="dropdown-item dropdown-item-disabled">'
+        '<span class="dropdown-portfolio-name">Le Bâtisseur</span>'
+        '<span class="dropdown-portfolio-tag">Quality Compounders  ·  In progress</span>'
+        '</div>'
         '<div class="dropdown-item dropdown-item-disabled">'
         '<span class="dropdown-portfolio-name">Le Nakamoto</span>'
         '<span class="dropdown-portfolio-tag">Digital Asset Treasuries  ·  In progress</span>'
@@ -33,8 +36,9 @@ def render_nav(current: str):
     )
 
     portfolio_active = "nav-active" if is_portfolio_active else ""
+    # tabindex="0" lets the dropdown receive focus on tap (mobile), so :focus-within reveals the menu.
     portfolio_html = (
-        '<div class="nav-dropdown">'
+        '<div class="nav-dropdown" tabindex="0">'
         f'<span class="nav-link nav-link-dropdown {portfolio_active}">Portfolio <span class="caret">▾</span></span>'
         f'{portfolio_dropdown_html}'
         '</div>'
@@ -154,9 +158,12 @@ def render_nav(current: str):
         margin-top: 0;
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }}
-    .nav-dropdown:hover .dropdown-menu {{
+    .nav-dropdown:hover .dropdown-menu,
+    .nav-dropdown:focus-within .dropdown-menu {{
         display: block;
     }}
+    .nav-dropdown {{ outline: none; }}
+    .nav-dropdown:focus {{ outline: none; }}
     .dropdown-item {{
         display: flex;
         flex-direction: column;
