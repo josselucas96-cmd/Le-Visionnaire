@@ -25,6 +25,12 @@ def get_portfolio(portfolio_id: str):
     return result[0] if result else None
 
 
+def update_portfolio(portfolio_id: str, fields: dict):
+    """Update fields on a portfolio row (name, inception_date, etc.)."""
+    sb = get_client()
+    sb.table("portfolios").update(fields).eq("id", portfolio_id).execute()
+
+
 # ── Positions ─────────────────────────────────────────────────────────────────
 def get_positions(active_only=True, portfolio_id: str = "visionnaire"):
     sb = get_client()
@@ -212,6 +218,4 @@ def reset_portfolio(today_str: str, prices: dict, portfolio_id: str = "visionnai
                     "entry_price": current_price,
                     "entry_date": today_str,
                 }).eq("id", p["id"]).execute()
-    # Update both legacy settings and portfolios table
-    upsert_setting("inception_date", today_str)
     sb.table("portfolios").update({"inception_date": today_str}).eq("id", portfolio_id).execute()

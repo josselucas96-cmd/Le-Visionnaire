@@ -76,6 +76,14 @@ def render_nav(current: str):
 
     [data-testid="stHeader"] {{ display: none !important; }}
 
+    /* Hide Streamlit Cloud "Hosted with Streamlit" badge — it overlaps with the
+       bottom-right "Manage app" button on Streamlit Community Cloud. */
+    .viewerBadge_link__qRIco,
+    .viewerBadge_link__1S137,
+    .viewerBadge_container__r5tak,
+    a[href*="streamlit.io/cloud"],
+    a[href*="share.streamlit.io"] {{ display: none !important; }}
+
     .nav-bar {{
         position: fixed;
         top: 0; left: 0; right: 0;

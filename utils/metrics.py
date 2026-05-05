@@ -89,16 +89,48 @@ def beta_vs_spy(port_returns: pd.Series, spy_returns: pd.Series) -> float | None
     return round(cov[0][1] / cov[1][1], 2)
 
 
-def monthly_returns_table(port_index: pd.Series) -> pd.DataFrame:
-    """Monthly returns pivoted: years as rows, months Jan-Dec as columns."""
+def monthly_returns_table(port_index: pd.Series,
+                          inception_date: str | None = None) -> pd.DataFrame:
+    """Monthly returns pivoted: years as rows, months Jan-Dec as columns.
+
+    Two corrections vs naive pct_change:
+    - Inception month: portfolio starts at base 100 mid-month, so the regular
+      pct_change is NaN (no prior month-end). We override with (close / 100) - 1,
+      which gives the partial-month return from inception to month-end.
+    - Current incomplete month: month-end is in the future, so showing a partial
+      return is misleading. Set to NaN.
+    """
     MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    monthly = port_index.resample("ME").last().pct_change().dropna() * 100
-    monthly.index = pd.to_datetime(monthly.index)
+    if port_index.empty:
+        return pd.DataFrame()
+
+    monthly_close = port_index.resample("ME").last()
+    monthly_ret = monthly_close.pct_change() * 100  # NaN for the first row
+
+    # Override inception month: index is base 100 at inception
+    if inception_date:
+        inc = pd.Timestamp(inception_date)
+        for ts in monthly_close.index:
+            if ts.year == inc.year and ts.month == inc.month:
+                monthly_ret.loc[ts] = float(monthly_close.loc[ts] - 100.0)
+                break
+
+    # Drop any month whose month-end is still in the future (incomplete month)
+    today = pd.Timestamp.today().normalize()
+    for ts in monthly_close.index:
+        month_end = pd.Timestamp(ts.year, ts.month, 1) + pd.offsets.MonthEnd(0)
+        if month_end > today:
+            monthly_ret.loc[ts] = float("nan")
+
+    monthly_ret = monthly_ret.dropna()
+    if monthly_ret.empty:
+        return pd.DataFrame()
+
     df = pd.DataFrame({
-        "year":  monthly.index.year,
-        "month": monthly.index.month,
-        "ret":   monthly.values,
+        "year":  monthly_ret.index.year,
+        "month": monthly_ret.index.month,
+        "ret":   monthly_ret.values,
     })
     pivot = df.pivot(index="year", columns="month", values="ret")
     pivot.columns = [MONTHS[m - 1] for m in pivot.columns]

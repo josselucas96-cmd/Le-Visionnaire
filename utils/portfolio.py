@@ -522,18 +522,31 @@ Always conduct your own due diligence before making any investment decision.
             # Monthly returns
             st.write("")
             st.markdown('<div class="pf-section-label">Monthly Returns (%)</div>', unsafe_allow_html=True)
-            mrt = monthly_returns_table(port_index)
+            mrt = monthly_returns_table(port_index, inception_date=inception_date)
             if not mrt.empty:
+                _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                _inc_ts   = pd.Timestamp(inception_date)
+                _inc_col  = _MONTHS[_inc_ts.month - 1]
+                _inc_year = _inc_ts.year
+
                 def color_monthly(col):
                     return [
                         "color: #00D09C" if pd.notna(v) and v > 0
                         else "color: #FF4B4B" if pd.notna(v) and v < 0
                         else "" for v in col
                     ]
-                fmt = {m: lambda v: f"{v:+.1f}" if pd.notna(v) else "" for m in mrt.columns}
+                fmt = {m: (lambda v: f"{v:+.1f}" if pd.notna(v) else "") for m in mrt.columns}
                 styled_mrt = mrt.style.format(fmt).apply(color_monthly)
+                # Asterisk on the inception cell only (partial month from inception)
+                if _inc_year in mrt.index and _inc_col in mrt.columns:
+                    styled_mrt = styled_mrt.format(
+                        lambda v: f"{v:+.1f}*" if pd.notna(v) else "",
+                        subset=pd.IndexSlice[[_inc_year], [_inc_col]],
+                    )
                 st.dataframe(styled_mrt, use_container_width=True,
                              height=38 + min(len(mrt), 10) * 35)
+                st.caption(f"\\* Partial month — return from inception ({inception_date}) to month-end.")
 
     st.divider()
 
