@@ -36,12 +36,12 @@ def render_nav(current: str):
     )
 
     portfolio_active = "nav-active" if is_portfolio_active else ""
-    # tabindex="0" lets the dropdown receive focus on tap (mobile), so :focus-within reveals the menu.
+    # <details>/<summary> is natively tappable on mobile and supports hover on desktop.
     portfolio_html = (
-        '<div class="nav-dropdown" tabindex="0">'
-        f'<span class="nav-link nav-link-dropdown {portfolio_active}">Portfolio <span class="caret">▾</span></span>'
+        '<details class="nav-dropdown">'
+        f'<summary class="nav-link nav-link-dropdown {portfolio_active}">Portfolio <span class="caret">▾</span></summary>'
         f'{portfolio_dropdown_html}'
-        '</div>'
+        '</details>'
     )
 
     # Single-link entries before and after the Portfolio dropdown
@@ -136,13 +136,20 @@ def render_nav(current: str):
         opacity: 0.7;
     }}
 
-    /* ── Dropdown ── */
+    /* ── Dropdown (uses <details>/<summary>) ── */
     .nav-dropdown {{
         position: relative;
         height: 52px;
         display: flex;
         align-items: center;
     }}
+    .nav-dropdown summary {{
+        list-style: none;
+        cursor: pointer;
+    }}
+    .nav-dropdown summary::-webkit-details-marker {{ display: none; }}
+    .nav-dropdown summary::marker {{ content: ""; }}
+
     .dropdown-menu {{
         display: none;
         position: absolute;
@@ -158,12 +165,12 @@ def render_nav(current: str):
         margin-top: 0;
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }}
-    .nav-dropdown:hover .dropdown-menu,
-    .nav-dropdown:focus-within .dropdown-menu {{
-        display: block;
+    /* Click-to-toggle (mobile + desktop): native <details> open state */
+    .nav-dropdown[open] .dropdown-menu {{ display: block; }}
+    /* Hover to preview (desktop only): only triggered on devices with real hover */
+    @media (hover: hover) {{
+        .nav-dropdown:hover .dropdown-menu {{ display: block; }}
     }}
-    .nav-dropdown {{ outline: none; }}
-    .nav-dropdown:focus {{ outline: none; }}
     .dropdown-item {{
         display: flex;
         flex-direction: column;
