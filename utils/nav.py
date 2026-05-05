@@ -241,10 +241,16 @@ def render_nav(current: str):
             flex-shrink: 0;
         }}
         .nav-dropdown {{ height: 36px; }}
+        /* Mobile: position dropdown fixed in viewport so it isn't clipped
+           by nav-links' overflow-x scroll container. */
         .dropdown-menu {{
-            min-width: 200px;
-            left: 0;
-            transform: none;
+            position: fixed;
+            top: 95px;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 220px;
+            max-width: 92vw;
+            z-index: 9999998;
         }}
         .block-container {{ padding-top: 6.5rem !important; }}
     }}
