@@ -2,7 +2,7 @@ import streamlit as st
 from utils.nav import render_nav
 
 st.set_page_config(
-    page_title="About | Le Visionnaire",
+    page_title="About | Specula",
     page_icon="📡",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -38,7 +38,7 @@ st.markdown("""
 render_nav("about")
 st.write("")
 
-st.markdown('<div class="about-label">Le Visionnaire</div>', unsafe_allow_html=True)
+st.markdown('<div class="about-label">Specula</div>', unsafe_allow_html=True)
 st.markdown('<div class="about-title">Hello ! I\'m Lucas</div>', unsafe_allow_html=True)
 
 st.markdown("""
