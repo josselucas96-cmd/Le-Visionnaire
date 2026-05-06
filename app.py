@@ -333,8 +333,13 @@ st.markdown(
 '<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
 '<div class="card-description">A UCITS-compliant paper portfolio anchored on quality businesses and exceptional capital allocators, '
 'paired with a tactical layer of thematic plays and special situations. Live since May 2026.</div>'
-'<div class="card-badge-active badge-live">● Live</div>'
+'<div class="card-badge-active badge-live" style="background:rgba(245,158,11,0.15); color:#FBBF24; border-color:rgba(245,158,11,0.35);">● Live</div>'
 '</div></a>'
+# When Le Nakamoto goes live (May 11, 2026), swap the block below for an <a>
+# wrapper around an active card matching the Visionnaire/Bâtisseur pattern,
+# with the orange palette inline:
+#   border-color:#F97316
+#   badge-live override: bg rgba(249,115,22,0.15), color #FB923C, border rgba(249,115,22,0.35)
 '<div class="portfolio-card portfolio-card-soon" style="border-color:#261C10;">'
 '<div class="card-glow" style="background:#F97316;opacity:0.18;"></div>'
 '<div class="card-accent" style="background:linear-gradient(90deg,#F97316,#FB923C);"></div>'
