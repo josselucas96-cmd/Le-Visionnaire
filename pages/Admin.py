@@ -36,26 +36,19 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ── Cockpit ───────────────────────────────────────────────────────────────────
-# Portfolio selector — drives everything below.
 _portfolios_admin = get_portfolios()
 if not _portfolios_admin:
     st.error("No portfolios configured in the `portfolios` table.")
     st.stop()
-_pf_ids = [p["id"] for p in _portfolios_admin]
+_pf_ids   = [p["id"]   for p in _portfolios_admin]
 _pf_names = [p["name"] for p in _portfolios_admin]
 if "admin_pf_id" not in st.session_state or st.session_state.admin_pf_id not in _pf_ids:
     st.session_state.admin_pf_id = _pf_ids[0]
 
-col_title, col_pf, col_logout = st.columns([5, 3, 1])
+# Title row + Logout
+col_title, col_logout = st.columns([8, 1])
 with col_title:
     st.title("Cockpit")
-with col_pf:
-    _idx = _pf_ids.index(st.session_state.admin_pf_id)
-    sel_name = st.selectbox("Portfolio", _pf_names, index=_idx, key="admin_pf_select")
-    new_pid = _pf_ids[_pf_names.index(sel_name)]
-    if new_pid != st.session_state.admin_pf_id:
-        st.session_state.admin_pf_id = new_pid
-        st.rerun()
 with col_logout:
     st.write("")
     st.write("")
@@ -63,10 +56,87 @@ with col_logout:
         st.session_state.authenticated = False
         st.rerun()
 
-_pid = st.session_state.admin_pf_id
-_pf = get_portfolio(_pid) or {}
+# Portfolio selector — three cards in a row.
+# Click a card to switch the selected portfolio; everything below
+# (Active Positions, Health Tracker, Earnings, Add/Close/Switch tabs)
+# operates on the selected one.
+_PF_VIS = {
+    "visionnaire": ("Le Visionnaire", "High-Conviction Equity",        "#6366F1"),
+    "batisseur":   ("Le Bâtisseur",   "Quality Compounders + Tactical", "#F59E0B"),
+    "nakamoto":    ("Le Nakamoto",    "Bitcoin Treasury Equities",      "#F97316"),
+}
 
-# Per-portfolio capital key with backward-compat fallback for Visionnaire
+st.markdown("""
+<style>
+.adm-pf-card {
+    background: #0D1117;
+    border: 1px solid #1F2937;
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem 0.6rem 1.4rem;
+    text-align: left;
+    transition: border-color 0.15s, transform 0.15s;
+    margin-bottom: 0.4rem;
+}
+.adm-pf-card-active {
+    border-width: 2px;
+    padding: 1.15rem 1.35rem 0.55rem 1.35rem;  /* compensate 1px extra border */
+}
+.adm-pf-eyebrow {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+}
+.adm-pf-name {
+    font-family: 'Cormorant Garamond', Georgia, serif !important;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #F9FAFB;
+    margin-bottom: 0.25rem;
+    line-height: 1.1;
+}
+.adm-pf-sub {
+    font-size: 0.75rem;
+    color: #6B7280;
+    letter-spacing: 0.3px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+_card_cols = st.columns(len(_pf_ids))
+for _col, _pid_iter in zip(_card_cols, _pf_ids):
+    _name, _sub, _color = _PF_VIS.get(
+        _pid_iter,
+        (next((p["name"] for p in _portfolios_admin if p["id"] == _pid_iter), _pid_iter),
+         "", "#6B7280"),
+    )
+    _is_active = (_pid_iter == st.session_state.admin_pf_id)
+    _border = _color if _is_active else "#1F2937"
+    _eyebrow_color = _color
+    with _col:
+        st.markdown(
+            f'<div class="adm-pf-card{" adm-pf-card-active" if _is_active else ""}" '
+            f'style="border-color:{_border};">'
+            f'<div class="adm-pf-eyebrow" style="color:{_eyebrow_color};">'
+            f'Portfolio · {_pid_iter.upper()}</div>'
+            f'<div class="adm-pf-name">{_name}</div>'
+            f'<div class="adm-pf-sub">{_sub}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        _btn_lbl = "Selected ▼" if _is_active else "Select"
+        if st.button(_btn_lbl, key=f"adm_pf_btn_{_pid_iter}",
+                     use_container_width=True,
+                     type="primary" if _is_active else "secondary"):
+            st.session_state.admin_pf_id = _pid_iter
+            st.rerun()
+
+_pid = st.session_state.admin_pf_id
+_pf  = get_portfolio(_pid) or {}
+
+# Per-portfolio capital key with backward-compat fallback for Visionnaire.
+# (Settings UI removed; helper kept because Active Positions reads initial_capital.)
 def _capital_key(pid):
     return f"initial_capital_{pid}"
 
@@ -75,56 +145,6 @@ def _read_initial_capital(pid):
     if val is None and pid == "visionnaire":
         val = get_setting("initial_capital")
     return float(val) if val else 1_000_000.0
-
-# ── Settings ──────────────────────────────────────────────────────────────────
-with st.expander(f"Portfolio Settings — {_pf.get('name', _pid)}"):
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        inc = st.text_input("Inception Date (YYYY-MM-DD)",
-                            value=str(_pf.get("inception_date", "2026-04-01")))
-    with c2:
-        name = st.text_input("Portfolio Name",
-                             value=_pf.get("name", _pid))
-    with c3:
-        capital = st.number_input("Initial Capital (USD)",
-                                  min_value=10_000, max_value=100_000_000,
-                                  step=10_000,
-                                  value=int(_read_initial_capital(_pid)))
-    if st.button("Save Settings"):
-        update_portfolio(_pid, {"inception_date": inc, "name": name})
-        upsert_setting(_capital_key(_pid), str(capital))
-        st.success("Saved.")
-        st.cache_data.clear()
-        st.rerun()
-
-    st.markdown("---")
-    st.markdown("**Reinitialize Portfolio**")
-    st.caption("Resets all entry prices to today's market prices, sets inception date to today, and removes STRC. Transactions history is preserved.")
-    if "confirm_reset" not in st.session_state:
-        st.session_state.confirm_reset = False
-    if not st.session_state.confirm_reset:
-        if st.button("Reinitialize Portfolio", type="secondary"):
-            st.session_state.confirm_reset = True
-            st.rerun()
-    else:
-        st.warning("Are you sure? This cannot be undone.")
-        col_yes, col_no = st.columns(2)
-        with col_yes:
-            if st.button("Yes, reset", type="primary"):
-                _pos = get_positions(portfolio_id=_pid)
-                _tickers = tuple(p["ticker"] for p in _pos if p["ticker"] != "STRC")
-                from utils.market import get_prices as _gp
-                _raw = _gp(_tickers)
-                _prices = {t: _raw[t]["price"] for t in _tickers if _raw.get(t) and _raw[t].get("price")}
-                reset_portfolio(date.today().isoformat(), _prices, portfolio_id=_pid)
-                st.cache_data.clear()
-                st.session_state.confirm_reset = False
-                st.success("Portfolio reinitialized.")
-                st.rerun()
-        with col_no:
-            if st.button("Cancel"):
-                st.session_state.confirm_reset = False
-                st.rerun()
 
 st.divider()
 
