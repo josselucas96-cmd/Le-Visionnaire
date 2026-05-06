@@ -17,7 +17,7 @@ from utils.data import (
 from utils.market import get_prices
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
 
-st.set_page_config(page_title="Cockpit | Admin", layout="wide")
+st.set_page_config(page_title="Cockpit | Admin", page_icon="🔭", layout="wide")
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 if "authenticated" not in st.session_state:

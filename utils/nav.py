@@ -46,11 +46,12 @@ def render_nav(current: str):
     )
 
     # Single-link entries before and after the Portfolio dropdown
+    # History is intentionally hidden from the public nav for now (still accessible
+    # at /HistoryAnalysis via direct URL for the admin).
     simple_pages = [
-        ("Accueil",      "/",                "specula"),
-        ("History",      "/HistoryAnalysis", "history"),
-        ("Stock Papers", "/Research",        "research"),
-        ("About",        "/About",           "about"),
+        ("Accueil",      "/",         "specula"),
+        ("Stock Papers", "/Research", "research"),
+        ("About",        "/About",    "about"),
     ]
     accueil_label, accueil_href, accueil_key = simple_pages[0]
     accueil_active = "nav-active" if accueil_key == current else ""
