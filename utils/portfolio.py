@@ -446,7 +446,7 @@ Always conduct your own due diligence before making any investment decision.
         eyebrow = _EYEBROW.get(portfolio_id, "PAPER PORTFOLIO")
         st.markdown(
             f'<div class="pf-eyebrow">{eyebrow}</div>'
-            f'<p class="pf-title" style="font-family:\'Cormorant Garamond\', Georgia, serif; '
+            f'<p class="pf-title" style="font-family:\'Cormorant Garamond\', Georgia, serif !important; '
             f'font-size:3.5rem; font-weight:700; letter-spacing:-1px; '
             f'margin-bottom:0; line-height:1.1;">{portfolio_name}</p>',
             unsafe_allow_html=True,
