@@ -116,55 +116,12 @@ _LAYER_COLORS = {
     "Cash":             "#CBD5E1",
     "Cash/Equivalent":  "#CBD5E1",
 }
-_CURRENCY_COLORS = {
-    "USD":  "#10B981",  # emerald (dollar)
-    "EUR":  "#3B82F6",  # blue (EU)
-    "CAD":  "#DC2626",  # red (CA flag)
-    "GBP":  "#7C3AED",  # purple (royal)
-    "CHF":  "#991B1B",  # dark red (CH)
-    "JPY":  "#F87171",  # light red (JP)
-    "AUD":  "#F59E0B",  # amber (AU sun)
-    "HKD":  "#B45309",  # bronze
-    "SEK":  "#FCD34D",  # yellow (SE flag)
-    "NOK":  "#1E3A8A",  # navy (NO flag)
-    "DKK":  "#FCA5A5",  # light red (DK flag)
-    "SGD":  "#EF4444",  # red (SG flag)
-    "Other":"#6B7280",
-}
 _COLOR_MAPS = {
     "Sector":    _SECTOR_COLORS,
     "Geography": _GEO_COLORS,
     "Thematic":  _THEMATIC_COLORS,
     "Layer":     _LAYER_COLORS,
-    "Forex":     _CURRENCY_COLORS,
 }
-
-# ── Currency mapping from Yahoo-style ticker suffix ──────────────────────────
-_TICKER_SUFFIX_TO_CCY = {
-    ".TO": "CAD", ".V": "CAD",
-    ".PA": "EUR", ".MC": "EUR", ".MI": "EUR", ".DE": "EUR",
-    ".AS": "EUR", ".HE": "EUR", ".BR": "EUR", ".LS": "EUR",
-    ".AT": "EUR", ".VI": "EUR", ".IR": "EUR", ".F": "EUR",
-    ".SW": "CHF",
-    ".L":  "GBP",
-    ".ST": "SEK",
-    ".OL": "NOK",
-    ".CO": "DKK",
-    ".T":  "JPY", ".JP": "JPY",
-    ".HK": "HKD",
-    ".AX": "AUD",
-    ".SI": "SGD",
-}
-
-
-def _currency_from_ticker(ticker) -> str:
-    """Map a Yahoo-style ticker to its trading currency (defaults to USD)."""
-    if not isinstance(ticker, str):
-        return "USD"
-    for suffix, ccy in _TICKER_SUFFIX_TO_CCY.items():
-        if ticker.endswith(suffix):
-            return ccy
-    return "USD"
 
 # Eyebrow text per portfolio (matches the IPS document tagline)
 _EYEBROW = {
@@ -225,7 +182,7 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
             show_disclaimer_banner (bool): default True
     """
     options = options or {}
-    show_donuts = options.get("show_donuts", ["Layer", "Sector", "Thematic", "Geography", "Forex"])
+    show_donuts = options.get("show_donuts", ["Layer", "Sector", "Thematic", "Geography"])
     show_risk_analysis = options.get("show_risk_analysis", True)
     show_research_teaser = options.get("show_research_teaser", True)
     show_documents_section = options.get("show_documents_section", True)
@@ -652,9 +609,6 @@ Always conduct your own due diligence before making any investment decision.
             "thesis_short":   "Thesis",
         })
         display = display.drop(columns=["Thesis"], errors="ignore")
-        # Trading-currency column for the Forex donut (heuristic from ticker suffix)
-        if "Ticker" in display.columns:
-            display["Forex"] = display["Ticker"].apply(_currency_from_ticker)
 
         def color_signed(col):
             return [
@@ -749,7 +703,7 @@ Always conduct your own due diligence before making any investment decision.
                 "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
                 "Entry": None, "Price": None, "Total Return": None, "Today %": None,
                 "Sector": "Cash/Equivalent", "Geography": "USD",
-                "Thematic": "Cash/Equivalent", "Forex": "USD",
+                "Thematic": "Cash/Equivalent",
             }])
             display_alloc = pd.concat([display_donut, cash_row], ignore_index=True)
         else:
