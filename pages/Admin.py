@@ -3,6 +3,7 @@ Admin Cockpit — password protected.
 Only you should access this page. It lets you add/close positions and manage settings.
 """
 import streamlit as st
+from utils import SPECULA_ICON
 import pandas as pd
 import yfinance as yf
 from datetime import date
@@ -17,7 +18,7 @@ from utils.data import (
 from utils.market import get_prices
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
 
-st.set_page_config(page_title="Cockpit | Admin", page_icon="◈", layout="wide")
+st.set_page_config(page_title="Cockpit | Admin", page_icon=SPECULA_ICON, layout="wide")
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 if "authenticated" not in st.session_state:

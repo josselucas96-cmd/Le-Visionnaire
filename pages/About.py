@@ -1,9 +1,10 @@
 import streamlit as st
+from utils import SPECULA_ICON
 from utils.nav import render_nav
 
 st.set_page_config(
     page_title="About | Specula",
-    page_icon="◈",
+    page_icon=SPECULA_ICON,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
