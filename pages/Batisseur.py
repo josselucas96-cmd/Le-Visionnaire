@@ -12,5 +12,5 @@ render_portfolio_page("batisseur", options={
     # Layer (Obvious / Haute Qualité / Diversification / Tactical) is internal
     # taxonomy — keep it in DB for monitoring but hide from public display.
     "show_layer_column": False,
-    "show_donuts": ["Sector", "Geography", "Thematic"],
+    "show_donuts": ["Sector", "Thematic", "Geography", "Forex"],
 })
