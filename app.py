@@ -90,14 +90,23 @@ st.markdown("""
     .portfolios-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
+        grid-auto-rows: 1fr;     /* force equal-height rows */
         gap: 1.2rem;
+        margin-bottom: 5rem;
     }
     @media (max-width: 768px) {
-        .portfolios-grid { grid-template-columns: 1fr; }
+        .portfolios-grid { grid-template-columns: 1fr; grid-auto-rows: auto; }
         .research-teaser { flex-direction: column; gap: 1rem; }
     }
-    .portfolios-grid {
-        margin-bottom: 5rem;
+    /* Anchor wrapper around active cards must stretch in the grid cell so the
+       card inside fills the same height as siblings. */
+    .portfolios-grid > a {
+        display: flex;
+        text-decoration: none;
+    }
+    .portfolios-grid > a > .portfolio-card {
+        flex: 1;
+        width: 100%;
     }
     .portfolio-card {
         background: #0D1117;
@@ -114,12 +123,10 @@ st.markdown("""
         transform: translateY(-3px);
     }
     .portfolio-card-active {
-        border-color: #312E81;
         cursor: pointer;
     }
-    .portfolio-card-active:hover {
-        border-color: #4338CA;
-    }
+    /* Per-portfolio border-color is set inline via style="" — each Live card
+       carries its own theme-tinted border. */
     .portfolio-card-soon {
         opacity: 0.85;
         cursor: default;
@@ -306,7 +313,7 @@ st.markdown('<div class="section-label">The Portfolios</div>', unsafe_allow_html
 st.markdown(
 '<div class="portfolios-grid">'
 '<a href="/Visionnaire" target="_self" style="text-decoration:none;">'
-'<div class="portfolio-card portfolio-card-active">'
+'<div class="portfolio-card portfolio-card-active" style="border-color:#6366F1;">'
 '<div class="card-glow" style="background:#6366F1;"></div>'
 '<div class="card-accent" style="background:linear-gradient(90deg,#6366F1,#818CF8);"></div>'
 '<div class="card-number" style="color:#6366F1;">PORTFOLIO I</div>'
@@ -317,7 +324,7 @@ st.markdown(
 '<div class="card-badge-active badge-live">● Live</div>'
 '</div></a>'
 '<a href="/Batisseur" target="_self" style="text-decoration:none;">'
-'<div class="portfolio-card portfolio-card-active">'
+'<div class="portfolio-card portfolio-card-active" style="border-color:#F59E0B;">'
 '<div class="card-glow" style="background:#F59E0B;"></div>'
 '<div class="card-accent" style="background:linear-gradient(90deg,#F59E0B,#FCD34D);"></div>'
 '<div class="card-number" style="color:#F59E0B;">PORTFOLIO II</div>'
