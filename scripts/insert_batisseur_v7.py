@@ -38,7 +38,7 @@ POSITIONS = [
     ("EL.PA",   "EssilorLuxottica",        "Diversification", 3.0,  "Healthcare",             "Europe",       "Healthcare Equipment", "Vertically integrated eyewear leader, smart glasses partnership with Meta."),
     ("WM",      "Waste Management",        "Diversification", 3.0,  "Industrials",            "USA",          "Other",                "Landfill regulatory monopoly with structural physical moat."),
     ("NVO",     "Novo Nordisk",            "Diversification", 3.0,  "Healthcare",             "Europe",       "Obesity",              "GLP-1 obesity franchise with attractive valuation post correction; pipeline optionality."),
-    ("VICI",    "VICI Properties",         "Diversification", 2.0,  "Real Estate",            "USA",          "Other",                "Casino property REIT, regulatory moat, attractive yield, long-term triple-net leases."),
+    ("VICI",    "VICI Properties",         "Tactical",        2.0,  "Real Estate",            "USA",          "Other",                "Casino property REIT, regulatory moat, attractive yield, long-term triple-net leases."),
     ("IBE.MC",  "Iberdrola",               "Diversification", 2.0,  "Utilities",              "Europe",       "Energy Transition",    "Spanish utility with renewables exposure and regulated cash flows."),
     ("DPZ",     "Domino's Pizza",          "Diversification", 2.0,  "Consumer Discretionary", "USA",          "Consumer Growth",      "Asset-light franchise model, strong ROIC, technology-led ordering platform."),
     ("STZ",     "Constellation Brands",    "Diversification", 2.0,  "Consumer Staples",       "USA",          "Consumer Growth",      "Premium beer portfolio (Modelo, Corona) with brand strength and pricing power."),
