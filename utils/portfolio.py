@@ -107,11 +107,13 @@ _LAYER_COLORS = {
     "Anchor":           "#1E40AF",
     "Exploratory":      "#F97316",
     "Income":           "#34D399",
-    # Le Bâtisseur
+    # Le Bâtisseur — internal taxonomy
     "Obvious":          "#1E40AF",
     "Haute Qualité":    "#6366F1",
     "Diversification":  "#34D399",
     "Tactical":         "#F97316",
+    # Le Bâtisseur — public taxonomy (collapsed via layer_map)
+    "Quality Compounders": "#3B82F6",
     # Cash (all portfolios)
     "Cash":             "#CBD5E1",
     "Cash/Equivalent":  "#CBD5E1",
@@ -188,6 +190,7 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
     show_documents_section = options.get("show_documents_section", True)
     show_disclaimer_banner = options.get("show_disclaimer_banner", True)
     show_layer_column = options.get("show_layer_column", True)
+    layer_map = options.get("layer_map", {})  # internal → public layer rename
 
     # ── Portfolio metadata ────────────────────────────────────────────────────
     pf = get_portfolio(portfolio_id)
@@ -609,6 +612,9 @@ Always conduct your own due diligence before making any investment decision.
             "thesis_short":   "Thesis",
         })
         display = display.drop(columns=["Thesis"], errors="ignore")
+        # Collapse internal Layer values into public-facing names if configured
+        if layer_map and "Layer" in display.columns:
+            display["Layer"] = display["Layer"].apply(lambda v: layer_map.get(v, v))
 
         def color_signed(col):
             return [

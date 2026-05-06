@@ -9,8 +9,13 @@ st.set_page_config(
 )
 
 render_portfolio_page("batisseur", options={
-    # Layer (Obvious / Haute Qualité / Diversification / Tactical) is internal
-    # taxonomy — keep it in DB for monitoring but hide from public display.
-    "show_layer_column": False,
-    "show_donuts": ["Sector", "Thematic", "Geography"],
+    # Internal Layer taxonomy (Obvious / Haute Qualité / Diversification / Tactical)
+    # is collapsed into the public IPS framing: Quality Compounders + Tactical.
+    "show_donuts": ["Layer", "Sector", "Thematic", "Geography"],
+    "layer_map": {
+        "Obvious":         "Quality Compounders",
+        "Haute Qualité":   "Quality Compounders",
+        "Diversification": "Quality Compounders",
+        # Tactical stays Tactical
+    },
 })
