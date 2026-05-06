@@ -371,6 +371,162 @@ else:
 
 st.divider()
 
+# ── Portfolio Health Tracker ──────────────────────────────────────────────────
+with st.expander(f"🩺 Health Tracker — {_pf.get('name', _pid)}", expanded=True):
+    _pos_health = positions  # already loaded above
+    if not _pos_health:
+        st.info("No positions to evaluate.")
+    else:
+        from collections import defaultdict
+
+        _weights         = [float(p["weight"]) for p in _pos_health]
+        _weights_sum     = sum(_weights)
+        _weights_sorted  = sorted(_weights, reverse=True)
+        _n_pos           = len(_pos_health)
+        _top1            = _weights_sorted[0]
+        _top3            = sum(_weights_sorted[:3])
+        _top5            = sum(_weights_sorted[:5])
+        _cash_pct_h      = max(0.0, 100.0 - _weights_sum)
+        _sum_above_5     = sum(w for w in _weights if w > 5.0)
+        _n_above_5       = sum(1 for w in _weights if w > 5.0)
+
+        _sector_alloc = defaultdict(float)
+        _theme_alloc  = defaultdict(float)
+        _geo_alloc    = defaultdict(float)
+        for p in _pos_health:
+            _sector_alloc[p.get("sector")  or "—"] += float(p["weight"])
+            _theme_alloc [p.get("thematic")or "—"] += float(p["weight"])
+            _geo_alloc   [p.get("geography")or "—"] += float(p["weight"])
+
+        # Status helper — returns (icon, color, label) for a metric vs thresholds
+        def _hstat(value, ok_max, watch_max, breach_max):
+            if value <= ok_max:
+                return ("🟢", "#10B981", "OK")
+            if value <= watch_max:
+                return ("🟡", "#F59E0B", "Watch")
+            if value <= breach_max:
+                return ("🟠", "#F97316", "Alert")
+            return ("🔴", "#DC2626", "BREACH")
+
+        def _badge(icon, color, label, extra=""):
+            return (f"<div style='font-size:0.78rem; color:{color}; font-weight:600; "
+                    f"margin-top:-6px;'>{icon} {label}{(' · ' + extra) if extra else ''}</div>")
+
+        # ── UCITS V Compliance (Bâtisseur only) ──────────────────────────────
+        if _pid == "batisseur":
+            st.markdown("**UCITS V Compliance**")
+            u1, u2, u3 = st.columns(3)
+            with u1:
+                ic, cl, lb = _hstat(_top1, 8.0, 9.5, 10.0)
+                st.metric("Max single position", f"{_top1:.2f}%",
+                          help="Hard cap 10% · Personal trim alert 9.5%")
+                hr = 10.0 - _top1
+                st.markdown(_badge(ic, cl, lb, f"headroom {hr:+.1f}pp to cap"),
+                            unsafe_allow_html=True)
+            with u2:
+                ic, cl, lb = _hstat(_sum_above_5, 35.0, 37.0, 40.0)
+                st.metric("Sum positions >5%", f"{_sum_above_5:.2f}%",
+                          help="Hard cap 40% · Personal alert 37% · Personal trim 39%")
+                hr = 40.0 - _sum_above_5
+                st.markdown(_badge(ic, cl, lb,
+                            f"{_n_above_5} pos >5% · headroom {hr:+.1f}pp"),
+                            unsafe_allow_html=True)
+            with u3:
+                if _n_pos >= 20:
+                    ic, cl, lb = "🟢", "#10B981", "OK"
+                elif _n_pos >= 16:
+                    ic, cl, lb = "🟡", "#F59E0B", "Tight"
+                else:
+                    ic, cl, lb = "🔴", "#DC2626", "BREACH"
+                st.metric("Position count", str(_n_pos), help="UCITS V minimum 16")
+                st.markdown(_badge(ic, cl, lb, f"min 16"), unsafe_allow_html=True)
+            st.write("")
+
+        # ── Concentration ────────────────────────────────────────────────────
+        st.markdown("**Concentration**")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: st.metric("Top 1",  f"{_top1:.2f}%")
+        with c2: st.metric("Top 3",  f"{_top3:.2f}%")
+        with c3: st.metric("Top 5",  f"{_top5:.2f}%")
+        with c4: st.metric("Cash",   f"{_cash_pct_h:.2f}%")
+
+        # Concentration flags
+        _flags = []
+        if _top3 > 35:
+            _flags.append(f"Top 3 = {_top3:.1f}% (>35% concentration alert)")
+        if _cash_pct_h < 2:
+            _flags.append(f"Cash {_cash_pct_h:.1f}% — below operational target")
+        elif _cash_pct_h > 15:
+            _flags.append(f"Cash {_cash_pct_h:.1f}% — above target, deploy?")
+        if _flags:
+            for f in _flags:
+                st.markdown(f"⚠ {f}")
+
+        st.write("")
+
+        # ── Sector / Thematic / Geography breakdown (3 columns side-by-side) ─
+        def _alloc_table(title, alloc_dict, hot_threshold=25.0):
+            """Render a sorted alloc table with flags on heavy slices."""
+            st.markdown(f"**{title}**")
+            df = pd.DataFrame(
+                [(k, v) for k, v in sorted(alloc_dict.items(), key=lambda x: -x[1])],
+                columns=[title.split()[0], "%"],
+            )
+            df["%"] = df["%"].round(2)
+
+            def _row_style(row):
+                v = row["%"]
+                if v >= hot_threshold:
+                    return [f"color: #F97316; font-weight: 600"] * len(row)
+                if v >= hot_threshold * 0.7:
+                    return [f"color: #F59E0B"] * len(row)
+                return [""] * len(row)
+
+            styled = df.style.format({"%": "{:.2f}%"}).apply(_row_style, axis=1)
+            st.dataframe(styled, use_container_width=True, hide_index=True,
+                         height=38 + min(len(df), 12) * 35)
+
+        # Display in 3 columns for compact view, or stacked. 3 cols on wide screens.
+        sc, tc, gc = st.columns(3)
+        with sc: _alloc_table("Sector",    _sector_alloc, hot_threshold=25.0)
+        with tc: _alloc_table("Thematic",  _theme_alloc,  hot_threshold=20.0)
+        with gc: _alloc_table("Geography", _geo_alloc,    hot_threshold=70.0)
+
+        st.write("")
+
+        # ── Bâtisseur-specific cluster risks ─────────────────────────────────
+        if _pid == "batisseur":
+            st.markdown("**Cluster Risks (Bâtisseur-specific)**")
+
+            def _cluster(tickers):
+                return sum(float(p["weight"]) for p in _pos_health
+                           if p["ticker"] in tickers)
+
+            _ai_capex   = _cluster({"NVDA", "AMZN", "META", "MSFT", "TSM"})
+            _healthcare = _cluster({"LLY", "BSX", "ISRG", "NVO", "EL.PA"})
+            _luxury     = _cluster({"RACE", "RMS.PA"})
+            _em_consumer= _cluster({"MELI", "BABA"})
+            _glp1       = _cluster({"LLY", "NVO"})
+
+            cl1, cl2, cl3, cl4, cl5 = st.columns(5)
+            with cl1: st.metric("AI capex",       f"{_ai_capex:.1f}%",   help="NVDA+AMZN+META+MSFT (+TSM if held)")
+            with cl2: st.metric("Healthcare",     f"{_healthcare:.1f}%", help="LLY+BSX+ISRG+NVO+EL")
+            with cl3: st.metric("Luxury",         f"{_luxury:.1f}%",     help="RACE+RMS")
+            with cl4: st.metric("EM Consumer",    f"{_em_consumer:.1f}%",help="MELI+BABA")
+            with cl5: st.metric("GLP-1 obesity",  f"{_glp1:.1f}%",       help="LLY+NVO (inverse-correlated competitors)")
+
+            _cluster_flags = []
+            if _ai_capex > 30:
+                _cluster_flags.append(f"AI capex cluster {_ai_capex:.1f}% — watch correlation in AI bear")
+            if _healthcare > 20:
+                _cluster_flags.append(f"Healthcare cluster {_healthcare:.1f}% — common reimbursement/regulatory exposure")
+            if _glp1 > 8:
+                _cluster_flags.append(f"GLP-1 cluster {_glp1:.1f}% — narrative-break double impact risk")
+            for f in _cluster_flags:
+                st.markdown(f"⚠ {f}")
+
+st.divider()
+
 # ── Earnings & Events Calendar ────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
 def fetch_upcoming_earnings_v3(tickers: tuple) -> tuple:
