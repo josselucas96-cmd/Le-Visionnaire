@@ -287,10 +287,6 @@ st.markdown("""
 <div class="specula-hero">
     <div class="specula-eyebrow">Open Research Platform</div>
     <div class="specula-title">Specula</div>
-    <div class="specula-tagline">
-        Observation is the edge. Conviction is the discipline.<br>
-        <span style="font-size:0.88rem; color:#4B5563; font-style:normal; letter-spacing:0.5px;">Merging the power of Qualitative and Quantitative depth.</span>
-    </div>
     <div class="specula-divider"></div>
 </div>
 """, unsafe_allow_html=True)
