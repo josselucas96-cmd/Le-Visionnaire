@@ -379,14 +379,24 @@ with st.expander(f"🩺 Health Tracker — {_pf.get('name', _pid)}", expanded=Tr
     else:
         from collections import defaultdict
 
-        _weights         = [float(p["weight"]) for p in _pos_health]
+        # UCITS applies on the current NAV-based weight, not the entry weight.
+        # current_weight was computed in the Active Positions block above
+        # (entry_weight × current_price / entry_price, normalized by total NAV).
+        # Fall back to entry weight for positions where market data is missing.
+        def _live_w(p):
+            cw = p.get("current_weight")
+            return float(cw) if cw is not None else float(p["weight"])
+
+        _weights         = [_live_w(p) for p in _pos_health]
+        _entry_weights   = [float(p["weight"]) for p in _pos_health]
         _weights_sum     = sum(_weights)
         _weights_sorted  = sorted(_weights, reverse=True)
         _n_pos           = len(_pos_health)
         _top1            = _weights_sorted[0]
         _top3            = sum(_weights_sorted[:3])
         _top5            = sum(_weights_sorted[:5])
-        _cash_pct_h      = max(0.0, 100.0 - _weights_sum)
+        _entry_top1      = max(_entry_weights)
+        _cash_pct_h      = float(current_cash_pct)  # already computed in Active Positions block
         _sum_above_5     = sum(w for w in _weights if w > 5.0)
         _n_above_5       = sum(1 for w in _weights if w > 5.0)
 
@@ -394,9 +404,10 @@ with st.expander(f"🩺 Health Tracker — {_pf.get('name', _pid)}", expanded=Tr
         _theme_alloc  = defaultdict(float)
         _geo_alloc    = defaultdict(float)
         for p in _pos_health:
-            _sector_alloc[p.get("sector")  or "—"] += float(p["weight"])
-            _theme_alloc [p.get("thematic")or "—"] += float(p["weight"])
-            _geo_alloc   [p.get("geography")or "—"] += float(p["weight"])
+            w = _live_w(p)
+            _sector_alloc[p.get("sector")  or "—"] += w
+            _theme_alloc [p.get("thematic")or "—"] += w
+            _geo_alloc   [p.get("geography")or "—"] += w
 
         # Status helper — returns (icon, color, label) for a metric vs thresholds
         def _hstat(value, ok_max, watch_max, breach_max):
