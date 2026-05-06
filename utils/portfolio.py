@@ -317,8 +317,17 @@ Always conduct your own due diligence before making any investment decision.
         margin-bottom: 0.7rem;
         margin-top: 0.2rem;
     }}
+    /* Portfolio header title — force Cormorant Garamond / Georgia serif.
+       Class selector + !important beats the global p rule from nav.py. */
+    p.pf-title,
     .pf-title {{
         color: {accent} !important;
+        font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif !important;
+        font-size: 3.5rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -1px !important;
+        line-height: 1.1 !important;
+        margin-bottom: 0 !important;
     }}
     /* Metric labels: accent, uppercase, letter-spaced (eyebrow style) */
     [data-testid="stMetric"] [data-testid="stMetricLabel"] p {{
