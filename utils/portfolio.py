@@ -29,72 +29,74 @@ from utils.theme import (
 
 # ── Color palettes (shared across portfolios) ────────────────────────────────
 _THEMATIC_COLORS = {
-    # Tech / Internet
-    "AI / Semi":              "#1E40AF",
-    "Software":               "#818CF8",
-    "Software / SaaS":        "#818CF8",  # legacy alias
-    "Cloud":                  "#6366F1",
-    "Cloud / Infrastructure": "#6366F1",  # legacy alias
-    "Cybersecurity":          "#F472B6",
-    "Social Platform":        "#F472B6",
-    "Robotics / Automation":  "#6B7280",
-    # Health
-    "Healthcare Equipment":   "#14B8A6",
-    "Digital Health":         "#34D399",
-    "Biotech":                "#059669",
-    "Obesity":                "#A78BFA",
-    # Finance
-    "Fintech":                "#60A5FA",
-    "Fintech / Payments":     "#60A5FA",  # legacy alias
-    "Banking":                "#374151",
-    "Crypto Currencies Play": "#F97316",
-    # Consumer
-    "Consumer Growth":        "#FCA5A5",
-    "Luxury":                 "#92400E",
-    # Energy / Utilities
-    "Energy Transition":      "#FCD34D",
-    "Clean Energy":           "#4ADE80",
-    # Other
-    "Space / Defense":        "#374151",
-    "EV / China":             "#86EFAC",
-    "Other":                  "#94A3B8",
+    # ── Tech / Internet ──
+    "AI / Semi":              "#1E3A8A",  # deep navy
+    "Software":               "#3B82F6",  # bright blue
+    "Software / SaaS":        "#3B82F6",  # legacy alias
+    "Cloud":                  "#0EA5E9",  # sky cyan
+    "Cloud / Infrastructure": "#0EA5E9",  # legacy alias
+    "Cybersecurity":          "#A855F7",  # violet
+    "Social Platform":        "#EC4899",  # magenta
+    "Robotics / Automation":  "#9333EA",  # purple
+    # ── Health ──
+    "Healthcare Equipment":   "#14B8A6",  # teal
+    "Digital Health":         "#34D399",  # mint
+    "Biotech":                "#059669",  # forest
+    "Obesity":                "#A78BFA",  # lavender
+    # ── Finance ──
+    "Fintech":                "#6366F1",  # indigo
+    "Fintech / Payments":     "#6366F1",  # legacy alias
+    "Banking":                "#1E293B",  # near-black slate
+    "Crypto Currencies Play": "#F59E0B",  # amber
+    # ── Consumer ──
+    "Consumer Growth":        "#FCA5A5",  # peach (legacy preserved)
+    "Luxury":                 "#92400E",  # wine
+    # ── Energy / Utilities ──
+    "Energy Transition":      "#FCD34D",  # yellow
+    "Clean Energy":           "#4ADE80",  # light green
+    # ── Other / Misc ──
+    "Space / Defense":        "#374151",  # graphite
+    "EV / China":             "#86EFAC",  # mint
+    "Other":                  "#64748B",  # slate
     "Cash":                   "#CBD5E1",
     "Cash/Equivalent":        "#CBD5E1",
 }
 _SECTOR_COLORS = {
-    # Simplified naming (Visionnaire / Nakamoto legacy)
-    "Tech":          "#1E40AF",
-    "Healthcare":    "#34D399",
+    # ── Simplified naming (Visionnaire / Nakamoto legacy) ──
+    "Tech":          "#3B82F6",
+    "Healthcare":    "#10B981",
     "Finance":       "#6366F1",
-    "Communication": "#60A5FA",
-    "Industrials":   "#6B7280",
-    "Consumer":      "#FCD34D",
-    "Energy":        "#FB923C",
+    "Communication": "#8B5CF6",
+    "Industrials":   "#64748B",
+    "Consumer":      "#F97316",
+    "Energy":        "#DC2626",
     "Materials":     "#A8A29E",
-    "Real Estate":   "#818CF8",
-    "Utilities":     "#94A3B8",
-    # GICS naming (Bâtisseur)
-    "Information Technology": "#1E40AF",
-    "Financials":             "#6366F1",
-    "Communication Services": "#60A5FA",
-    "Consumer Discretionary": "#FCD34D",
-    "Consumer Staples":        "#F59E0B",
-    # Cash
+    "Real Estate":   "#EC4899",
+    "Utilities":     "#06B6D4",
+    # ── GICS naming (Bâtisseur) ──
+    "Information Technology": "#3B82F6",  # bright blue
+    "Communication Services": "#8B5CF6",  # purple
+    "Consumer Discretionary": "#F97316",  # orange
+    "Consumer Staples":        "#A16207",  # dark amber
+    "Financials":             "#6366F1",  # indigo
+    # Healthcare / Industrials / Energy / Materials / Real Estate / Utilities
+    # use the simplified key (same name in GICS).
+    # ── Cash ──
     "Cash":          "#CBD5E1",
-    "Cash/Equivalent": "#CBD5E1",
+    "Cash/Equivalent": "#94A3B8",
 }
 _GEO_COLORS = {
-    "USA":              "#1E40AF",
-    "Canada":           "#DC2626",
-    "Europe":           "#93C5FD",
-    "Japan":            "#FDBA74",
-    "Asia ex-Japan":    "#FDE68A",
-    "China":            "#991B1B",
-    "Emerging Markets": "#FCD34D",
-    "LatAm":            "#86EFAC",
-    "Global":           "#C084FC",
-    "Other":            "#6B7280",
-    "USD":              "#CBD5E1",
+    "USA":              "#1E40AF",  # deep blue
+    "Canada":           "#DC2626",  # red (flag)
+    "Europe":           "#3B82F6",  # mid blue
+    "Japan":            "#FDBA74",  # peach
+    "Asia ex-Japan":    "#F59E0B",  # amber
+    "China":            "#991B1B",  # dark red
+    "Emerging Markets": "#FCD34D",  # yellow
+    "LatAm":            "#10B981",  # emerald
+    "Global":           "#A78BFA",  # lavender
+    "Other":            "#6B7280",  # grey
+    "USD":              "#94A3B8",  # medium grey (visible vs background)
 }
 _LAYER_COLORS = {
     # Le Visionnaire
