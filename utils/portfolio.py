@@ -29,26 +29,40 @@ from utils.theme import (
 
 # ── Color palettes (shared across portfolios) ────────────────────────────────
 _THEMATIC_COLORS = {
+    # Tech / Internet
     "AI / Semi":              "#1E40AF",
-    "Crypto Currencies Play": "#F97316",
-    "Biotech":                "#059669",
-    "Space / Defense":        "#374151",
-    "Consumer Growth":        "#FCA5A5",
-    "Robotics / Automation":  "#6B7280",
-    "Fintech / Payments":     "#60A5FA",
-    "Energy Transition":      "#FCD34D",
-    "Software / SaaS":        "#818CF8",
+    "Software":               "#818CF8",
+    "Software / SaaS":        "#818CF8",  # legacy alias
+    "Cloud":                  "#6366F1",
+    "Cloud / Infrastructure": "#6366F1",  # legacy alias
     "Cybersecurity":          "#F472B6",
-    "Cloud / Infrastructure": "#6366F1",
-    "Clean Energy":           "#4ADE80",
-    "Digital Health":         "#34D399",
     "Social Platform":        "#F472B6",
+    "Robotics / Automation":  "#6B7280",
+    # Health
+    "Healthcare Equipment":   "#14B8A6",
+    "Digital Health":         "#34D399",
+    "Biotech":                "#059669",
+    "Obesity":                "#A78BFA",
+    # Finance
+    "Fintech":                "#60A5FA",
+    "Fintech / Payments":     "#60A5FA",  # legacy alias
+    "Banking":                "#374151",
+    "Crypto Currencies Play": "#F97316",
+    # Consumer
+    "Consumer Growth":        "#FCA5A5",
+    "Luxury":                 "#92400E",
+    # Energy / Utilities
+    "Energy Transition":      "#FCD34D",
+    "Clean Energy":           "#4ADE80",
+    # Other
+    "Space / Defense":        "#374151",
     "EV / China":             "#86EFAC",
     "Other":                  "#94A3B8",
     "Cash":                   "#CBD5E1",
     "Cash/Equivalent":        "#CBD5E1",
 }
 _SECTOR_COLORS = {
+    # Simplified naming (Visionnaire / Nakamoto legacy)
     "Tech":          "#1E40AF",
     "Healthcare":    "#34D399",
     "Finance":       "#6366F1",
@@ -59,11 +73,19 @@ _SECTOR_COLORS = {
     "Materials":     "#A8A29E",
     "Real Estate":   "#818CF8",
     "Utilities":     "#94A3B8",
+    # GICS naming (Bâtisseur)
+    "Information Technology": "#1E40AF",
+    "Financials":             "#6366F1",
+    "Communication Services": "#60A5FA",
+    "Consumer Discretionary": "#FCD34D",
+    "Consumer Staples":        "#F59E0B",
+    # Cash
     "Cash":          "#CBD5E1",
     "Cash/Equivalent": "#CBD5E1",
 }
 _GEO_COLORS = {
     "USA":              "#1E40AF",
+    "Canada":           "#DC2626",
     "Europe":           "#93C5FD",
     "Japan":            "#FDBA74",
     "Asia ex-Japan":    "#FDE68A",
@@ -75,12 +97,20 @@ _GEO_COLORS = {
     "USD":              "#CBD5E1",
 }
 _LAYER_COLORS = {
+    # Le Visionnaire
     "Core":             "#1E40AF",
     "Conviction":       "#F97316",
     "Moonshot":         "#34D399",
+    # Le Nakamoto
     "Anchor":           "#1E40AF",
     "Exploratory":      "#F97316",
     "Income":           "#34D399",
+    # Le Bâtisseur
+    "Obvious":          "#1E40AF",
+    "Haute Qualité":    "#6366F1",
+    "Diversification":  "#34D399",
+    "Tactical":         "#F97316",
+    # Cash (all portfolios)
     "Cash":             "#CBD5E1",
     "Cash/Equivalent":  "#CBD5E1",
 }
@@ -155,6 +185,7 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
     show_research_teaser = options.get("show_research_teaser", True)
     show_documents_section = options.get("show_documents_section", True)
     show_disclaimer_banner = options.get("show_disclaimer_banner", True)
+    show_layer_column = options.get("show_layer_column", True)
 
     # ── Portfolio metadata ────────────────────────────────────────────────────
     pf = get_portfolio(portfolio_id)
@@ -554,11 +585,14 @@ Always conduct your own due diligence before making any investment decision.
     with st.expander("Positions", expanded=True):
         df = pd.DataFrame(positions)
         df = df.sort_values("current_weight", ascending=False)
-        display = df[[c for c in [
+        _display_cols = [
             "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
             "perf_pct", "change_today",
-            "sector", "geography", "thematic", "thesis_short"
-        ] if c in df.columns]].rename(columns={
+            "sector", "geography", "thematic", "thesis_short",
+        ]
+        if not show_layer_column:
+            _display_cols = [c for c in _display_cols if c != "layer"]
+        display = df[[c for c in _display_cols if c in df.columns]].rename(columns={
             "ticker":         "Ticker",
             "name":           "Name",
             "layer":          "Layer",
@@ -585,13 +619,16 @@ Always conduct your own due diligence before making any investment decision.
         empty_row = pd.DataFrame([{
             c: None if c in _numeric_cols else "" for c in display.columns
         }])
-        cash_row_table = pd.DataFrame([{
-            "Ticker": "CASH", "Name": "Cash USD", "Layer": "Cash",
+        _cash_row = {
+            "Ticker": "CASH", "Name": "Cash USD",
             "Alloc.": current_cash_pct,
             "Entry": None, "Price": None,
             "Total Return": None, "Today %": None,
             "Sector": "—", "Geography": "USD", "Thematic": "—",
-        }])
+        }
+        if show_layer_column:
+            _cash_row["Layer"] = "Cash"
+        cash_row_table = pd.DataFrame([_cash_row])
         display_full = pd.concat([display, empty_row, cash_row_table], ignore_index=True)
 
         styled = display_full.style.format({

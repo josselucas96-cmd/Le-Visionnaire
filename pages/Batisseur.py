@@ -8,4 +8,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-render_portfolio_page("batisseur")
+render_portfolio_page("batisseur", options={
+    # Layer (Obvious / Haute Qualité / Diversification / Tactical) is internal
+    # taxonomy — keep it in DB for monitoring but hide from public display.
+    "show_layer_column": False,
+    "show_donuts": ["Sector", "Geography", "Thematic"],
+})
