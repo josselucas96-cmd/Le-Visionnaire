@@ -16,9 +16,10 @@ def render_nav(current: str):
     is_portfolio_active = current in portfolio_keys
     v_active = "dropdown-active" if current == "visionnaire" else ""
     b_active = "dropdown-active" if current == "batisseur" else ""
+    n_active = "dropdown-active" if current == "nakamoto" else ""
 
     # Build the dropdown menu HTML on a single line (avoids Markdown code-block trap)
-    # Order matches Specula landing: Visionnaire (live) → Bâtisseur (live) → Nakamoto (In progress).
+    # Order matches Specula landing: Visionnaire → Bâtisseur → Nakamoto.
     portfolio_dropdown_html = (
         '<div class="dropdown-menu">'
         f'<a href="/Visionnaire" target="_self" class="dropdown-item {v_active}">'
@@ -29,10 +30,10 @@ def render_nav(current: str):
         '<span class="dropdown-portfolio-name">Le Bâtisseur</span>'
         '<span class="dropdown-portfolio-tag">Quality Compounders</span>'
         '</a>'
-        '<div class="dropdown-item dropdown-item-disabled">'
+        f'<a href="/Nakamoto" target="_self" class="dropdown-item {n_active}">'
         '<span class="dropdown-portfolio-name">Le Nakamoto</span>'
-        '<span class="dropdown-portfolio-tag">Digital Asset Treasuries  ·  In progress</span>'
-        '</div>'
+        '<span class="dropdown-portfolio-tag">Digital Asset Treasuries</span>'
+        '</a>'
         '</div>'
     )
 
