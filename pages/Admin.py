@@ -481,35 +481,35 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             },
         )
 
-        # Per-row reset handling: if any "↺" was ticked, force its cells to
-        # the default seed values by writing into the editor's persistent
-        # session state, then rerun. The checkbox is uncoded back to False.
+        # Per-row reset handling: if any "↺" was ticked, mutate the editor's
+        # persistent session_state IN PLACE (Streamlit forbids reassigning a
+        # widget key, raising StreamlitAPIException — but mutating the dict
+        # the key points to is fine).
         _needs_reset_rerun = False
         for i, p in enumerate(positions):
             try:
                 _ticked = bool(edited_inputs.iloc[i].get("↺", False))
             except Exception:
                 _ticked = False
-            if _ticked:
-                t = p["ticker"]
-                f = _funds.get(t, {})
-                _ana   = f.get("analyst_rg")
-                _gm    = (f.get("gross_margin")     or 0) * 100
-                _om    = (f.get("operating_margin") or 0) * 100
-                _fcf_m = (f.get("fcf_margin")       or 0) * 100
-                _state = st.session_state.get(_editor_key, {})
-                if not isinstance(_state, dict):
-                    _state = {}
-                _er = _state.setdefault("edited_rows", {})
-                _er[i] = {
-                    "RG % (exp)":  round(_ana,   1) if _ana is not None else None,
-                    "GM % (exp)":  round(_gm,    1),
-                    "OM % (exp)":  round(_om,    1),
-                    "FCF % (exp)": round(_fcf_m, 1),
-                    "↺":           False,
-                }
-                st.session_state[_editor_key] = _state
-                _needs_reset_rerun = True
+            if not _ticked:
+                continue
+            t = p["ticker"]
+            f = _funds.get(t, {})
+            _ana   = f.get("analyst_rg")
+            _gm    = (f.get("gross_margin")     or 0) * 100
+            _om    = (f.get("operating_margin") or 0) * 100
+            _fcf_m = (f.get("fcf_margin")       or 0) * 100
+            _reset_payload = {
+                "RG % (exp)":  round(_ana,   1) if _ana is not None else None,
+                "GM % (exp)":  round(_gm,    1),
+                "OM % (exp)":  round(_om,    1),
+                "FCF % (exp)": round(_fcf_m, 1),
+                "↺":           False,
+            }
+            ss = st.session_state.get(_editor_key)
+            if isinstance(ss, dict):
+                ss.setdefault("edited_rows", {})[i] = _reset_payload
+            _needs_reset_rerun = True
         if _needs_reset_rerun:
             st.rerun()
 
