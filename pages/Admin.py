@@ -475,9 +475,11 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
         for i, p in enumerate(positions):
             t = p["ticker"]
             f = _funds.get(t, {})
-            mc  = f.get("market_cap")
-            ev  = f.get("enterprise_value")
-            rev = f.get("revenue_ttm")
+            mc      = f.get("market_cap")
+            ev      = f.get("enterprise_value")
+            rev     = f.get("revenue_ttm")
+            ebitda  = f.get("ebitda")
+            fwd_pe  = f.get("forward_pe")
 
             row = edited_inputs.iloc[i]
             rg  = row["RG % (exp)"]
@@ -488,61 +490,118 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             # Forward GP estimate uses user's GM applied to TTM revenue.
             gp_est = (rev * gm / 100.0) if (rev and gm and gm > 0) else None
 
-            ps   = _safe_div(mc,  rev)
-            evs  = _safe_div(ev,  rev)
-            evgp = _safe_div(ev,  gp_est)
+            ps        = _safe_div(mc,  rev)
+            evs       = _safe_div(ev,  rev)
+            evgp      = _safe_div(ev,  gp_est)
+            ev_ebitda = _safe_div(ev,  ebitda) if (ebitda and ebitda > 0) else None
 
-            psg     = _safe_div(ps,   rg) if (rg and rg > 0) else None
-            evsg    = _safe_div(evs,  rg) if (rg and rg > 0) else None
             evgprg  = _safe_div(evgp, rg) if (rg and rg > 0) else None
             psgq    = (evs / (rg * om)  * 100) if (evs is not None and rg and om  and rg > 0 and om  > 0) else None
             psgfcf  = (evs / (rg * fcf) * 100) if (evs is not None and rg and fcf and rg > 0 and fcf > 0) else None
 
-            _ratio_rows.append({
-                "Ticker":       t,
-                "MCap ($M)":    round(mc / 1e6) if mc  else None,
-                "EV ($M)":      round(ev / 1e6) if ev  else None,
-                "Rev TTM ($M)": round(rev / 1e6) if rev else None,
-                "P/S":          round(ps,     2) if ps      is not None else None,
-                "EV/S":         round(evs,    2) if evs     is not None else None,
-                "EV/GP":        round(evgp,   2) if evgp    is not None else None,
-                "PSG":          round(psg,    2) if psg     is not None else None,
-                "EV/S/G":       round(evsg,   2) if evsg    is not None else None,
-                "EV/GP/RG":     round(evgprg, 2) if evgprg  is not None else None,
-                "PSG-Q":        round(psgq,   2) if psgq    is not None else None,
-                "PSG-FCF":      round(psgfcf, 2) if psgfcf  is not None else None,
-            })
+            if _pid == "batisseur":
+                # Bâtisseur ratios: PE-focused for quality compounders.
+                # Forward PE 2Y = Forward PE 1Y / (1 + RG/100)  — assumes constant margins.
+                fwd_pe_2y = (fwd_pe / (1 + rg / 100.0)) if (fwd_pe and rg) else None
+                _ratio_rows.append({
+                    "Ticker":       t,
+                    "MCap ($M)":    round(mc / 1e6) if mc  else None,
+                    "EV ($M)":      round(ev / 1e6) if ev  else None,
+                    "Rev TTM ($M)": round(rev / 1e6) if rev else None,
+                    "EBITDA ($M)":  round(ebitda / 1e6) if ebitda else None,
+                    "P/S":          round(ps,        2) if ps        is not None else None,
+                    "EV/EBITDA":    round(ev_ebitda, 2) if ev_ebitda is not None else None,
+                    "EV/GP":        round(evgp,      2) if evgp      is not None else None,
+                    "Fwd PE 1Y":    round(fwd_pe,    2) if fwd_pe    is not None else None,
+                    "Fwd PE 2Y":    round(fwd_pe_2y, 2) if fwd_pe_2y is not None else None,
+                    "EV/GP/RG":     round(evgprg,    2) if evgprg    is not None else None,
+                    "PSG-Q":        round(psgq,      2) if psgq      is not None else None,
+                    "PSG-FCF":      round(psgfcf,    2) if psgfcf    is not None else None,
+                })
+            else:
+                # Visionnaire (and others by default): growth-tilted ratios.
+                psg     = _safe_div(ps,   rg) if (rg and rg > 0) else None
+                evsg    = _safe_div(evs,  rg) if (rg and rg > 0) else None
+                _ratio_rows.append({
+                    "Ticker":       t,
+                    "MCap ($M)":    round(mc / 1e6) if mc  else None,
+                    "EV ($M)":      round(ev / 1e6) if ev  else None,
+                    "Rev TTM ($M)": round(rev / 1e6) if rev else None,
+                    "P/S":          round(ps,     2) if ps      is not None else None,
+                    "EV/S":         round(evs,    2) if evs     is not None else None,
+                    "EV/GP":        round(evgp,   2) if evgp    is not None else None,
+                    "PSG":          round(psg,    2) if psg     is not None else None,
+                    "EV/S/G":       round(evsg,   2) if evsg    is not None else None,
+                    "EV/GP/RG":     round(evgprg, 2) if evgprg  is not None else None,
+                    "PSG-Q":        round(psgq,   2) if psgq    is not None else None,
+                    "PSG-FCF":      round(psgfcf, 2) if psgfcf  is not None else None,
+                })
         _ratios_df = pd.DataFrame(_ratio_rows)
 
-        # Color-grade growth-adjusted ratios.
-        # Lower is better: <1 green; 1–1.5 yellow; 1.5–2 orange; >2 red.
+        # Color graders — different scales for ratio-style vs PE-style metrics.
         def _color_growth_ratio(v):
-            if v is None or pd.isna(v):
-                return ""
+            """Lower is better: <1 green; 1–1.5 yellow; 1.5–2 orange; >2 red."""
+            if v is None or pd.isna(v): return ""
             if v < 1:   return "color: #10B981; font-weight: 600"
             if v < 1.5: return "color: #FCD34D"
             if v < 2:   return "color: #F97316"
             return "color: #DC2626; font-weight: 600"
 
-        _grad_cols = ["PSG", "EV/S/G", "EV/GP/RG", "PSG-Q", "PSG-FCF"]
-        styled = _ratios_df.style.format({
-            "MCap ($M)":    "{:,.0f}",
-            "EV ($M)":      "{:,.0f}",
-            "Rev TTM ($M)": "{:,.0f}",
-            **{c: "{:.2f}" for c in ["P/S", "EV/S", "EV/GP"] + _grad_cols},
-        }, na_rep="—")
-        for c in _grad_cols:
-            styled = styled.map(_color_growth_ratio, subset=[c])
+        def _color_pe(v):
+            """Forward PE: <20 green; 20–30 yellow; 30–40 orange; >40 red."""
+            if v is None or pd.isna(v): return ""
+            if v < 20: return "color: #10B981; font-weight: 600"
+            if v < 30: return "color: #FCD34D"
+            if v < 40: return "color: #F97316"
+            return "color: #DC2626; font-weight: 600"
+
+        def _color_ev_ebitda(v):
+            """EV/EBITDA: <10 green; 10–15 yellow; 15–25 orange; >25 red."""
+            if v is None or pd.isna(v): return ""
+            if v < 10: return "color: #10B981; font-weight: 600"
+            if v < 15: return "color: #FCD34D"
+            if v < 25: return "color: #F97316"
+            return "color: #DC2626; font-weight: 600"
+
+        if _pid == "batisseur":
+            _ratio_cols = ["P/S", "EV/EBITDA", "EV/GP", "Fwd PE 1Y", "Fwd PE 2Y",
+                           "EV/GP/RG", "PSG-Q", "PSG-FCF"]
+            styled = _ratios_df.style.format({
+                "MCap ($M)":    "{:,.0f}",
+                "EV ($M)":      "{:,.0f}",
+                "Rev TTM ($M)": "{:,.0f}",
+                "EBITDA ($M)":  "{:,.0f}",
+                **{c: "{:.2f}" for c in _ratio_cols},
+            }, na_rep="—")
+            styled = styled.map(_color_ev_ebitda,    subset=["EV/EBITDA"])
+            styled = styled.map(_color_pe,           subset=["Fwd PE 1Y", "Fwd PE 2Y"])
+            for c in ["EV/GP/RG", "PSG-Q", "PSG-FCF"]:
+                styled = styled.map(_color_growth_ratio, subset=[c])
+            _hierarchy = "Fwd PE 1Y → Fwd PE 2Y → EV/EBITDA → EV/GP → EV/GP/RG → PSG-Q → PSG-FCF"
+            _legend = (
+                "🟢/🟡/🟠/🔴 thresholds — "
+                "Fwd PE: <20 / <30 / <40 / >40 · "
+                "EV/EBITDA: <10 / <15 / <25 / >25 · "
+                "growth-adjusted: <1 / <1.5 / <2 / >2"
+            )
+        else:
+            _grad_cols = ["PSG", "EV/S/G", "EV/GP/RG", "PSG-Q", "PSG-FCF"]
+            styled = _ratios_df.style.format({
+                "MCap ($M)":    "{:,.0f}",
+                "EV ($M)":      "{:,.0f}",
+                "Rev TTM ($M)": "{:,.0f}",
+                **{c: "{:.2f}" for c in ["P/S", "EV/S", "EV/GP"] + _grad_cols},
+            }, na_rep="—")
+            for c in _grad_cols:
+                styled = styled.map(_color_growth_ratio, subset=[c])
+            _hierarchy = "P/S → EV/S → EV/S/G → EV/GP/RG → PSG-Q → PSG-FCF"
+            _legend = "🟢 <1 · 🟡 1–1.5 · 🟠 1.5–2 · 🔴 >2"
 
         st.markdown("**Computed ratios** (auto-update on each input edit)")
         st.dataframe(styled, use_container_width=True, hide_index=True,
                      height=38 + min(len(positions), 30) * 35)
 
-        st.caption(
-            "**Hierarchy** : P/S → EV/S → EV/S/G → EV/GP/RG → PSG-Q → PSG-FCF   ·   "
-            "Color thresholds for growth-adjusted ratios: "
-            "🟢 <1 · 🟡 1–1.5 · 🟠 1.5–2 · 🔴 >2"
-        )
+        st.caption(f"**Hierarchy** : {_hierarchy}   ·   {_legend}")
 
         # Save button — explicit batched persist.
         if st.button("💾 Save valuation inputs", type="primary", key="valo_save"):

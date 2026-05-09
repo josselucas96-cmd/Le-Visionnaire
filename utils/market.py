@@ -22,16 +22,20 @@ def get_valuation_fundamentals(tickers: tuple) -> dict:
                 "market_cap":       info.get("marketCap"),
                 "enterprise_value": info.get("enterpriseValue"),
                 "revenue_ttm":      rev,
+                "ebitda":           info.get("ebitda"),
                 "gross_margin":     info.get("grossMargins"),
                 "operating_margin": info.get("operatingMargins"),
                 "free_cashflow":    fcf,
                 "fcf_margin":       fcf_margin,
+                "forward_pe":       info.get("forwardPE"),
+                "trailing_pe":      info.get("trailingPE"),
             }
         except Exception:
             result[t] = {"market_cap": None, "enterprise_value": None,
-                         "revenue_ttm": None, "gross_margin": None,
-                         "operating_margin": None, "free_cashflow": None,
-                         "fcf_margin": None}
+                         "revenue_ttm": None, "ebitda": None,
+                         "gross_margin": None, "operating_margin": None,
+                         "free_cashflow": None, "fcf_margin": None,
+                         "forward_pe": None, "trailing_pe": None}
     return result
 
 
