@@ -15,17 +15,23 @@ def get_valuation_fundamentals(tickers: tuple) -> dict:
     for t in tickers:
         try:
             info = yf.Ticker(t).info
+            rev = info.get("totalRevenue")
+            fcf = info.get("freeCashflow")
+            fcf_margin = (fcf / rev) if (rev and fcf is not None and rev > 0) else None
             result[t] = {
                 "market_cap":       info.get("marketCap"),
                 "enterprise_value": info.get("enterpriseValue"),
-                "revenue_ttm":      info.get("totalRevenue"),
+                "revenue_ttm":      rev,
                 "gross_margin":     info.get("grossMargins"),
                 "operating_margin": info.get("operatingMargins"),
+                "free_cashflow":    fcf,
+                "fcf_margin":       fcf_margin,
             }
         except Exception:
             result[t] = {"market_cap": None, "enterprise_value": None,
                          "revenue_ttm": None, "gross_margin": None,
-                         "operating_margin": None}
+                         "operating_margin": None, "free_cashflow": None,
+                         "fcf_margin": None}
     return result
 
 

@@ -4,9 +4,11 @@
 ALTER TABLE positions
     ADD COLUMN IF NOT EXISTS expected_revenue_growth NUMERIC,
     ADD COLUMN IF NOT EXISTS expected_gross_margin   NUMERIC,
-    ADD COLUMN IF NOT EXISTS expected_op_margin      NUMERIC;
+    ADD COLUMN IF NOT EXISTS expected_op_margin      NUMERIC,
+    ADD COLUMN IF NOT EXISTS expected_fcf_margin     NUMERIC;
 
--- Verify (should return 3 rows):
+-- Verify (should return 4 rows):
 -- SELECT column_name, data_type FROM information_schema.columns
 -- WHERE table_name='positions'
---   AND column_name IN ('expected_revenue_growth','expected_gross_margin','expected_op_margin');
+--   AND column_name IN ('expected_revenue_growth','expected_gross_margin',
+--                       'expected_op_margin','expected_fcf_margin');
