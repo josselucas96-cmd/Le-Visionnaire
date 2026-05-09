@@ -439,12 +439,14 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                 "GM % (exp)":  p.get("expected_gross_margin") if p.get("expected_gross_margin") is not None else round(_gm_ttm,  1),
                 "OM % (exp)":  p.get("expected_op_margin")    if p.get("expected_op_margin")    is not None else round(_om_ttm,  1),
                 "FCF % (exp)": p.get("expected_fcf_margin")   if p.get("expected_fcf_margin")   is not None else round(_fcf_ttm, 1),
+                "↺":           False,
             })
         _inputs_df = pd.DataFrame(_inputs_rows)
 
+        _editor_key = f"valo_inputs_{_pid}"
         edited_inputs = st.data_editor(
             _inputs_df,
-            key=f"valo_inputs_{_pid}",
+            key=_editor_key,
             hide_index=True,
             use_container_width=True,
             num_rows="fixed",
@@ -471,8 +473,45 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                     "FCF %", format="%.1f", min_value=-50.0, max_value=80.0, step=1.0,
                     help="Expected average free cash flow margin, 2-3 years (in %)",
                 ),
+                "↺":           st.column_config.CheckboxColumn(
+                    "↺", default=False, width="small",
+                    help="Tick to reset this row to defaults (analyst RG · TTM margins). "
+                         "Cell-level only — click Save afterward to clear the saved override.",
+                ),
             },
         )
+
+        # Per-row reset handling: if any "↺" was ticked, force its cells to
+        # the default seed values by writing into the editor's persistent
+        # session state, then rerun. The checkbox is uncoded back to False.
+        _needs_reset_rerun = False
+        for i, p in enumerate(positions):
+            try:
+                _ticked = bool(edited_inputs.iloc[i].get("↺", False))
+            except Exception:
+                _ticked = False
+            if _ticked:
+                t = p["ticker"]
+                f = _funds.get(t, {})
+                _ana   = f.get("analyst_rg")
+                _gm    = (f.get("gross_margin")     or 0) * 100
+                _om    = (f.get("operating_margin") or 0) * 100
+                _fcf_m = (f.get("fcf_margin")       or 0) * 100
+                _state = st.session_state.get(_editor_key, {})
+                if not isinstance(_state, dict):
+                    _state = {}
+                _er = _state.setdefault("edited_rows", {})
+                _er[i] = {
+                    "RG % (exp)":  round(_ana,   1) if _ana is not None else None,
+                    "GM % (exp)":  round(_gm,    1),
+                    "OM % (exp)":  round(_om,    1),
+                    "FCF % (exp)": round(_fcf_m, 1),
+                    "↺":           False,
+                }
+                st.session_state[_editor_key] = _state
+                _needs_reset_rerun = True
+        if _needs_reset_rerun:
+            st.rerun()
 
         # Compute live ratios from edited inputs.
         def _safe_div(a, b):
