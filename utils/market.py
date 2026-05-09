@@ -4,6 +4,31 @@ import pandas as pd
 from datetime import datetime, date
 
 
+@st.cache_data(ttl=3600)  # Refresh every hour — fundamentals don't move intraday
+def get_valuation_fundamentals(tickers: tuple) -> dict:
+    """For each ticker, return a dict with the fields needed by the Valo
+    Tracking table. Margins are returned as ratios 0-1 (caller multiplies
+    by 100 if it wants percentages). Missing fields are returned as None
+    rather than raising — yfinance is patchy on non-US tickers.
+    """
+    result = {}
+    for t in tickers:
+        try:
+            info = yf.Ticker(t).info
+            result[t] = {
+                "market_cap":       info.get("marketCap"),
+                "enterprise_value": info.get("enterpriseValue"),
+                "revenue_ttm":      info.get("totalRevenue"),
+                "gross_margin":     info.get("grossMargins"),
+                "operating_margin": info.get("operatingMargins"),
+            }
+        except Exception:
+            result[t] = {"market_cap": None, "enterprise_value": None,
+                         "revenue_ttm": None, "gross_margin": None,
+                         "operating_margin": None}
+    return result
+
+
 @st.cache_data(ttl=300)  # Refresh every 5 minutes
 def get_prices(tickers: tuple) -> dict:
     """Current price and daily % change for each ticker."""

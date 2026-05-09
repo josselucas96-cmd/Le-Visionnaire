@@ -31,6 +31,20 @@ def update_portfolio(portfolio_id: str, fields: dict):
     sb.table("portfolios").update(fields).eq("id", portfolio_id).execute()
 
 
+def update_position_valuation(position_id: int, growth, gm, om):
+    """Persist the user's expected forward valuation inputs on a position.
+
+    growth, gm, om are percentages (e.g. 20.0 = 20%). None values are stored
+    as NULL — clearing a cell removes the estimate.
+    """
+    sb = get_client()
+    sb.table("positions").update({
+        "expected_revenue_growth": growth,
+        "expected_gross_margin":   gm,
+        "expected_op_margin":      om,
+    }).eq("id", position_id).execute()
+
+
 # ── Positions ─────────────────────────────────────────────────────────────────
 def get_positions(active_only=True, portfolio_id: str = "visionnaire"):
     sb = get_client()

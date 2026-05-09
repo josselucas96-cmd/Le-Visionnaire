@@ -391,6 +391,167 @@ else:
 
 st.divider()
 
+# ── Valo Tracking ─────────────────────────────────────────────────────────────
+with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=False):
+    if not positions:
+        st.info("No positions to evaluate.")
+    else:
+        from utils.market import get_valuation_fundamentals
+        from utils.data   import update_position_valuation
+
+        cap_col, refresh_col = st.columns([5, 1])
+        with cap_col:
+            st.caption(
+                "Forward valuation tracking. Edit **RG / GM / OM** (your 2-3y "
+                "expected averages, in %), then **Save**. All growth-adjusted "
+                "ratios use your RG; EV/GP and PSG-Q use your GM and OM."
+            )
+        with refresh_col:
+            if st.button("↻ Refresh fundamentals", key="valo_refresh",
+                         help="Bypass yfinance cache (1h)"):
+                get_valuation_fundamentals.clear()
+                st.rerun()
+
+        _v_tickers = tuple(p["ticker"] for p in positions)
+        with st.spinner("Loading fundamentals…"):
+            _funds = get_valuation_fundamentals(_v_tickers)
+
+        # Build the editable inputs DataFrame.
+        _inputs_rows = []
+        for p in positions:
+            t = p["ticker"]
+            f = _funds.get(t, {})
+            _gm_ttm = (f.get("gross_margin")     or 0) * 100  # %
+            _om_ttm = (f.get("operating_margin") or 0) * 100  # %
+            _inputs_rows.append({
+                "Ticker":      t,
+                "Name":        p.get("name", ""),
+                "RG % (exp)":  p.get("expected_revenue_growth"),
+                "GM % (exp)":  p.get("expected_gross_margin") if p.get("expected_gross_margin") is not None else round(_gm_ttm, 1),
+                "OM % (exp)":  p.get("expected_op_margin")    if p.get("expected_op_margin")    is not None else round(_om_ttm, 1),
+            })
+        _inputs_df = pd.DataFrame(_inputs_rows)
+
+        edited_inputs = st.data_editor(
+            _inputs_df,
+            key=f"valo_inputs_{_pid}",
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            column_config={
+                "Ticker":      st.column_config.TextColumn(disabled=True, width="small"),
+                "Name":        st.column_config.TextColumn(disabled=True, width="medium"),
+                "RG % (exp)":  st.column_config.NumberColumn(
+                    "RG %", format="%.1f", min_value=-50.0, max_value=300.0, step=1.0,
+                    help="Expected average revenue growth, 2-3 years (in %)",
+                ),
+                "GM % (exp)":  st.column_config.NumberColumn(
+                    "GM %", format="%.1f", min_value=0.0,   max_value=100.0, step=1.0,
+                    help="Expected average gross margin, 2-3 years (in %)",
+                ),
+                "OM % (exp)":  st.column_config.NumberColumn(
+                    "OM %", format="%.1f", min_value=-50.0, max_value=80.0, step=1.0,
+                    help="Expected average operating margin, 2-3 years (in %)",
+                ),
+            },
+        )
+
+        # Compute live ratios from edited inputs.
+        def _safe_div(a, b):
+            try:
+                if a is None or b is None or b == 0:
+                    return None
+                return a / b
+            except Exception:
+                return None
+
+        _ratio_rows = []
+        for i, p in enumerate(positions):
+            t = p["ticker"]
+            f = _funds.get(t, {})
+            mc  = f.get("market_cap")
+            ev  = f.get("enterprise_value")
+            rev = f.get("revenue_ttm")
+
+            row = edited_inputs.iloc[i]
+            rg = row["RG % (exp)"]
+            gm = row["GM % (exp)"]
+            om = row["OM % (exp)"]
+
+            # Forward GP estimate uses user's GM applied to TTM revenue.
+            gp_est = (rev * gm / 100.0) if (rev and gm and gm > 0) else None
+
+            ps   = _safe_div(mc,  rev)
+            evs  = _safe_div(ev,  rev)
+            evgp = _safe_div(ev,  gp_est)
+
+            psg     = _safe_div(ps,   rg) if (rg and rg > 0)        else None
+            evsg    = _safe_div(evs,  rg) if (rg and rg > 0)        else None
+            evgprg  = _safe_div(evgp, rg) if (rg and rg > 0)        else None
+            psgq    = (evs / (rg * om) * 100) if (evs is not None and rg and om and rg > 0 and om > 0) else None
+
+            _ratio_rows.append({
+                "Ticker":     t,
+                "MCap ($M)":  round(mc / 1e6) if mc  else None,
+                "EV ($M)":    round(ev / 1e6) if ev  else None,
+                "Rev TTM ($M)": round(rev / 1e6) if rev else None,
+                "P/S":        round(ps,    2) if ps     is not None else None,
+                "EV/S":       round(evs,   2) if evs    is not None else None,
+                "EV/GP":      round(evgp,  2) if evgp   is not None else None,
+                "PSG":        round(psg,   2) if psg    is not None else None,
+                "EV/S/G":     round(evsg,  2) if evsg   is not None else None,
+                "EV/GP/RG":   round(evgprg,2) if evgprg is not None else None,
+                "PSG-Q":      round(psgq,  2) if psgq   is not None else None,
+            })
+        _ratios_df = pd.DataFrame(_ratio_rows)
+
+        # Color-grade growth-adjusted ratios.
+        # Lower is better: <1 green; 1–1.5 yellow; 1.5–2 orange; >2 red.
+        def _color_growth_ratio(v):
+            if v is None or pd.isna(v):
+                return ""
+            if v < 1:   return "color: #10B981; font-weight: 600"
+            if v < 1.5: return "color: #FCD34D"
+            if v < 2:   return "color: #F97316"
+            return "color: #DC2626; font-weight: 600"
+
+        _grad_cols = ["PSG", "EV/S/G", "EV/GP/RG", "PSG-Q"]
+        styled = _ratios_df.style.format({
+            "MCap ($M)":    "{:,.0f}",
+            "EV ($M)":      "{:,.0f}",
+            "Rev TTM ($M)": "{:,.0f}",
+            **{c: "{:.2f}" for c in ["P/S", "EV/S", "EV/GP"] + _grad_cols},
+        }, na_rep="—")
+        for c in _grad_cols:
+            styled = styled.map(_color_growth_ratio, subset=[c])
+
+        st.markdown("**Computed ratios** (auto-update on each input edit)")
+        st.dataframe(styled, use_container_width=True, hide_index=True,
+                     height=38 + min(len(positions), 30) * 35)
+
+        st.caption(
+            "**Hierarchy** : P/S → EV/S → EV/S/G → EV/GP/RG → PSG-Q   ·   "
+            "Color thresholds for growth-adjusted ratios: "
+            "🟢 <1 · 🟡 1–1.5 · 🟠 1.5–2 · 🔴 >2"
+        )
+
+        # Save button — explicit batched persist.
+        if st.button("💾 Save valuation inputs", type="primary", key="valo_save"):
+            with st.spinner("Saving…"):
+                for i, p in enumerate(positions):
+                    row = edited_inputs.iloc[i]
+                    update_position_valuation(
+                        position_id=p["id"],
+                        growth=float(row["RG % (exp)"]) if pd.notna(row["RG % (exp)"]) else None,
+                        gm=    float(row["GM % (exp)"]) if pd.notna(row["GM % (exp)"]) else None,
+                        om=    float(row["OM % (exp)"]) if pd.notna(row["OM % (exp)"]) else None,
+                    )
+            st.success(f"Saved {len(positions)} positions.")
+            st.cache_data.clear()
+            st.rerun()
+
+st.divider()
+
 # ── Portfolio Health Tracker ──────────────────────────────────────────────────
 with st.expander(f"🩺 Health Tracker — {_pf.get('name', _pid)}", expanded=True):
     _pos_health = positions  # already loaded above
