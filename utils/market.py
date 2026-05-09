@@ -14,10 +14,32 @@ def get_valuation_fundamentals(tickers: tuple) -> dict:
     result = {}
     for t in tickers:
         try:
-            info = yf.Ticker(t).info
+            tk = yf.Ticker(t)
+            info = tk.info
             rev = info.get("totalRevenue")
             fcf = info.get("freeCashflow")
             fcf_margin = (fcf / rev) if (rev and fcf is not None and rev > 0) else None
+
+            # Analyst consensus revenue growth (forward, +1y).
+            analyst_rg = None
+            try:
+                rev_est = tk.revenue_estimate
+                if rev_est is not None and not rev_est.empty:
+                    if "+1y" in rev_est.index and "growth" in rev_est.columns:
+                        g = rev_est.loc["+1y", "growth"]
+                        if pd.notna(g):
+                            analyst_rg = float(g) * 100
+                    if analyst_rg is None and "+1y" in rev_est.index and "0y" in rev_est.index:
+                        cur = rev_est.loc["0y", "avg"]
+                        nxt = rev_est.loc["+1y", "avg"]
+                        if pd.notna(cur) and pd.notna(nxt) and cur > 0:
+                            analyst_rg = (float(nxt) - float(cur)) / float(cur) * 100
+            except Exception:
+                pass
+            # Fallback to TTM revenue growth from .info (backward-looking but better than nothing)
+            if analyst_rg is None and info.get("revenueGrowth") is not None:
+                analyst_rg = float(info["revenueGrowth"]) * 100
+
             result[t] = {
                 "market_cap":       info.get("marketCap"),
                 "enterprise_value": info.get("enterpriseValue"),
@@ -29,13 +51,15 @@ def get_valuation_fundamentals(tickers: tuple) -> dict:
                 "fcf_margin":       fcf_margin,
                 "forward_pe":       info.get("forwardPE"),
                 "trailing_pe":      info.get("trailingPE"),
+                "analyst_rg":       analyst_rg,
             }
         except Exception:
             result[t] = {"market_cap": None, "enterprise_value": None,
                          "revenue_ttm": None, "ebitda": None,
                          "gross_margin": None, "operating_margin": None,
                          "free_cashflow": None, "fcf_margin": None,
-                         "forward_pe": None, "trailing_pe": None}
+                         "forward_pe": None, "trailing_pe": None,
+                         "analyst_rg": None}
     return result
 
 
