@@ -331,13 +331,11 @@ st.markdown(
 'paired with a tactical layer of thematic plays and special situations. Live since May 2026.</div>'
 '<div class="card-badge-active badge-live" style="background:rgba(245,158,11,0.15); color:#FBBF24; border-color:rgba(245,158,11,0.35);">● Live</div>'
 '</div></a>'
-# When Le Nakamoto goes live (May 11, 2026), swap the block below for an <a>
-# wrapper around an active card matching the Visionnaire/Bâtisseur pattern,
-# with the orange palette inline:
-#   border-color:#F97316
-#   badge-live override: bg rgba(249,115,22,0.15), color #FB923C, border rgba(249,115,22,0.35)
-'<div class="portfolio-card portfolio-card-soon" style="border-color:#261C10;">'
-'<div class="card-glow" style="background:#F97316;opacity:0.18;"></div>'
+# Nakamoto: clickable preview before May 11 inception. Swap the badge
+# from "Preview" to "● Live" once positions are inserted into Supabase.
+'<a href="/Nakamoto" target="_self" style="text-decoration:none;">'
+'<div class="portfolio-card portfolio-card-active" style="border-color:#F97316;">'
+'<div class="card-glow" style="background:#F97316;"></div>'
 '<div class="card-accent" style="background:linear-gradient(90deg,#F97316,#FB923C);"></div>'
 '<div class="card-number" style="color:#F97316;">PORTFOLIO III</div>'
 '<div class="card-name">Le Nakamoto</div>'
@@ -345,8 +343,8 @@ st.markdown(
 '<div class="card-description">A paper portfolio specialized in amplified Bitcoin exposure through digital asset treasuries (DATs) — '
 'companies holding BTC on their balance sheet. '
 'An innovative investment vehicle built on amplification mechanisms, designed to deliver a more advantageous risk/reward profile for Bitcoin exposure.</div>'
-'<div class="card-badge-active badge-soon">◌ In progress</div>'
-'</div>'
+'<div class="card-badge-active badge-live" style="background:rgba(249,115,22,0.15); color:#FB923C; border-color:rgba(249,115,22,0.35);">◌ Preview · Live May 11</div>'
+'</div></a>'
 '</div>',
 unsafe_allow_html=True)
 
