@@ -713,24 +713,38 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
 
         # Save button — explicit batched persist.
         if st.button("💾 Save valuation inputs", type="primary", key="valo_save"):
+            _failed = []
             with st.spinner("Saving…"):
                 for i, p in enumerate(positions):
                     row = edited_inputs.iloc[i]
-                    update_position_valuation(
-                        position_id=p["id"],
-                        growth=float(row["RG % (exp)"])  if pd.notna(row["RG % (exp)"])  else None,
-                        gm=    float(row["GM % (exp)"])  if pd.notna(row["GM % (exp)"])  else None,
-                        om=    float(row["OM % (exp)"])  if pd.notna(row["OM % (exp)"])  else None,
-                        fcf=   float(row["FCF % (exp)"]) if pd.notna(row["FCF % (exp)"]) else None,
-                    )
-            # Clear the local snapshot + reset machinery so the next render
-            # rebuilds input_df from the freshly saved DB values.
-            st.session_state[_snapshot_key] = {}
-            st.session_state[_reset_pending_key] = set()
-            st.session_state[_widget_v_key] += 1
-            st.success(f"Saved {len(positions)} positions.")
-            st.cache_data.clear()
-            st.rerun()
+                    try:
+                        update_position_valuation(
+                            position_id=p["id"],
+                            growth=float(row["RG % (exp)"])  if pd.notna(row["RG % (exp)"])  else None,
+                            gm=    float(row["GM % (exp)"])  if pd.notna(row["GM % (exp)"])  else None,
+                            om=    float(row["OM % (exp)"])  if pd.notna(row["OM % (exp)"])  else None,
+                            fcf=   float(row["FCF % (exp)"]) if pd.notna(row["FCF % (exp)"]) else None,
+                        )
+                    except Exception as e:
+                        _failed.append((p["ticker"], type(e).__name__, str(e)[:300]))
+            if _failed:
+                st.error(f"❌ {len(_failed)} position(s) failed to save:")
+                for tk, etype, emsg in _failed:
+                    st.code(f"{tk}  →  {etype}: {emsg}", language=None)
+                st.caption(
+                    "If you see 'column ... does not exist', run "
+                    "`NOTIFY pgrst, 'reload schema';` in Supabase SQL Editor. "
+                    "If you see permission errors, check RLS policies on `positions`."
+                )
+            else:
+                # Clear the local snapshot + reset machinery so the next render
+                # rebuilds input_df from the freshly saved DB values.
+                st.session_state[_snapshot_key] = {}
+                st.session_state[_reset_pending_key] = set()
+                st.session_state[_widget_v_key] += 1
+                st.success(f"Saved {len(positions)} positions.")
+                st.cache_data.clear()
+                st.rerun()
 
 st.divider()
 
