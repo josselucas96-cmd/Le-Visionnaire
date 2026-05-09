@@ -404,7 +404,7 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             st.caption(
                 "Forward valuation tracking. Edit **RG / GM / OM** (your 2-3y "
                 "expected averages, in %), then **Save**. All growth-adjusted "
-                "ratios use your RG; EV/GP and PSG-Q use your GM and OM."
+                "ratios use your RG; EV/GM and PSG-Q use your GM and OM."
             )
         with refresh_col:
             if st.button("↻ Refresh fundamentals", key="valo_refresh",
@@ -565,10 +565,10 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                     "Δ Analyst":    round(d_ana,    1) if d_ana     is not None else None,
                     "P/S":          round(ps,        2) if ps        is not None else None,
                     "EV/EBITDA":    round(ev_ebitda, 2) if ev_ebitda is not None else None,
-                    "EV/GP":        round(evgp,      2) if evgp      is not None else None,
+                    "EV/GM":        round(evgp,      2) if evgp      is not None else None,
                     "Fwd PE 1Y":    round(fwd_pe,    2) if fwd_pe    is not None else None,
                     "Fwd PE 2Y":    round(fwd_pe_2y, 2) if fwd_pe_2y is not None else None,
-                    "EV/GP/RG":     round(evgprg,    2) if evgprg    is not None else None,
+                    "EV/GM/RG":     round(evgprg,    2) if evgprg    is not None else None,
                     "PSG-Q":        round(psgq,      2) if psgq      is not None else None,
                     "PSG-FCF":      round(psgfcf,    2) if psgfcf    is not None else None,
                 })
@@ -584,10 +584,10 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                     "Δ Analyst":      round(d_ana,  1) if d_ana   is not None else None,
                     "P/S":            round(ps,     2) if ps      is not None else None,
                     "EV/S":           round(evs,    2) if evs     is not None else None,
-                    "EV/GP":          round(evgp,   2) if evgp    is not None else None,
+                    "EV/GM":          round(evgp,   2) if evgp    is not None else None,
                     "P/S/RG (PSG)":   round(psg,    2) if psg     is not None else None,
                     "EV/S/RG":        round(evsg,   2) if evsg    is not None else None,
-                    "EV/GP/RG":       round(evgprg, 2) if evgprg  is not None else None,
+                    "EV/GM/RG":       round(evgprg, 2) if evgprg  is not None else None,
                     "PSG-Q":          round(psgq,   2) if psgq    is not None else None,
                     "PSG-FCF":        round(psgfcf, 2) if psgfcf  is not None else None,
                 })
@@ -626,8 +626,8 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             return "color: #DC2626; font-weight: 600"
 
         if _pid == "batisseur":
-            _ratio_cols = ["P/S", "EV/EBITDA", "EV/GP", "Fwd PE 1Y", "Fwd PE 2Y",
-                           "EV/GP/RG", "PSG-Q", "PSG-FCF"]
+            _ratio_cols = ["P/S", "EV/EBITDA", "EV/GM", "Fwd PE 1Y", "Fwd PE 2Y",
+                           "EV/GM/RG", "PSG-Q", "PSG-FCF"]
             styled = _ratios_df.style.format({
                 "MCap ($M)":    "{:,.0f}",
                 "EV ($M)":      "{:,.0f}",
@@ -639,9 +639,9 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             styled = styled.map(_color_delta,        subset=["Δ Analyst"])
             styled = styled.map(_color_ev_ebitda,    subset=["EV/EBITDA"])
             styled = styled.map(_color_pe,           subset=["Fwd PE 1Y", "Fwd PE 2Y"])
-            for c in ["EV/GP/RG", "PSG-Q", "PSG-FCF"]:
+            for c in ["EV/GM/RG", "PSG-Q", "PSG-FCF"]:
                 styled = styled.map(_color_growth_ratio, subset=[c])
-            _hierarchy = "Fwd PE 1Y → Fwd PE 2Y → EV/EBITDA → EV/GP → EV/GP/RG → PSG-Q → PSG-FCF"
+            _hierarchy = "Fwd PE 1Y → Fwd PE 2Y → EV/EBITDA → EV/GM → EV/GM/RG → PSG-Q → PSG-FCF"
             _legend = (
                 "🟢/🟡/🟠/🔴 thresholds — "
                 "Fwd PE: <20 / <30 / <40 / >40 · "
@@ -650,18 +650,18 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                 "Δ Analyst: 🟢 over / 🔴 under analyst RG"
             )
         else:
-            _grad_cols = ["P/S/RG (PSG)", "EV/S/RG", "EV/GP/RG", "PSG-Q", "PSG-FCF"]
+            _grad_cols = ["P/S/RG (PSG)", "EV/S/RG", "EV/GM/RG", "PSG-Q", "PSG-FCF"]
             styled = _ratios_df.style.format({
                 "MCap ($M)":    "{:,.0f}",
                 "EV ($M)":      "{:,.0f}",
                 "Rev TTM ($M)": "{:,.0f}",
                 "Δ Analyst":    "{:+.1f}",
-                **{c: "{:.2f}" for c in ["P/S", "EV/S", "EV/GP"] + _grad_cols},
+                **{c: "{:.2f}" for c in ["P/S", "EV/S", "EV/GM"] + _grad_cols},
             }, na_rep="—")
             styled = styled.map(_color_delta, subset=["Δ Analyst"])
             for c in _grad_cols:
                 styled = styled.map(_color_growth_ratio, subset=[c])
-            _hierarchy = "P/S → EV/S → EV/S/RG → EV/GP/RG → PSG-Q → PSG-FCF"
+            _hierarchy = "P/S → EV/S → EV/S/RG → EV/GM/RG → PSG-Q → PSG-FCF"
             _legend = (
                 "🟢 <1 · 🟡 1–1.5 · 🟠 1.5–2 · 🔴 >2 · "
                 "Δ Analyst: 🟢 over / 🔴 under analyst RG"
