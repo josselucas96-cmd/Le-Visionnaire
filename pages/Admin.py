@@ -416,6 +416,24 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
         with st.spinner("Loading fundamentals…"):
             _funds = get_valuation_fundamentals(_v_tickers)
 
+        # ─── Per-row reset machinery ────────────────────────────────────
+        # Streamlit's data_editor keeps an internal frontend state that
+        # isn't reliably synced when we mutate session_state[key] directly.
+        # Instead we (1) version the widget key so a reset spawns a fresh
+        # widget, and (2) keep our own snapshot of the current values so
+        # OTHER rows' edits survive the widget replacement.
+        _snapshot_key = f"valo_snapshot_{_pid}"
+        _widget_v_key = f"valo_widget_v_{_pid}"
+        if _snapshot_key not in st.session_state:
+            st.session_state[_snapshot_key] = {}
+        if _widget_v_key not in st.session_state:
+            st.session_state[_widget_v_key] = 0
+        _snapshot = st.session_state[_snapshot_key]
+        _reset_pending_key = f"valo_reset_pending_{_pid}"  # set of tickers
+        if _reset_pending_key not in st.session_state:
+            st.session_state[_reset_pending_key] = set()
+        _reset_pending = st.session_state[_reset_pending_key]
+
         # Build the editable inputs DataFrame.
         _inputs_rows = []
         for p in positions:
@@ -426,24 +444,41 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             _fcf_ttm = (f.get("fcf_margin")       or 0) * 100  # %
             _ana_rg  = f.get("analyst_rg")  # already in %
             _ana_rg_round = round(_ana_rg, 1) if _ana_rg is not None else None
-            _rg_user_default = (
-                p.get("expected_revenue_growth")
-                if p.get("expected_revenue_growth") is not None
-                else _ana_rg_round
-            )
+
+            if t in _reset_pending:
+                # Force defaults for tickers being reset on this render
+                rg_value  = _ana_rg_round
+                gm_value  = round(_gm_ttm, 1)
+                om_value  = round(_om_ttm, 1)
+                fcf_value = round(_fcf_ttm, 1)
+            elif t in _snapshot:
+                # Carry over the user's current edits (across the widget bump)
+                e = _snapshot[t]
+                rg_value  = e.get("RG % (exp)")
+                gm_value  = e.get("GM % (exp)")
+                om_value  = e.get("OM % (exp)")
+                fcf_value = e.get("FCF % (exp)")
+            else:
+                # Fresh load: use DB override if any, else seeds (analyst/TTM)
+                rg_value  = p.get("expected_revenue_growth") if p.get("expected_revenue_growth") is not None else _ana_rg_round
+                gm_value  = p.get("expected_gross_margin")   if p.get("expected_gross_margin")   is not None else round(_gm_ttm,  1)
+                om_value  = p.get("expected_op_margin")      if p.get("expected_op_margin")      is not None else round(_om_ttm,  1)
+                fcf_value = p.get("expected_fcf_margin")     if p.get("expected_fcf_margin")     is not None else round(_fcf_ttm, 1)
+
             _inputs_rows.append({
                 "Ticker":      t,
                 "Name":        p.get("name", ""),
-                "RG % (exp)":  _rg_user_default,
+                "RG % (exp)":  rg_value,
                 "Analyst":     _ana_rg_round,
-                "GM % (exp)":  p.get("expected_gross_margin") if p.get("expected_gross_margin") is not None else round(_gm_ttm,  1),
-                "OM % (exp)":  p.get("expected_op_margin")    if p.get("expected_op_margin")    is not None else round(_om_ttm,  1),
-                "FCF % (exp)": p.get("expected_fcf_margin")   if p.get("expected_fcf_margin")   is not None else round(_fcf_ttm, 1),
+                "GM % (exp)":  gm_value,
+                "OM % (exp)":  om_value,
+                "FCF % (exp)": fcf_value,
                 "↺":           False,
             })
         _inputs_df = pd.DataFrame(_inputs_rows)
 
-        _editor_key = f"valo_inputs_{_pid}"
+        # Versioned key — bumps on each reset so the widget is reborn fresh.
+        _editor_key = f"valo_inputs_{_pid}_v{st.session_state[_widget_v_key]}"
         edited_inputs = st.data_editor(
             _inputs_df,
             key=_editor_key,
@@ -476,15 +511,26 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                 "↺":           st.column_config.CheckboxColumn(
                     "↺", default=False, width="small",
                     help="Tick to reset this row to defaults (analyst RG · TTM margins). "
-                         "Cell-level only — click Save afterward to clear the saved override.",
+                         "Cell-level only — click Save afterward to persist.",
                 ),
             },
         )
 
-        # Per-row reset handling: if any "↺" was ticked, mutate the editor's
-        # persistent session_state IN PLACE (Streamlit forbids reassigning a
-        # widget key, raising StreamlitAPIException — but mutating the dict
-        # the key points to is fine).
+        # Capture current edits into our snapshot so they survive the next
+        # widget bump (when a reset happens elsewhere on the table).
+        for i, p in enumerate(positions):
+            t = p["ticker"]
+            row = edited_inputs.iloc[i]
+            _snapshot[t] = {
+                "RG % (exp)":  row["RG % (exp)"],
+                "GM % (exp)":  row["GM % (exp)"],
+                "OM % (exp)":  row["OM % (exp)"],
+                "FCF % (exp)": row["FCF % (exp)"],
+            }
+        # The reset-pending set has been consumed by the input_df build above.
+        _reset_pending.clear()
+
+        # Detect ↺ clicks on this render → schedule reset for next render.
         _needs_reset_rerun = False
         for i, p in enumerate(positions):
             try:
@@ -494,23 +540,15 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             if not _ticked:
                 continue
             t = p["ticker"]
-            f = _funds.get(t, {})
-            _ana   = f.get("analyst_rg")
-            _gm    = (f.get("gross_margin")     or 0) * 100
-            _om    = (f.get("operating_margin") or 0) * 100
-            _fcf_m = (f.get("fcf_margin")       or 0) * 100
-            _reset_payload = {
-                "RG % (exp)":  round(_ana,   1) if _ana is not None else None,
-                "GM % (exp)":  round(_gm,    1),
-                "OM % (exp)":  round(_om,    1),
-                "FCF % (exp)": round(_fcf_m, 1),
-                "↺":           False,
-            }
-            ss = st.session_state.get(_editor_key)
-            if isinstance(ss, dict):
-                ss.setdefault("edited_rows", {})[i] = _reset_payload
+            _reset_pending.add(t)
+            # Drop from snapshot so input_df build uses the seeds instead
+            if t in _snapshot:
+                del _snapshot[t]
             _needs_reset_rerun = True
         if _needs_reset_rerun:
+            # Bump the widget version so st.data_editor instantiates a new
+            # internal state (no leftover edits from the previous widget).
+            st.session_state[_widget_v_key] += 1
             st.rerun()
 
         # Compute live ratios from edited inputs.
@@ -685,6 +723,11 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
                         om=    float(row["OM % (exp)"])  if pd.notna(row["OM % (exp)"])  else None,
                         fcf=   float(row["FCF % (exp)"]) if pd.notna(row["FCF % (exp)"]) else None,
                     )
+            # Clear the local snapshot + reset machinery so the next render
+            # rebuilds input_df from the freshly saved DB values.
+            st.session_state[_snapshot_key] = {}
+            st.session_state[_reset_pending_key] = set()
+            st.session_state[_widget_v_key] += 1
             st.success(f"Saved {len(positions)} positions.")
             st.cache_data.clear()
             st.rerun()
