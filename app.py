@@ -296,12 +296,12 @@ st.markdown("""
 <div class="philosophy-block">
     <div class="philosophy-label">Investment Philosophy</div>
     <div class="philosophy-text">
-        Specula is an open research platform hosting a growing collection of public paper portfolios —
-        a <b>non-commercial, educational project</b>. Nothing published here constitutes investment advice
-        or a recommendation to buy or sell any security or digital asset.
-        Each portfolio follows <b>its own logic</b> — a distinct thesis, a distinct strategy, a distinct risk profile.
+        <p>Specula is an open research platform hosting a growing collection of public paper portfolios.</p>
+        <p>This is a <b>non-commercial, educational project</b>. Nothing published here constitutes investment advice
+        or a recommendation to buy or sell any security or digital asset.</p>
+        <p>Each portfolio follows <b>its own logic</b> — a distinct thesis, a distinct strategy, a distinct risk profile.
         Together, they form a set of <b>complementary strategic optionalities</b>:
-        different markets, different instruments, different convictions — all documented and published in real time.
+        different markets, different instruments, different convictions, all documented and published in real time.</p>
     </div>
 </div>
 """, unsafe_allow_html=True)
