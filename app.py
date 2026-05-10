@@ -331,8 +331,6 @@ st.markdown(
 'paired with a tactical layer of thematic plays and special situations. Live since May 2026.</div>'
 '<div class="card-badge-active badge-live" style="background:rgba(245,158,11,0.15); color:#FBBF24; border-color:rgba(245,158,11,0.35);">● Live</div>'
 '</div></a>'
-# Nakamoto: clickable preview before May 11 inception. Swap the badge
-# from "Preview" to "● Live" once positions are inserted into Supabase.
 '<a href="/Nakamoto" target="_self" style="text-decoration:none;">'
 '<div class="portfolio-card portfolio-card-active" style="border-color:#F97316;">'
 '<div class="card-glow" style="background:#F97316;"></div>'
@@ -341,9 +339,8 @@ st.markdown(
 '<div class="card-name">Le Nakamoto</div>'
 '<div class="card-subtitle">Digital Assets · Bitcoin Treasury Plays</div>'
 '<div class="card-description">A paper portfolio specialized in amplified Bitcoin exposure through digital asset treasuries (DATs) — '
-'companies holding BTC on their balance sheet. '
-'An innovative investment vehicle built on amplification mechanisms, designed to deliver a more advantageous risk/reward profile for Bitcoin exposure.</div>'
-'<div class="card-badge-active badge-live" style="background:rgba(249,115,22,0.15); color:#FB923C; border-color:rgba(249,115,22,0.35);">◌ Preview · Live May 11</div>'
+'companies holding BTC on their balance sheet, paired with a tactical income overlay of Bitcoin-backed preferreds. Live since May 2026.</div>'
+'<div class="card-badge-active badge-live" style="background:rgba(249,115,22,0.15); color:#FB923C; border-color:rgba(249,115,22,0.35);">● Live</div>'
 '</div></a>'
 '</div>',
 unsafe_allow_html=True)

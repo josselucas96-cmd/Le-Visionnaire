@@ -10,6 +10,9 @@ st.set_page_config(
 )
 
 render_portfolio_page("nakamoto", options={
-    "show_donuts": ["Geography"],
-    "show_risk_analysis": False,
+    # Layer donut shows the IPS-aligned split: Anchor (structural core)
+    # vs Exploratory (smaller-cap amplification) vs Income (BTC-backed
+    # preferreds overlay).
+    "show_donuts": ["Layer", "Sector", "Thematic", "Geography"],
+    "show_risk_analysis": True,
 })
