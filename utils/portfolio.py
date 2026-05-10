@@ -280,6 +280,7 @@ def render_portfolio_page(portfolio_id: str, options: dict | None = None):
 {portfolio_name} is a personal paper portfolio shared for educational and informational purposes only.
 It does not constitute investment advice or a recommendation to buy or sell any security or digital asset.
 I am not a registered financial advisor. Past performance is not indicative of future results.
+The author may hold personal positions in securities mentioned on this page; readers should consider this potential conflict of interest. Full disclosure in the Investment Policy Statement.
 Always conduct your own due diligence before making any investment decision.
 </div>
 </details>
@@ -893,8 +894,9 @@ Always conduct your own due diligence before making any investment decision.
 <div class="disclaimer">
 <strong>Disclaimer:</strong> This is a paper trading simulation and does not involve real financial assets.
 All content published here is for educational and informational purposes only and does not constitute
-financial, investment, or legal advice. I am not a registered financial advisor. Investing involves
-significant risk, including the possible loss of principal. Always conduct your own due diligence
-before making any investment decisions.
+financial, investment, or legal advice. I am not a registered financial advisor. The author may hold
+personal positions in securities mentioned on this page; readers should consider this potential conflict
+of interest. Investing involves significant risk, including the possible loss of principal. Always
+conduct your own due diligence before making any investment decisions.
 </div>
 """, unsafe_allow_html=True)

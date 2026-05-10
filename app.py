@@ -327,7 +327,7 @@ st.markdown(
 '<div class="card-number" style="color:#F59E0B;">PORTFOLIO II</div>'
 '<div class="card-name">Le Bâtisseur</div>'
 '<div class="card-subtitle">Quality Compounders · Capital Allocation</div>'
-'<div class="card-description">A UCITS-compliant paper portfolio anchored on quality businesses and exceptional capital allocators, '
+'<div class="card-description">A 5/10/40-inspired paper portfolio anchored on quality businesses and exceptional capital allocators, '
 'paired with a tactical layer of thematic plays and special situations. Live since May 2026.</div>'
 '<div class="card-badge-active badge-live" style="background:rgba(245,158,11,0.15); color:#FBBF24; border-color:rgba(245,158,11,0.35);">● Live</div>'
 '</div></a>'
