@@ -89,6 +89,31 @@ def get_prices(tickers: tuple) -> dict:
     return result
 
 
+# Approximate BTC holdings per Nakamoto position. Estimates as of Q3 2025
+# disclosures — UPDATE FROM ACTUAL FILINGS as positions evolve. STRC is a
+# preferred share with no direct BTC exposure (holders earn USD coupons).
+BTC_HOLDINGS_NAKAMOTO = {
+    "MSTR":     597325,  # Strategy (ex-MicroStrategy)
+    "MTPLF":     22610,  # Metaplanet (3350.T OTC US line)
+    "ASST":       5816,  # Strive Asset Management (post-Asset Entities)
+    "ALCPB.PA":   2089,  # Capital B (ex Blockchain Group)
+    "OBTC3.SA":    800,  # OranjeBTC (B3 Brazil) — estimate, verify
+    "GS9.F":       800,  # H100 Group (Frankfurt OTC) — estimate, verify
+    "CASH3.SA":    320,  # Méliuz (B3 Brazil)
+    "SWC.L":      2500,  # Smarter Web Company (LSE) — estimate, verify
+    "STRC":          0,  # Preferred — no direct BTC exposure
+}
+
+
+@st.cache_data(ttl=300)  # Refresh every 5 minutes
+def get_bitcoin_price() -> float | None:
+    """Current BTC-USD spot price. Used for Nakamoto NAV computations."""
+    try:
+        return float(yf.Ticker("BTC-USD").fast_info.last_price)
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=3600)  # FX rates don't move much intraday
 def get_fx_to_usd(currencies: tuple) -> dict:
     """Returns {currency_code: rate_to_usd}. USD maps to 1.0; unknown / failed

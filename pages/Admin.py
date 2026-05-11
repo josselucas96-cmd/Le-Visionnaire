@@ -15,7 +15,10 @@ from utils.data import (
     get_events, add_event, delete_event,
     get_portfolios, get_portfolio, update_portfolio,
 )
-from utils.market import get_prices, get_fx_to_usd
+from utils.market import (
+    get_prices, get_fx_to_usd,
+    get_valuation_fundamentals, get_bitcoin_price, BTC_HOLDINGS_NAKAMOTO,
+)
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
 
 st.set_page_config(page_title="Cockpit | Admin", page_icon=SPECULA_ICON, layout="wide")
@@ -320,6 +323,37 @@ if positions:
         else:
             p["perf_pct"] = None
 
+    # Portfolio-specific valuation ratio:
+    #   Visionnaire → P/S (market_cap / revenue_ttm)
+    #   Bâtisseur   → Fwd PE (from yfinance)
+    #   Nakamoto    → EV/mNAV (enterprise_value_usd / (BTC_held × BTC_price))
+    _funds_admin = get_valuation_fundamentals(tickers_live)
+    _ratio_label = None
+    if _pid == "visionnaire":
+        _ratio_label = "P/S"
+        for p in positions:
+            f = _funds_admin.get(p["ticker"], {}) or {}
+            mc, rev = f.get("market_cap"), f.get("revenue_ttm")
+            p["valo_ratio"] = round(mc / rev, 2) if (mc and rev and rev > 0) else None
+    elif _pid == "batisseur":
+        _ratio_label = "Fwd PE"
+        for p in positions:
+            f = _funds_admin.get(p["ticker"], {}) or {}
+            fpe = f.get("forward_pe")
+            p["valo_ratio"] = round(float(fpe), 2) if fpe else None
+    elif _pid == "nakamoto":
+        _ratio_label = "EV/mNAV"
+        btc_price = get_bitcoin_price()
+        for p in positions:
+            f = _funds_admin.get(p["ticker"], {}) or {}
+            ev = f.get("enterprise_value")
+            ccy = (prices_live.get(p["ticker"]) or {}).get("currency") or "USD"
+            rate = _fx_rates.get(ccy) or 1.0
+            ev_usd = ev * rate if ev else None
+            btc_held = BTC_HOLDINGS_NAKAMOTO.get(p["ticker"], 0)
+            nav_usd = btc_held * btc_price if (btc_held and btc_price) else None
+            p["valo_ratio"] = round(ev_usd / nav_usd, 2) if (ev_usd and nav_usd and nav_usd > 0) else None
+
     df_pos = pd.DataFrame(positions)
     total_weight = df_pos["weight"].sum()
 
@@ -349,19 +383,20 @@ if positions:
     df_pos2 = pd.DataFrame(positions)
     display_cols = [c for c in [
         "ticker", "name", "weight", "current_weight", "nav_usd",
-        "market_cap_usd",
+        "market_cap_usd", "valo_ratio",
         "entry_price", "current_price",
         "perf_pct", "change_today", "entry_date",
         "sector", "geography", "thematic", "thesis_short"
     ] if c in df_pos2.columns]
 
-    display_admin = df_pos2[display_cols].rename(columns={
+    _rename_map = {
         "ticker":         "Ticker",
         "name":           "Name",
         "weight":         "Alloc.",
         "current_weight": "Current %",
         "nav_usd":        "NAV (USD)",
         "market_cap_usd": "Market Cap (USD)",
+        "valo_ratio":     _ratio_label or "Valo",
         "entry_price":    "Entry",
         "current_price":  "Price",
         "perf_pct":       "Perf %",
@@ -371,7 +406,8 @@ if positions:
         "geography":      "Geography",
         "thematic":       "Thematic",
         "thesis_short":   "Thesis",
-    })
+    }
+    display_admin = df_pos2[display_cols].rename(columns=_rename_map)
 
     def color_signed_admin(col):
         return [
@@ -391,7 +427,7 @@ if positions:
         if abs_v >= 1e6:  return f"${v / 1e6:.0f}M"
         return f"${v:,.0f}"
 
-    styled = display_admin.style.format({
+    _fmt = {
         "Alloc.":            lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
         "Current %":         lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
         "NAV (USD)":         lambda v: f"${v:,.0f}" if isinstance(v, (int, float)) else "",
@@ -400,7 +436,10 @@ if positions:
         "Price":             lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
         "Perf %":            lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
         "Today %":           lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-    }).apply(color_signed_admin, subset=["Perf %", "Today %"])
+    }
+    if _ratio_label:
+        _fmt[_ratio_label] = lambda v: f"{v:.2f}" if isinstance(v, (int, float)) and pd.notna(v) else "—"
+    styled = display_admin.style.format(_fmt).apply(color_signed_admin, subset=["Perf %", "Today %"])
 
     table_height = 38 + min(len(positions), 20) * 35
     st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
