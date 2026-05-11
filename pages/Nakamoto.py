@@ -11,8 +11,8 @@ st.set_page_config(
 
 render_portfolio_page("nakamoto", options={
     # Single-thesis portfolio (Bitcoin Treasury Equities) — sector /
-    # thematic donuts add little signal. Only the geographic spread
-    # is genuinely informative, so render that donut alone.
-    "show_donuts": ["Geography"],
+    # thematic donuts add little signal. Layer (Anchor / Exploratory /
+    # Income) and Geography are the two informative breakdowns.
+    "show_donuts": ["Layer", "Geography"],
     "show_risk_analysis": True,
 })
