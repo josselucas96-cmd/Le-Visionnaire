@@ -65,19 +65,46 @@ def get_valuation_fundamentals(tickers: tuple) -> dict:
 
 @st.cache_data(ttl=300)  # Refresh every 5 minutes
 def get_prices(tickers: tuple) -> dict:
-    """Current price and daily % change for each ticker."""
+    """Current price, daily % change, market cap (in listing currency) and
+    currency code for each ticker. Market cap is local-currency; convert
+    via get_fx_to_usd if a USD figure is needed.
+    """
     result = {}
     for ticker in tickers:
         try:
             info = yf.Ticker(ticker).fast_info
             price = info.last_price
             prev = info.previous_close
+            mc   = getattr(info, "market_cap", None)
+            ccy  = getattr(info, "currency", None)
             result[ticker] = {
                 "price": round(price, 2),
                 "change_pct": round((price - prev) / prev * 100, 2),
+                "market_cap": float(mc) if mc is not None else None,
+                "currency":   ccy or "USD",
             }
         except Exception:
-            result[ticker] = {"price": None, "change_pct": None}
+            result[ticker] = {"price": None, "change_pct": None,
+                              "market_cap": None, "currency": None}
+    return result
+
+
+@st.cache_data(ttl=3600)  # FX rates don't move much intraday
+def get_fx_to_usd(currencies: tuple) -> dict:
+    """Returns {currency_code: rate_to_usd}. USD maps to 1.0; unknown / failed
+    lookups map to None so the caller can show '—' instead of a wrong figure.
+    """
+    result = {"USD": 1.0}
+    for ccy in currencies:
+        if not ccy or ccy == "USD" or ccy in result:
+            continue
+        try:
+            pair = f"{ccy}USD=X"
+            info = yf.Ticker(pair).fast_info
+            rate = info.last_price
+            result[ccy] = float(rate) if rate else None
+        except Exception:
+            result[ccy] = None
     return result
 
 

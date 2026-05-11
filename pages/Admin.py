@@ -299,10 +299,21 @@ st.subheader(f"Active Positions — {_pf.get('name', _pid)} ({len(positions)})")
 if positions:
     tickers_live = tuple(p["ticker"] for p in positions)
     prices_live  = get_prices(tickers_live)
+
+    # Fetch FX rates for non-USD market caps so we can display in USD.
+    from utils.market import get_fx_to_usd as _get_fx
+    _ccys_needed = tuple({(prices_live.get(t, {}) or {}).get("currency") or "USD"
+                          for t in tickers_live})
+    _fx_rates = _get_fx(_ccys_needed)
+
     for p in positions:
         live = prices_live.get(p["ticker"], {})
         p["current_price"] = live.get("price")
         p["change_today"]  = live.get("change_pct")
+        _mc_local = live.get("market_cap")
+        _ccy      = live.get("currency") or "USD"
+        _rate     = _fx_rates.get(_ccy)
+        p["market_cap_usd"] = (_mc_local * _rate) if (_mc_local and _rate) else None
         if p["current_price"] and p["entry_price"]:
             p["perf_pct"] = round(
                 (p["current_price"] - p["entry_price"]) / p["entry_price"] * 100, 2
@@ -338,7 +349,9 @@ if positions:
     # Rebuild df AFTER dynamic weights have been added to position dicts
     df_pos2 = pd.DataFrame(positions)
     display_cols = [c for c in [
-        "ticker", "name", "weight", "current_weight", "nav_usd", "entry_price", "current_price",
+        "ticker", "name", "weight", "current_weight", "nav_usd",
+        "market_cap_usd",
+        "entry_price", "current_price",
         "perf_pct", "change_today", "entry_date",
         "sector", "geography", "thematic", "thesis_short"
     ] if c in df_pos2.columns]
@@ -349,6 +362,7 @@ if positions:
         "weight":         "Alloc.",
         "current_weight": "Current %",
         "nav_usd":        "NAV (USD)",
+        "market_cap_usd": "Market Cap (USD)",
         "entry_price":    "Entry",
         "current_price":  "Price",
         "perf_pct":       "Perf %",
@@ -367,14 +381,26 @@ if positions:
             else "" for v in col
         ]
 
+    def _format_mcap(v):
+        """Dynamic T/B/M formatter for market cap so we can fit the
+        full equity universe (large-cap $T → micro-cap $M) in one column."""
+        if not isinstance(v, (int, float)) or pd.isna(v):
+            return "—"
+        abs_v = abs(v)
+        if abs_v >= 1e12: return f"${v / 1e12:.2f}T"
+        if abs_v >= 1e9:  return f"${v / 1e9:.1f}B"
+        if abs_v >= 1e6:  return f"${v / 1e6:.0f}M"
+        return f"${v:,.0f}"
+
     styled = display_admin.style.format({
-        "Alloc.":    lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
-        "Current %": lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
-        "NAV (USD)": lambda v: f"${v:,.0f}" if isinstance(v, (int, float)) else "",
-        "Entry":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
-        "Price":     lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
-        "Perf %":    lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
-        "Today %":   lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+        "Alloc.":            lambda v: f"{v:.1f}%" if isinstance(v, (int, float)) else "",
+        "Current %":         lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
+        "NAV (USD)":         lambda v: f"${v:,.0f}" if isinstance(v, (int, float)) else "",
+        "Market Cap (USD)":  _format_mcap,
+        "Entry":             lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+        "Price":             lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "",
+        "Perf %":            lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
+        "Today %":           lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "",
     }).apply(color_signed_admin, subset=["Perf %", "Today %"])
 
     table_height = 38 + min(len(positions), 20) * 35
