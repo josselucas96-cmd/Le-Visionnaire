@@ -10,9 +10,9 @@ st.set_page_config(
 )
 
 render_portfolio_page("nakamoto", options={
-    # Layer donut shows the IPS-aligned split: Anchor (structural core)
-    # vs Exploratory (smaller-cap amplification) vs Income (BTC-backed
-    # preferreds overlay).
-    "show_donuts": ["Layer", "Sector", "Thematic", "Geography"],
+    # Single-thesis portfolio (Bitcoin Treasury Equities) — sector /
+    # thematic donuts add little signal. Only the geographic spread
+    # is genuinely informative, so render that donut alone.
+    "show_donuts": ["Geography"],
     "show_risk_analysis": True,
 })
