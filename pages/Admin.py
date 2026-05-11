@@ -15,7 +15,7 @@ from utils.data import (
     get_events, add_event, delete_event,
     get_portfolios, get_portfolio, update_portfolio,
 )
-from utils.market import get_prices
+from utils.market import get_prices, get_fx_to_usd
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
 
 st.set_page_config(page_title="Cockpit | Admin", page_icon=SPECULA_ICON, layout="wide")
@@ -301,10 +301,9 @@ if positions:
     prices_live  = get_prices(tickers_live)
 
     # Fetch FX rates for non-USD market caps so we can display in USD.
-    from utils.market import get_fx_to_usd as _get_fx
     _ccys_needed = tuple({(prices_live.get(t, {}) or {}).get("currency") or "USD"
                           for t in tickers_live})
-    _fx_rates = _get_fx(_ccys_needed)
+    _fx_rates = get_fx_to_usd(_ccys_needed)
 
     for p in positions:
         live = prices_live.get(p["ticker"], {})
