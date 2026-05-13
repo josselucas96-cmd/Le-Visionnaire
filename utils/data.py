@@ -168,6 +168,51 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
     }).eq("id", position_id).execute()
 
 
+def set_position_weight(position_id: int, new_weight: float, new_price: float,
+                        date: str, perceived_delta: float, reason: str):
+    """Rebalance a position: set weight = new_weight and entry_price = new_price atomically.
+
+    Resetting entry_price means future drift compounds from `new_price`, so the
+    drifted weight tracks `new_weight` immediately after commit — matching the
+    user's mental model "I set AMD to 5%, so AMD is 5% now."
+
+    `perceived_delta` is the visual change (new_target - drifted_before) shown
+    in the cockpit; it's logged as the implied trade size in `transactions`.
+    """
+    sb = get_client()
+    pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
+    old_price = float(pos["entry_price"])
+    perf = round((new_price - old_price) / old_price * 100, 2) if old_price > 0 else 0.0
+
+    if perceived_delta < 0:
+        txn = {
+            "portfolio_id":    pos.get("portfolio_id", "visionnaire"),
+            "date":            date,
+            "action":          "TRIM",
+            "ticker_out":      pos["ticker"],
+            "price_out":       new_price,
+            "entry_price_out": old_price,
+            "weight_out":      round(abs(perceived_delta), 4),
+            "perf_pct":        perf,
+            "reason":          reason,
+        }
+    else:
+        txn = {
+            "portfolio_id": pos.get("portfolio_id", "visionnaire"),
+            "date":         date,
+            "action":       "IN",
+            "ticker_in":    pos["ticker"],
+            "price_in":     new_price,
+            "weight_in":    round(abs(perceived_delta), 4),
+            "reason":       reason,
+        }
+    sb.table("transactions").insert(txn).execute()
+    sb.table("positions").update({
+        "weight":      round(new_weight, 4),
+        "entry_price": new_price,
+    }).eq("id", position_id).execute()
+
+
 def switch_position(out_id: int, out_price: float, in_data: dict, date: str, reason: str):
     sb = get_client()
     pos_out = sb.table("positions").select("*").eq("id", out_id).execute().data[0]

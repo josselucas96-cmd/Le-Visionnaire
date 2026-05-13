@@ -10,7 +10,7 @@ from datetime import date
 
 from utils.data import (
     get_positions, get_transactions,
-    add_position, close_position, trim_position,
+    add_position, close_position, set_position_weight,
     get_setting, upsert_setting, reset_portfolio,
     get_events, add_event, delete_event,
     get_portfolios, get_portfolio, update_portfolio,
@@ -1319,7 +1319,10 @@ with tab_moves:
     if ver_key not in st.session_state:
         st.session_state[ver_key] = 0
 
-    # Seed draft from current positions on first render (or after Reset)
+    # Seed draft from current positions on first render (or after Reset).
+    # "current_weight" displays the drifted (dynamic) allocation, not the entry
+    # weight, so the user sees today's reality. "new_weight" defaults to the
+    # same value so untouched rows show zero delta = NOOP.
     if draft_key not in st.session_state:
         st.session_state[draft_key] = [
             {
@@ -1331,8 +1334,8 @@ with tab_moves:
                 "geography":      p.get("geography") or GEOS[0],
                 "thematic":       p.get("thematic") or THEMATICS[0],
                 "thesis_short":   p.get("thesis_short") or "",
-                "current_weight": float(p["weight"]),
-                "new_weight":     float(p["weight"]),
+                "current_weight": float(p.get("current_weight") or p["weight"]),
+                "new_weight":     float(p.get("current_weight") or p["weight"]),
                 "_is_new":        False,
                 "_lookup_done":   True,
             }
@@ -1641,22 +1644,14 @@ with tab_moves:
                             if m["action_type"] == "CLOSE":
                                 close_position(m["id"], px, today_str,
                                                reason or "Move from cockpit")
-                            elif m["action_type"] == "REDUCE":
-                                trim_position(m["id"], abs(m["delta"]), px, today_str,
-                                              reason or "Move from cockpit")
-                            elif m["action_type"] == "REINFORCE":
-                                add_position({
-                                    "ticker":       m["ticker"], "name": m["name"], "isin": None,
-                                    "layer":        m["layer"],
-                                    "weight":       m["delta"],
-                                    "entry_price":  px,
-                                    "entry_date":   today_str,
-                                    "sector":       m["sector"],
-                                    "geography":    m["geography"],
-                                    "thematic":     m["thematic"],
-                                    "thesis_short": "",
-                                    "is_active":    True,
-                                }, portfolio_id=_pid)
+                            elif m["action_type"] in ("REDUCE", "REINFORCE"):
+                                # Rebalance: set target weight & reset entry_price to today's
+                                # so drifted ≈ new_weight immediately after commit.
+                                set_position_weight(
+                                    m["id"], m["new_weight"], px, today_str,
+                                    perceived_delta=m["delta"],
+                                    reason=reason or "Move from cockpit",
+                                )
                             elif m["action_type"] == "BUY":
                                 add_position({
                                     "ticker":       m["ticker"], "name": m["name"], "isin": None,
