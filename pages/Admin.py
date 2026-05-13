@@ -10,7 +10,7 @@ from datetime import date
 
 from utils.data import (
     get_positions, get_transactions,
-    add_position, close_position, trim_position, switch_position,
+    add_position, close_position, trim_position,
     get_setting, upsert_setting, reset_portfolio,
     get_events, add_event, delete_event,
     get_portfolios, get_portfolio, update_portfolio,
@@ -1207,13 +1207,11 @@ THEMATICS  = ["AI / Semi", "Crypto Currencies Play", "Biotech", "Digital Health"
               "Fintech / Payments", "Consumer Growth", "Energy Transition",
               "Software / SaaS", "Cybersecurity", "Cloud / Infrastructure", "Other"]
 
-pos_options = {f"{p['ticker']}  —  {p['name']}": p for p in positions}
-
-tab_add, tab_close, tab_switch, tab_history, tab_research = st.tabs([
-    "➕  Add", "✖  Close", "🔄  Switch", "📋  History", "📄  Documents"
+tab_moves, tab_history, tab_research = st.tabs([
+    "🎯  Moves", "📋  History", "📄  Documents"
 ])
 
-# ── ADD ───────────────────────────────────────────────────────────────────────
+# ── Ticker lookup helpers (used by Moves tab) ────────────────────────────────
 # Exchange label → Yahoo Finance suffix (empty = US)
 EXCHANGES = {
     "Auto-detect":          None,
@@ -1279,288 +1277,362 @@ GEO_MAP = {
     "Brazil": "LatAm", "Mexico": "LatAm", "Argentina": "LatAm",
 }
 
-with tab_add:
-    existing_w = sum(p["weight"] for p in positions)
-    remaining  = round(max(0, 100 - existing_w), 1)
-    st.caption(f"Invested: **{existing_w:.1f}%** · Available (cash): **{remaining:.1f}%**")
 
-    # Ticker lookup (outside the form so it can trigger a rerun)
-    lk1, lk2, lk3, lk4 = st.columns([2, 2, 1.5, 1])
-    with lk1:
-        lookup_ticker = st.text_input("Ticker", key="lookup_ticker",
-                                      placeholder="e.g. TSLA, MC, ENI").strip().upper()
-    with lk2:
-        exchange_label = st.selectbox("Exchange (optional)", list(EXCHANGES.keys()), key="lookup_exchange")
-    with lk3:
-        lookup_date = st.date_input("★ Entry Date", value=date.today(), key="lookup_date")
-    with lk4:
-        st.write("")
-        st.write("")
-        do_lookup = st.button("Lookup", type="secondary")
+def _moves_action_label(current: float, new: float) -> str:
+    """Display chip derived from current vs new weight."""
+    if abs(new - current) < 0.001:
+        return "—"
+    if current == 0 and new > 0:
+        return "✚ BUY (new)"
+    if new == 0 and current > 0:
+        return "✗ CLOSE"
+    if new > current:
+        return "⬆ REINFORCE"
+    return "⬇ REDUCE"
 
-    if do_lookup:
-        if lookup_ticker:
-            suffix = EXCHANGES[exchange_label]
+
+def _moves_classify(current: float, new: float) -> str:
+    """Internal dispatch tag: BUY / REINFORCE / REDUCE / CLOSE / NOOP."""
+    if abs(new - current) < 0.001:
+        return "NOOP"
+    if current == 0 and new > 0:
+        return "BUY"
+    if new == 0 and current > 0:
+        return "CLOSE"
+    if new > current:
+        return "REINFORCE"
+    return "REDUCE"
+
+
+with tab_moves:
+    st.caption(
+        "Edit allocations directly: set **New %** to 0 to close, increase to reinforce, "
+        "decrease to reduce. Add new positions via the panel below."
+    )
+    today_str   = str(date.today())
+    draft_key   = f"moves_draft_{_pid}"
+    ver_key     = f"moves_ver_{_pid}"
+    confirm_key = f"moves_confirm_{_pid}"
+
+    if ver_key not in st.session_state:
+        st.session_state[ver_key] = 0
+
+    # Seed draft from current positions on first render (or after Reset)
+    if draft_key not in st.session_state:
+        st.session_state[draft_key] = [
+            {
+                "id":             p["id"],
+                "ticker":         p["ticker"],
+                "name":           p["name"],
+                "layer":          p.get("layer") or LAYERS[0],
+                "sector":         p.get("sector") or SECTORS[0],
+                "geography":      p.get("geography") or GEOS[0],
+                "thematic":       p.get("thematic") or THEMATICS[0],
+                "thesis_short":   p.get("thesis_short") or "",
+                "current_weight": float(p["weight"]),
+                "new_weight":     float(p["weight"]),
+                "_is_new":        False,
+            }
+            for p in positions
+        ]
+
+    # ── Add new position panel ────────────────────────────────────────────────
+    with st.expander("➕  Add new position", expanded=False):
+        ac1, ac2, ac3 = st.columns([2, 2, 1])
+        with ac1:
+            mv_lookup_ticker = st.text_input(
+                "Ticker", key="mv_lookup_ticker",
+                placeholder="e.g. ZM, ENI, BABA",
+            ).strip().upper()
+        with ac2:
+            mv_exchange_label = st.selectbox(
+                "Exchange (optional)", list(EXCHANGES.keys()), key="mv_lookup_exchange",
+            )
+        with ac3:
+            st.write("")
+            st.write("")
+            mv_do_lookup = st.button("Lookup ↻", type="secondary", key="mv_lookup_btn")
+
+        if mv_do_lookup and mv_lookup_ticker:
+            existing_tickers = {d["ticker"] for d in st.session_state[draft_key]}
             try:
-                with st.spinner(f"Fetching {lookup_ticker}…"):
-                    resolved, info = resolve_ticker(lookup_ticker, suffix)
-                if _valid_info(info):
-                    st.session_state["af_ticker"] = resolved
-                    st.session_state["af_name"]   = info.get("longName") or info.get("shortName") or ""
-                    st.session_state["af_sector"] = SECTOR_MAP.get(info.get("sector", ""), "")
-                    st.session_state["af_geo"]    = GEO_MAP.get(info.get("country", ""), "Other")
-                    # Try historical close for the selected date; fall back to live price
-                    try:
-                        from datetime import timedelta
-                        hist = yf.Ticker(resolved).history(
-                            start=lookup_date,
-                            end=lookup_date + timedelta(days=4),
-                        )
-                        hist_price = float(hist["Close"].iloc[0]) if not hist.empty else None
-                    except Exception:
-                        hist_price = None
-                    if hist_price:
-                        st.session_state["af_price"] = round(hist_price, 2)
-                    else:
-                        live = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                        st.session_state["af_price"] = float(live)
-                    if resolved != lookup_ticker:
-                        st.info(f"Resolved as **{resolved}** — {st.session_state['af_name']}")
+                suffix = EXCHANGES[mv_exchange_label]
+                with st.spinner(f"Fetching {mv_lookup_ticker}…"):
+                    resolved, info = resolve_ticker(mv_lookup_ticker, suffix)
+                if resolved in existing_tickers:
+                    st.warning(f"{resolved} is already in the draft below.")
+                elif _valid_info(info):
+                    st.session_state[draft_key].append({
+                        "id":             None,
+                        "ticker":         resolved,
+                        "name":           info.get("longName") or info.get("shortName") or resolved,
+                        "layer":          LAYERS[0],
+                        "sector":         SECTOR_MAP.get(info.get("sector", ""), SECTORS[0]) or SECTORS[0],
+                        "geography":      GEO_MAP.get(info.get("country", ""), GEOS[0]) or GEOS[0],
+                        "thematic":       THEMATICS[0],
+                        "thesis_short":   "",
+                        "current_weight": 0.0,
+                        "new_weight":     0.0,
+                        "_is_new":        True,
+                    })
+                    st.session_state[ver_key] += 1
+                    st.success(f"✓ Added **{resolved}** — set its New % in the table below.")
+                    st.rerun()
                 else:
-                    st.warning(f"'{lookup_ticker}' not found. Try specifying the exchange or check the ticker.")
+                    # Lookup failed: add blank row anyway, user fills metadata via SQL later
+                    st.session_state[draft_key].append({
+                        "id":             None,
+                        "ticker":         mv_lookup_ticker,
+                        "name":           mv_lookup_ticker,
+                        "layer":          LAYERS[0],
+                        "sector":         SECTORS[0],
+                        "geography":      GEOS[0],
+                        "thematic":       THEMATICS[0],
+                        "thesis_short":   "",
+                        "current_weight": 0.0,
+                        "new_weight":     0.0,
+                        "_is_new":        True,
+                    })
+                    st.session_state[ver_key] += 1
+                    st.info(f"'{mv_lookup_ticker}' not found via yfinance — added with blank metadata.")
+                    st.rerun()
             except Exception:
                 st.warning("Yahoo Finance rate limit hit — wait a few seconds and try again.")
 
-    af = {
-        "ticker":  st.session_state.get("af_ticker", ""),
-        "name":    st.session_state.get("af_name", ""),
-        "sector":  st.session_state.get("af_sector", SECTORS[0]),
-        "geo":     st.session_state.get("af_geo", GEOS[0]),
-        "price":   st.session_state.get("af_price", 0.01),
-    }
+    # ── Main editor ───────────────────────────────────────────────────────────
+    if not st.session_state[draft_key]:
+        st.info("No positions in this portfolio yet. Use **Add new position** above to bootstrap.")
+    else:
+        df_draft = pd.DataFrame(st.session_state[draft_key]).sort_values("ticker").reset_index(drop=True)
 
-    st.markdown(
-        "<p style='font-size:0.78rem; color:#888; margin-bottom:4px;'>"
-        "<span style='color:#00D09C; font-weight:700;'>■</span> Required &nbsp;·&nbsp;"
-        "Company info is auto-kept on add-to-existing</p>",
-        unsafe_allow_html=True,
-    )
-    with st.form("add_form", clear_on_submit=True):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            ticker  = st.text_input("★ Ticker", value=af["ticker"]).strip().upper()
-            name    = st.text_input("Company Name  (kept if exists)", value=af["name"])
-        with c2:
-            weight  = st.number_input("★ Weight (%)", min_value=0.1, max_value=50.0,
-                                      step=0.5, value=float(max(0.1, min(9.5, remaining))))
-            entry_p = st.number_input("★ Entry Price", min_value=0.01, step=0.01,
-                                      value=float(max(0.01, af["price"])))
-            entry_d = st.date_input("Entry Date", value=lookup_date)
-        with c3:
-            sec_idx = SECTORS.index(af["sector"]) if af["sector"] in SECTORS else 0
-            geo_idx = GEOS.index(af["geo"]) if af["geo"] in GEOS else 0
-            layer     = st.selectbox("★ Layer",                       LAYERS)
-            sector    = st.selectbox("Sector  (kept if exists)",    SECTORS, index=sec_idx)
-            geography = st.selectbox("Geography  (kept if exists)", GEOS,    index=geo_idx)
-            thematic  = st.selectbox("Thematic  (kept if exists)",  THEMATICS)
-        thesis = st.text_area("Thesis  (overwrites only if filled)", height=80)
+        editor_key = f"moves_editor_{_pid}_v{st.session_state[ver_key]}"
+        edited = st.data_editor(
+            df_draft,
+            column_config={
+                "ticker":         st.column_config.TextColumn("Ticker", disabled=True, width="small"),
+                "name":           st.column_config.TextColumn("Name", disabled=True),
+                "layer":          st.column_config.TextColumn("Layer", disabled=True, width="small"),
+                "current_weight": st.column_config.NumberColumn("Current %", disabled=True, format="%.2f"),
+                "new_weight":     st.column_config.NumberColumn(
+                                      "New %", min_value=0.0, max_value=100.0,
+                                      step=0.5, format="%.2f"),
+                "id":             None,
+                "sector":         None,
+                "geography":      None,
+                "thematic":       None,
+                "thesis_short":   None,
+                "_is_new":        None,
+            },
+            column_order=["ticker", "name", "layer", "current_weight", "new_weight"],
+            hide_index=True,
+            num_rows="fixed",
+            key=editor_key,
+            use_container_width=True,
+        )
 
-        new_total = existing_w + weight
-        over_limit = new_total > 100.0
-        if over_limit:
-            st.error(f"Total would reach {new_total:.1f}% — no leverage allowed. Reduce weight.")
+        # Sync edited new_weight back to draft (preserve fields the editor doesn't show)
+        new_weights_by_ticker = {r["ticker"]: float(r["new_weight"]) for r in edited.to_dict("records")}
+        for d in st.session_state[draft_key]:
+            if d["ticker"] in new_weights_by_ticker:
+                d["new_weight"] = new_weights_by_ticker[d["ticker"]]
 
-        if st.form_submit_button("Add Position", type="primary"):
-            if not ticker or not name or entry_p <= 0:
-                st.error("Ticker, Name and Entry Price are required.")
-            elif over_limit:
-                st.error(f"Cannot add: total weight {new_total:.1f}% exceeds 100%.")
+        # ── Compute moves from current draft ──
+        moves = []
+        for d in st.session_state[draft_key]:
+            cls = _moves_classify(d["current_weight"], d["new_weight"])
+            if cls == "NOOP":
+                continue
+            moves.append({
+                **d,
+                "delta":       d["new_weight"] - d["current_weight"],
+                "action":      _moves_action_label(d["current_weight"], d["new_weight"]),
+                "action_type": cls,
+            })
+
+        # ── Validation ──
+        sum_new   = sum(d["new_weight"] for d in st.session_state[draft_key])
+        cash_proj = max(0.0, 100.0 - sum_new)
+        tickers   = [d["ticker"] for d in st.session_state[draft_key]]
+        has_dup   = len(tickers) != len(set(tickers))
+        has_neg   = any(d["new_weight"] < 0 for d in st.session_state[draft_key])
+        over_100  = sum_new > 100.0 + 0.001
+        valid     = not (has_dup or has_neg or over_100)
+
+        vc1, vc2 = st.columns([3, 1])
+        with vc1:
+            if not valid:
+                if over_100:
+                    st.error(f"❌ Sum of new weights is {sum_new:.2f}% — no leverage allowed.")
+                if has_dup:
+                    st.error("❌ Duplicate tickers in draft.")
+                if has_neg:
+                    st.error("❌ Negative weights not allowed.")
             else:
-                add_position({
-                    "ticker": ticker, "name": name, "isin": None,
-                    "layer": layer,
-                    "weight": weight, "entry_price": entry_p,
-                    "entry_date": str(entry_d), "sector": sector,
-                    "geography": geography, "thematic": thematic,
-                    "thesis_short": thesis, "is_active": True,
-                }, portfolio_id=_pid)
-                st.success(f"✓ {ticker} added.")
-                for k in ["af_ticker", "af_name", "af_sector", "af_geo", "af_price"]:
-                    st.session_state.pop(k, None)
-                st.cache_data.clear()
+                st.caption(
+                    f"Sum of new weights: **{sum_new:.2f}%** · "
+                    f"Cash projected: **{cash_proj:.2f}%** · ✓ Valid"
+                )
+        with vc2:
+            st.metric("Pending moves", len(moves))
+
+        if moves:
+            st.markdown("**Pending changes**")
+            preview_df = pd.DataFrame([
+                {
+                    "Action":    m["action"],
+                    "Ticker":    m["ticker"],
+                    "Δ %":       m["delta"],
+                    "Current %": m["current_weight"],
+                    "New %":     m["new_weight"],
+                }
+                for m in moves
+            ])
+            st.dataframe(
+                preview_df.style.format({
+                    "Δ %":       "{:+.2f}",
+                    "Current %": "{:.2f}",
+                    "New %":     "{:.2f}",
+                }),
+                hide_index=True, use_container_width=False,
+            )
+
+        # ── Action buttons ──
+        bc1, _bcgap, bc3 = st.columns([1, 2, 2])
+        with bc1:
+            if st.button("Reset edits", key="moves_reset"):
+                st.session_state.pop(draft_key, None)
+                st.session_state.pop(confirm_key, None)
+                st.session_state[ver_key] += 1
+                st.rerun()
+        with bc3:
+            preview_disabled = (not valid) or (not moves)
+            if st.button("Preview moves →", type="primary",
+                         disabled=preview_disabled, key="moves_preview"):
+                st.session_state[confirm_key] = True
                 st.rerun()
 
-# ── CLOSE ─────────────────────────────────────────────────────────────────────
-with tab_close:
-    if not positions:
-        st.info("No active positions.")
-    else:
-        # Selectbox outside form so max_value updates dynamically
-        selected_label = st.selectbox("Position to close", list(pos_options.keys()), key="close_select")
-        selected_pos   = pos_options[selected_label]
+        # ── Confirmation modal ────────────────────────────────────────────────
+        if st.session_state.get(confirm_key) and moves:
+            st.markdown("---")
+            with st.container(border=True):
+                st.subheader(f"Confirm moves — {_pf.get('name', _pid)} ({len(moves)} transaction(s))")
 
-        live_price = selected_pos.get("current_price") or 0.01
-        st.caption(
-            f"Entry: **{selected_pos['entry_price']}** · "
-            f"Date: **{selected_pos['entry_date']}** · "
-            f"Weight: **{selected_pos['weight']}%**"
-        )
+                move_tickers = tuple(m["ticker"] for m in moves)
+                preview_prices = get_prices(move_tickers)
 
-        with st.form("close_form", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                weight_sold = st.number_input(
-                    "Weight to sell (%)",
-                    min_value=0.1,
-                    max_value=float(selected_pos["weight"]),
-                    value=float(selected_pos["weight"]),
-                    step=0.5,
-                    help="Equal to full weight = full close. Less = partial trim.",
+                # NAV basis for $ estimate (best-effort; falls back to initial capital)
+                nav_basis   = globals().get("nav_total") or _read_initial_capital(_pid)
+                cash_before = globals().get(
+                    "current_cash_pct",
+                    100.0 - sum(d["current_weight"] for d in st.session_state[draft_key]),
                 )
-            with c2:
-                exit_p = st.number_input("Exit Price", min_value=0.01, step=0.01,
-                                         value=float(max(0.01, live_price)))
-            with c3:
-                exit_d = st.date_input("Exit Date", value=date.today())
-            reason = st.text_area("Reason", height=80)
 
-            is_full_close = weight_sold >= selected_pos["weight"]
-            btn_label = "Confirm Close" if is_full_close else f"Confirm Trim (−{weight_sold}%)"
-
-            if st.form_submit_button(btn_label, type="primary"):
-                if exit_p <= 0:
-                    st.error("Enter a valid exit price.")
-                elif weight_sold > selected_pos["weight"]:
-                    st.error(f"Cannot sell {weight_sold}% — position is only {selected_pos['weight']}%.")
-                else:
-                    perf = round((exit_p - selected_pos["entry_price"]) / selected_pos["entry_price"] * 100, 2)
-                    sign = "+" if perf >= 0 else ""
-                    if is_full_close:
-                        close_position(selected_pos["id"], exit_p, str(exit_d), reason)
-                        st.success(f"✓ {selected_pos['ticker']} closed at {exit_p} ({sign}{perf}%)")
-                    else:
-                        trim_position(selected_pos["id"], weight_sold, exit_p, str(exit_d), reason)
-                        remaining = round(selected_pos["weight"] - weight_sold, 1)
-                        st.success(f"✓ {selected_pos['ticker']} trimmed by {weight_sold}% at {exit_p} ({sign}{perf}%) — {remaining}% remaining")
-                    st.cache_data.clear()
-                    st.rerun()
-
-# ── SWITCH ────────────────────────────────────────────────────────────────────
-with tab_switch:
-    st.caption("Sell one position and immediately buy another.")
-    if not positions:
-        st.info("No active positions.")
-    else:
-        # OUT position selector (outside form so caption updates)
-        sw_out_label = st.selectbox("Exit this position", list(pos_options.keys()), key="sw_out_label")
-        sw_out_pos   = pos_options[sw_out_label]
-        st.caption(
-            f"Entry: **{sw_out_pos['entry_price']}** · "
-            f"Weight: **{sw_out_pos['weight']}%**"
-        )
-
-        st.markdown("---")
-
-        # Lookup for the IN position (outside form)
-        sw1, sw2, sw3, sw4 = st.columns([2, 2, 1.5, 1])
-        with sw1:
-            sw_lookup_ticker = st.text_input("New Ticker (IN)", key="sw_lookup_ticker",
-                                             placeholder="e.g. MSTR, MC, ENI").strip().upper()
-        with sw2:
-            sw_exchange_label = st.selectbox("Exchange (optional)", list(EXCHANGES.keys()), key="sw_lookup_exchange")
-        with sw3:
-            sw_lookup_date = st.date_input("★ Switch Date", value=date.today(), key="sw_lookup_date")
-        with sw4:
-            st.write("")
-            st.write("")
-            sw_do_lookup = st.button("Lookup", type="secondary", key="sw_lookup_btn")
-
-        if sw_do_lookup:
-            if sw_lookup_ticker:
-                suffix = EXCHANGES[sw_exchange_label]
-                try:
-                    with st.spinner(f"Fetching {sw_lookup_ticker}…"):
-                        resolved, info = resolve_ticker(sw_lookup_ticker, suffix)
-                    if _valid_info(info):
-                        st.session_state["sw_ticker"]  = resolved
-                        st.session_state["sw_name"]    = info.get("longName") or info.get("shortName") or ""
-                        st.session_state["sw_sector"]  = SECTOR_MAP.get(info.get("sector", ""), "")
-                        st.session_state["sw_geo"]     = GEO_MAP.get(info.get("country", ""), "Other")
-                        try:
-                            from datetime import timedelta
-                            hist = yf.Ticker(resolved).history(
-                                start=sw_lookup_date,
-                                end=sw_lookup_date + timedelta(days=4),
-                            )
-                            hist_price = float(hist["Close"].iloc[0]) if not hist.empty else None
-                        except Exception:
-                            hist_price = None
-                        if hist_price:
-                            st.session_state["sw_price"] = round(hist_price, 2)
-                        else:
-                            live = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
-                            st.session_state["sw_price"] = float(live)
-                        if resolved != sw_lookup_ticker:
-                            st.info(f"Resolved as **{resolved}** — {st.session_state['sw_name']}")
-                    else:
-                        st.warning(f"'{sw_lookup_ticker}' not found. Try specifying the exchange.")
-                except Exception:
-                    st.warning("Yahoo Finance rate limit hit — wait a few seconds and try again.")
-
-        sw_af = {
-            "ticker":  st.session_state.get("sw_ticker", ""),
-            "name":    st.session_state.get("sw_name", ""),
-            "sector":  st.session_state.get("sw_sector", SECTORS[0]),
-            "geo":     st.session_state.get("sw_geo", GEOS[0]),
-            "price":   st.session_state.get("sw_price", 0.01),
-        }
-
-        with st.form("switch_form", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                out_p     = st.number_input("★ Exit Price (OUT)", min_value=0.01, step=0.01)
-                in_ticker = st.text_input("★ Ticker (IN)", value=sw_af["ticker"]).strip().upper()
-                in_name   = st.text_input("Company Name", value=sw_af["name"])
-            with c2:
-                in_weight = st.number_input(
-                    "★ Weight IN (%)",
-                    min_value=0.1, max_value=float(sw_out_pos["weight"]),
-                    value=float(sw_out_pos["weight"]), step=0.5,
-                    help="Defaults to full OUT weight. Can be less (leaves cash).",
-                )
-                in_p    = st.number_input("★ Entry Price (IN)", min_value=0.01, step=0.01,
-                                          value=float(max(0.01, sw_af["price"])))
-            with c3:
-                sw_sec_idx = SECTORS.index(sw_af["sector"]) if sw_af["sector"] in SECTORS else 0
-                sw_geo_idx = GEOS.index(sw_af["geo"]) if sw_af["geo"] in GEOS else 0
-                in_layer    = st.selectbox("★ Layer",    LAYERS)
-                in_sector   = st.selectbox("Sector",    SECTORS, index=sw_sec_idx)
-                in_geo      = st.selectbox("Geography", GEOS,    index=sw_geo_idx)
-                in_thematic = st.selectbox("Thematic",  THEMATICS)
-            in_thesis  = st.text_area("New Thesis", height=80)
-            sw_reason  = st.text_area("Reason for switch", height=60)
-
-            if st.form_submit_button("Confirm Switch", type="primary"):
-                if not in_ticker or not in_name or out_p <= 0 or in_p <= 0:
-                    st.error("All ★ fields are required.")
-                else:
-                    switch_position(
-                        out_id=sw_out_pos["id"], out_price=out_p,
-                        in_data={
-                            "ticker": in_ticker, "name": in_name, "isin": None,
-                            "layer": in_layer,
-                            "weight": in_weight, "entry_price": in_p,
-                            "entry_date": str(sw_lookup_date), "sector": in_sector,
-                            "geography": in_geo, "thematic": in_thematic,
-                            "thesis_short": in_thesis, "is_active": True,
-                        },
-                        date=str(sw_lookup_date), reason=sw_reason,
+                total_cash_flow = 0.0
+                rows_html = []
+                for m in moves:
+                    px      = (preview_prices.get(m["ticker"]) or {}).get("price")
+                    px_str  = f"${px:.2f}" if px else "—"
+                    usd_amt = abs(m["delta"]) / 100.0 * nav_basis if nav_basis else 0.0
+                    cash_sign = -1 if m["delta"] > 0 else 1
+                    total_cash_flow += cash_sign * usd_amt
+                    delta_color = "#00D09C" if m["delta"] > 0 else "#FF4B4B"
+                    rows_html.append(
+                        f"<tr>"
+                        f"<td style='padding:6px 12px'>{m['action']}</td>"
+                        f"<td style='padding:6px 12px'><b>{m['ticker']}</b></td>"
+                        f"<td style='padding:6px 12px; text-align:right; color:{delta_color}'>{m['delta']:+.2f}%</td>"
+                        f"<td style='padding:6px 12px; text-align:right'>≈ ${usd_amt:,.0f}</td>"
+                        f"<td style='padding:6px 12px; text-align:right'>{px_str}</td>"
+                        f"</tr>"
                     )
-                    st.success(f"✓ {sw_out_pos['ticker']} → {in_ticker} switched.")
-                    for k in ["sw_ticker", "sw_name", "sw_sector", "sw_geo", "sw_price"]:
-                        st.session_state.pop(k, None)
-                    st.cache_data.clear()
-                    st.rerun()
+                table_html = (
+                    "<table style='width:100%; border-collapse:collapse; margin-bottom:1rem'>"
+                    "<thead><tr style='color:#888; border-bottom:1px solid rgba(255,255,255,0.1)'>"
+                    "<th style='padding:6px 12px; text-align:left'>Action</th>"
+                    "<th style='padding:6px 12px; text-align:left'>Ticker</th>"
+                    "<th style='padding:6px 12px; text-align:right'>Δ %</th>"
+                    "<th style='padding:6px 12px; text-align:right'>USD (est.)</th>"
+                    "<th style='padding:6px 12px; text-align:right'>Live Price</th>"
+                    "</tr></thead><tbody>"
+                    + "".join(rows_html)
+                    + "</tbody></table>"
+                )
+                st.markdown(table_html, unsafe_allow_html=True)
+
+                st.caption(
+                    f"Net cash flow: **${total_cash_flow:+,.0f}** · "
+                    f"Cash: **{cash_before:.2f}% → {cash_proj:.2f}%** · "
+                    f"Invested: **{(100 - cash_before):.2f}% → {(100 - cash_proj):.2f}%**"
+                )
+                st.caption("⚠️ Prices will be re-fetched at commit (final entry/exit price = live at commit time).")
+
+                reason = st.text_input(
+                    "Reason (optional, recorded in History)",
+                    key=f"moves_reason_{_pid}",
+                )
+
+                cbc1, cbc2 = st.columns(2)
+                with cbc1:
+                    if st.button("Cancel", key="moves_cancel"):
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
+                with cbc2:
+                    if st.button("Confirm & execute moves", type="primary", key="moves_commit"):
+                        fresh_prices = get_prices(move_tickers)
+                        errors   = []
+                        executed = 0
+                        for m in moves:
+                            px = (fresh_prices.get(m["ticker"]) or {}).get("price")
+                            if not px:
+                                errors.append(f"{m['ticker']}: no live price")
+                                continue
+                            try:
+                                if m["action_type"] == "CLOSE":
+                                    close_position(m["id"], px, today_str,
+                                                   reason or "Move from cockpit")
+                                elif m["action_type"] == "REDUCE":
+                                    trim_position(m["id"], abs(m["delta"]), px, today_str,
+                                                  reason or "Move from cockpit")
+                                elif m["action_type"] == "REINFORCE":
+                                    add_position({
+                                        "ticker":       m["ticker"], "name": m["name"], "isin": None,
+                                        "layer":        m["layer"],
+                                        "weight":       m["delta"],
+                                        "entry_price":  px,
+                                        "entry_date":   today_str,
+                                        "sector":       m["sector"],
+                                        "geography":    m["geography"],
+                                        "thematic":     m["thematic"],
+                                        "thesis_short": "",
+                                        "is_active":    True,
+                                    }, portfolio_id=_pid)
+                                elif m["action_type"] == "BUY":
+                                    add_position({
+                                        "ticker":       m["ticker"], "name": m["name"], "isin": None,
+                                        "layer":        m["layer"],
+                                        "weight":       m["new_weight"],
+                                        "entry_price":  px,
+                                        "entry_date":   today_str,
+                                        "sector":       m["sector"],
+                                        "geography":    m["geography"],
+                                        "thematic":     m["thematic"],
+                                        "thesis_short": m.get("thesis_short", ""),
+                                        "is_active":    True,
+                                    }, portfolio_id=_pid)
+                                executed += 1
+                            except Exception as e:
+                                errors.append(f"{m['ticker']}: {e}")
+
+                        if errors:
+                            st.error(f"{executed} executed, {len(errors)} failed: {'; '.join(errors)}")
+                        else:
+                            st.success(f"✓ {executed} move(s) executed.")
+
+                        st.session_state.pop(confirm_key, None)
+                        st.session_state.pop(draft_key, None)
+                        st.session_state[ver_key] += 1
+                        st.cache_data.clear()
+                        st.rerun()
 
 # ── HISTORY ───────────────────────────────────────────────────────────────────
 with tab_history:
