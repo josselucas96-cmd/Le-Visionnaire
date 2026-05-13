@@ -65,7 +65,7 @@ with col_logout:
 # operates on the selected one.
 _PF_VIS = {
     "visionnaire": ("Le Visionnaire", "High-Conviction Equity",        "#6366F1"),
-    "batisseur":   ("Le Bâtisseur",   "Quality Compounders + Tactical", "#F59E0B"),
+    "batisseur":   ("Le Bâtisseur",   "Quality Compounders + Tactical", "#F5B60A"),
     "nakamoto":    ("Le Nakamoto",    "Bitcoin Treasury Equities",      "#FF6A00"),
 }
 
