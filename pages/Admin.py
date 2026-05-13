@@ -66,7 +66,7 @@ with col_logout:
 _PF_VIS = {
     "visionnaire": ("Le Visionnaire", "High-Conviction Equity",        "#6366F1"),
     "batisseur":   ("Le Bâtisseur",   "Quality Compounders + Tactical", "#F59E0B"),
-    "nakamoto":    ("Le Nakamoto",    "Bitcoin Treasury Equities",      "#F97316"),
+    "nakamoto":    ("Le Nakamoto",    "Bitcoin Treasury Equities",      "#F7931A"),
 }
 
 st.markdown("""
