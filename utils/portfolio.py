@@ -614,7 +614,7 @@ Always conduct your own due diligence before making any investment decision.
             "current_weight": "Alloc.",
             "entry_price":    "PRU",
             "current_price":  "Price",
-            "perf_pct":       "Total Return",
+            "perf_pct":       "Return %",
             "change_today":   "Today %",
             "sector":         "Sector",
             "geography":      "Geography",
@@ -633,7 +633,7 @@ Always conduct your own due diligence before making any investment decision.
                 else "" for v in col
             ]
 
-        _numeric_cols = {"Alloc.", "PRU", "Price", "Total Return", "Today %"}
+        _numeric_cols = {"Alloc.", "PRU", "Price", "Return %", "Today %"}
         empty_row = pd.DataFrame([{
             c: None if c in _numeric_cols else "" for c in display.columns
         }])
@@ -641,7 +641,7 @@ Always conduct your own due diligence before making any investment decision.
             "Ticker": "CASH", "Name": "Cash USD",
             "Alloc.": current_cash_pct,
             "PRU": None, "Price": None,
-            "Total Return": None, "Today %": None,
+            "Return %": None, "Today %": None,
             "Sector": "—", "Geography": "USD", "Thematic": "—",
         }
         if show_layer_column:
@@ -653,9 +653,9 @@ Always conduct your own due diligence before making any investment decision.
             "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
             "PRU":          lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
             "Price":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
-            "Total Return": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
+            "Return %": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
             "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-        }).apply(color_signed, subset=["Total Return", "Today %"])
+        }).apply(color_signed, subset=["Return %", "Today %"])
 
         table_height = 38 + (len(display) + 3) * 35
         st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
@@ -717,7 +717,7 @@ Always conduct your own due diligence before making any investment decision.
         if current_cash_pct > 0:
             cash_row = pd.DataFrame([{
                 "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
-                "PRU": None, "Price": None, "Total Return": None, "Today %": None,
+                "PRU": None, "Price": None, "Return %": None, "Today %": None,
                 "Sector": "Cash/Equivalent", "Geography": "USD",
                 "Thematic": "Cash/Equivalent",
             }])
