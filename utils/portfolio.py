@@ -13,11 +13,12 @@ from datetime import date, timedelta
 from utils.data import get_positions, get_setting, get_portfolio
 from utils.market import get_prices, get_history, get_total_return_factor
 from utils.metrics import (
-    build_portfolio_index, daily_returns,
+    daily_returns,
     sharpe_ratio, max_drawdown, beta_vs_spy,
     annualized_volatility, var_95, correlation_matrix, avg_pairwise_correlation,
     monthly_returns_table,
 )
+from utils.nav_history import lazy_write_nav, get_nav_series
 from utils.research import get_research
 from utils.nav import render_nav
 from utils.theme import (
@@ -419,13 +420,16 @@ Always conduct your own due diligence before making any investment decision.
     history_corr = get_history(tickers, corr_start, benchmarks=())
 
     # Build portfolio index + benchmark indices (parameterized)
-    primary_perf  = None
-    primary_index = None
-    secondary_perf  = None
+    primary_perf   = None
+    primary_index  = None
+    secondary_perf = None
     secondary_index = None
+    cash_units     = float(pf.get("cash_units") or 0)
 
     if not history.empty:
-        port_index = build_portfolio_index(history, positions)
+        # NAV snapshot — frozen daily values in `nav_history`. The chart
+        # reads from the DB; future moves never recompute past days.
+        lazy_write_nav(portfolio_id, positions, cash_units, history)
         if bench_pri and bench_pri in history.columns:
             raw = history[bench_pri].dropna()
             if not raw.empty:
@@ -436,10 +440,11 @@ Always conduct your own due diligence before making any investment decision.
             if not raw.empty:
                 secondary_index = raw / raw.iloc[0] * 100
                 secondary_perf  = round(secondary_index.iloc[-1] - 100, 2)
-        last_updated = history.index[-1].strftime("%b %d, %Y") if not history.empty else "—"
+        last_updated = history.index[-1].strftime("%b %d, %Y")
     else:
-        port_index   = None
         last_updated = "—"
+
+    port_index = get_nav_series(portfolio_id)
 
     # Use chart's base-100 method for the headline metric (consistent with chart)
     if port_index is not None and not port_index.empty:
