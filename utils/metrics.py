@@ -3,14 +3,15 @@ import pandas as pd
 
 
 def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
-    """
-    Reconstruct a base-100 portfolio index from inception.
+    """Reconstruct a base-100 portfolio index from inception.
 
-    Each position is normalized to 100 from its entry_date.
-    Before entry_date the position contributes a flat 100 (i.e. no drag, no gain).
-    The final portfolio index is the weight-averaged combination of all positions.
+    Each position is normalized to 100 at its stored `entry_price` (PRU) —
+    the real cost basis — so the chart aligns exactly with Return % shown
+    per position. Yfinance daily closes are still used for the time series.
+    Falls back to the first yfinance close >= entry_date if entry_price is
+    missing.
 
-    This is a buy-and-hold simulation — weights are fixed at initiation.
+    Before entry_date the position contributes a flat 100 (no P&L).
     """
     if history.empty or not positions:
         return pd.Series(dtype=float)
@@ -39,7 +40,18 @@ def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
         if after.empty:
             continue
 
-        base_price = after.iloc[0]
+        # Use stored entry_price (PRU) as the normalization base when set —
+        # this aligns the chart with `(current - PRU) / PRU` shown in the
+        # Positions table. Fall back to yfinance close at entry_date for
+        # positions without a recorded PRU.
+        entry_price = p.get("entry_price")
+        try:
+            base_price = float(entry_price) if entry_price else float(after.iloc[0])
+        except (TypeError, ValueError):
+            base_price = float(after.iloc[0])
+        if base_price <= 0:
+            base_price = float(after.iloc[0])
+
         normalized_after = after / base_price * 100
 
         # Before entry date: flat at 100 (no position, no P&L)

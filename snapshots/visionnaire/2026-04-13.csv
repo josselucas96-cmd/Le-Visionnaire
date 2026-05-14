@@ -1,0 +1,17 @@
+ticker,weight,units,entry_price,snapshot_type
+AMD,5,0.02040567,245.03,initial
+AMZN,8,0.03369130,237.45,initial
+BMNR,2,0.09532888,20.98,initial
+CELH,10,0.29213556,34.23,initial
+CRSP,2,0.03914660,51.09,initial
+DUOL,2,0.02218772,90.14,initial
+HIMS,8,0.41386446,19.33,initial
+LFMD,1,0.29154519,3.43,initial
+META,10,0.01588563,629.50,initial
+MTPLF,5,2.32558140,2.15,initial
+NBIS,5,0.03504555,142.70,initial
+NVDA,12,0.06450572,186.03,initial
+RKLB,5,0.07456379,67.05,initial
+SMR,1,0.11037528,9.06,initial
+TSLA,12,0.03427885,350.07,initial
+XPEV,1,0.05787037,17.28,initial

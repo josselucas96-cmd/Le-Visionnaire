@@ -10,7 +10,16 @@ Move semantics (PR-3):
   units) — the mathematically correct formula. The legacy NAV-weighted
   formula was off by a small amount whenever reinforce price ≠ original
   PRU.
+
+Audit trail (PR-5):
+- Every move stamps `executed_at` (TIMESTAMPTZ) on the transaction row.
+- Every move triggers a `position_snapshots` row per active ticker.
+- A CSV mirror of each snapshot is written to ../snapshots/<portfolio>/.
 """
+import csv
+from datetime import datetime, timezone
+from pathlib import Path
+
 import streamlit as st
 from supabase import create_client
 
@@ -47,6 +56,74 @@ def _existing_units(row: dict) -> float:
     w = float(row.get("weight") or 0)
     p = float(row.get("entry_price") or 0)
     return (w / p) if p > 0 else 0.0
+
+
+def _now_utc_iso() -> str:
+    """Current UTC timestamp as ISO 8601 (with timezone)."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _snapshot_positions(sb, portfolio_id: str, snapshot_type: str = "move",
+                        when: str | None = None) -> None:
+    """Snapshot the post-move state of all active positions for this portfolio.
+
+    Writes to:
+    - Supabase `position_snapshots` table (upsert on portfolio_id, date, ticker)
+    - CSV mirror at ../snapshots/<portfolio>/<date>.csv (best-effort, non-fatal)
+
+    `snapshot_type` ∈ {'move', 'monthly', 'manual', 'initial'}.
+    """
+    from datetime import date as _date
+    when = when or _date.today().isoformat()
+    rows = (
+        sb.table("positions")
+        .select("ticker, weight, units, entry_price")
+        .eq("portfolio_id", portfolio_id)
+        .eq("is_active", True)
+        .order("ticker")
+        .execute()
+        .data
+    )
+    if not rows:
+        return
+    payload = [{
+        "portfolio_id":  portfolio_id,
+        "date":          when,
+        "ticker":        r["ticker"],
+        "weight":        float(r.get("weight") or 0),
+        "units":         float(r.get("units") or 0),
+        "entry_price":   float(r.get("entry_price") or 0),
+        "snapshot_type": snapshot_type,
+    } for r in rows]
+    try:
+        sb.table("position_snapshots").upsert(
+            payload, on_conflict="portfolio_id,date,ticker"
+        ).execute()
+    except Exception:
+        # Non-fatal: missing table on legacy deploys shouldn't break a move
+        pass
+    _write_snapshot_csv(portfolio_id, when, payload)
+
+
+def _write_snapshot_csv(portfolio_id: str, date_str: str, rows: list) -> None:
+    """Best-effort CSV backup of a snapshot in Streamlit_project/snapshots/.
+
+    Silent on filesystem errors (Streamlit Cloud is read-only at runtime;
+    the DB row in `position_snapshots` is the source of truth, CSV is mirror)."""
+    try:
+        base = Path(__file__).resolve().parent.parent / "snapshots" / portfolio_id
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / f"{date_str}.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(
+                f,
+                fieldnames=["ticker", "weight", "units", "entry_price", "snapshot_type"],
+            )
+            w.writeheader()
+            for r in rows:
+                w.writerow({k: r[k] for k in w.fieldnames})
+    except Exception:
+        pass
 
 
 # ── Portfolios ────────────────────────────────────────────────────────────────
@@ -164,6 +241,7 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
             "price_in":     new_p,
             "weight_in":    new_w,
             "reason":       f"Reinforced {new_w}% (new PRU: {new_pru:.4f})",
+            "executed_at":  _now_utc_iso(),
         }).execute()
     else:
         # NEW POSITION
@@ -177,10 +255,12 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
             "price_in":     new_p,
             "weight_in":    new_w,
             "reason":       "New position",
+            "executed_at":  _now_utc_iso(),
         }).execute()
 
     # Cost of the new exposure leaves cash
     _adjust_cash_units(sb, portfolio_id, -new_w)
+    _snapshot_positions(sb, portfolio_id)
 
 
 def trim_position(position_id: int, weight_sold: float, exit_price: float,
@@ -208,10 +288,13 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float,
         "weight_out":      weight_sold,
         "perf_pct":        perf,
         "reason":          reason,
+        "executed_at":     _now_utc_iso(),
     }).execute()
 
     # Cost basis returned to cash (proceeds at cost; realized P&L not booked).
-    _adjust_cash_units(sb, pos.get("portfolio_id", "visionnaire"), weight_sold)
+    portfolio_id = pos.get("portfolio_id", "visionnaire")
+    _adjust_cash_units(sb, portfolio_id, weight_sold)
+    _snapshot_positions(sb, portfolio_id)
 
 
 def close_position(position_id: int, exit_price: float, exit_date: str, reason: str):
@@ -230,6 +313,7 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
         "weight_out":      old_w,
         "perf_pct":        perf,
         "reason":          reason,
+        "executed_at":     _now_utc_iso(),
     }).execute()
     sb.table("positions").update({
         "is_active":  False,
@@ -238,7 +322,9 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
         "units":      0,
     }).eq("id", position_id).execute()
 
-    _adjust_cash_units(sb, pos.get("portfolio_id", "visionnaire"), old_w)
+    portfolio_id = pos.get("portfolio_id", "visionnaire")
+    _adjust_cash_units(sb, portfolio_id, old_w)
+    _snapshot_positions(sb, portfolio_id)
 
 
 def switch_position(out_id: int, out_price: float, in_data: dict,
@@ -262,6 +348,7 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
         "entry_price_out": pos_out["entry_price"],
         "perf_pct":        perf,
         "reason":          reason,
+        "executed_at":     _now_utc_iso(),
     }).execute()
     sb.table("positions").update({
         "is_active":  False,
@@ -279,6 +366,7 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
 
     # Net cash flow: cost-basis recovered from out, cost-basis consumed by in
     _adjust_cash_units(sb, portfolio_id, out_w - new_w)
+    _snapshot_positions(sb, portfolio_id)
 
 
 # ── Corporate actions ─────────────────────────────────────────────────────────
@@ -336,8 +424,10 @@ def apply_dividend_drip(portfolio_id: str, ticker: str, div_per_share: float,
         "weight_in":    cash_received,
         "reason":       (f"DRIP ${div_per_share:.4f}/share × {old_units:.6f} units "
                          f"= ${cash_received:.4f} reinvested @ ${reinvest_price:.4f}"),
+        "executed_at":  _now_utc_iso(),
     }).execute()
     # cash_units unchanged: DRIP is cash-neutral (dividend received then spent).
+    _snapshot_positions(sb, portfolio_id)
     return cash_received
 
 
@@ -381,7 +471,9 @@ def apply_split(portfolio_id: str, ticker: str, ratio: float,
         "ticker_in":    ticker,
         "price_in":     new_pru,
         "reason":       f"{ratio}-for-1 split: units × {ratio}, PRU ÷ {ratio}",
+        "executed_at":  _now_utc_iso(),
     }).execute()
+    _snapshot_positions(sb, portfolio_id)
     return new_units
 
 
