@@ -10,7 +10,7 @@ from datetime import date
 
 from utils.data import (
     get_positions, get_transactions,
-    add_position, close_position, set_position_weight,
+    add_position, close_position, trim_position,
     get_setting, upsert_setting, reset_portfolio,
     get_events, add_event, delete_event,
     get_portfolios, get_portfolio, update_portfolio,
@@ -1304,6 +1304,158 @@ def _moves_classify(current: float, new: float) -> str:
     return "REDUCE"
 
 
+def _pru_compute_rebalance(positions_list, draft, prices_live):
+    """PRU model + auto-conversion of typed targets to DB weights.
+
+    Returns dict with:
+      - moves: list of {ticker, id, action, target_drifted, drift_factor,
+                        old_db, new_db, delta_db, current_price, ...}
+      - T_after: projected NAV factor post-rebalance
+      - initial_cash_after: DB-level cash %
+      - cash_drifted_after: drifted cash %
+      - projected_drifted: dict ticker → projected drifted % for all positions
+
+    The math closed-form:
+        T = 100 × (T_untouched + 100 − sum_untouched_DB) / (100 − X_touched + K)
+    where:
+        T_untouched = Σ unchanged contributions (= old current_value)
+        sum_untouched_DB = Σ unchanged DB weights
+        X_touched = Σ target_drifted for touched existing
+        K = Σ (target_drifted / drift_factor) for touched existing
+        L = Σ target_drifted for new positions
+        initial_cash_after = 100 − sum_untouched_DB − T × (K + L) / 100
+
+    Touched/new positions then land at exactly target_drifted (no surprise).
+    PRU semantics: entry_price preserved on REDUCE; PRU-averaged on REINFORCE.
+    """
+    positions_by_id = {p["id"]: p for p in positions_list if p.get("id") is not None}
+
+    T_untouched      = 0.0
+    sum_untouched_DB = 0.0
+    X_touched        = 0.0
+    K                = 0.0
+    L                = 0.0
+    moves            = []
+
+    for d in draft:
+        new_w = float(d["new_weight"])
+        if d["id"] is not None:
+            orig = positions_by_id.get(d["id"])
+            if orig is None:
+                continue
+            old_db        = float(orig["weight"])
+            entry_price   = float(orig["entry_price"])
+            current_price = float(orig.get("current_price")
+                                  or (prices_live.get(d["ticker"]) or {}).get("price")
+                                  or entry_price)
+            drift_factor  = (current_price / entry_price) if entry_price > 0 else 1.0
+
+            if new_w == 0:
+                moves.append({
+                    "ticker": d["ticker"], "id": d["id"],
+                    "action": "CLOSE",
+                    "target_drifted": 0.0,
+                    "drift_factor":   drift_factor,
+                    "old_db":         old_db,
+                    "current_price":  current_price,
+                    "name":           d["name"],
+                    "layer":          d.get("layer"),
+                    "sector":         d.get("sector"),
+                    "geography":      d.get("geography"),
+                    "thematic":       d.get("thematic"),
+                    "current_weight": d["current_weight"],
+                })
+                continue
+
+            if abs(new_w - d["current_weight"]) < 0.001:
+                # Untouched: drift preserved
+                T_untouched      += float(orig.get("current_value") or old_db)
+                sum_untouched_DB += old_db
+            else:
+                # Touched
+                X_touched += new_w
+                K         += new_w / drift_factor if drift_factor > 0 else new_w
+                moves.append({
+                    "ticker": d["ticker"], "id": d["id"],
+                    "action": None,  # resolved later after delta_db computed
+                    "target_drifted": new_w,
+                    "drift_factor":   drift_factor,
+                    "old_db":         old_db,
+                    "current_price":  current_price,
+                    "name":           d["name"],
+                    "layer":          d.get("layer"),
+                    "sector":         d.get("sector"),
+                    "geography":      d.get("geography"),
+                    "thematic":       d.get("thematic"),
+                    "current_weight": d["current_weight"],
+                })
+        else:
+            if new_w > 0:
+                L += new_w
+                px = (prices_live.get(d["ticker"]) or {}).get("price") or 0.0
+                moves.append({
+                    "ticker": d["ticker"], "id": None,
+                    "action": "BUY",
+                    "target_drifted": new_w,
+                    "drift_factor":   1.0,
+                    "old_db":         0.0,
+                    "current_price":  px,
+                    "name":           d["name"],
+                    "layer":          d.get("layer"),
+                    "sector":         d.get("sector"),
+                    "geography":      d.get("geography"),
+                    "thematic":       d.get("thematic"),
+                    "current_weight": 0.0,
+                })
+
+    denominator = 100.0 - X_touched + K
+    if denominator <= 0:
+        return None  # over-allocation / unsolvable
+
+    T_after            = 100.0 * (T_untouched + 100.0 - sum_untouched_DB) / denominator
+    initial_cash_after = 100.0 - sum_untouched_DB - T_after * (K + L) / 100.0
+    cash_drifted_after = initial_cash_after / T_after * 100.0 if T_after > 0 else 0.0
+
+    # Resolve new_db / delta_db / action for each touched + buy
+    for m in moves:
+        if m["action"] == "CLOSE":
+            m["new_db"]    = 0.0
+            m["delta_db"]  = -m["old_db"]
+        elif m["action"] == "BUY":
+            m["new_db"]    = m["target_drifted"] * T_after / 100.0
+            m["delta_db"]  = m["new_db"]
+        else:  # touched, action pending
+            drift = m["drift_factor"]
+            m["new_db"]    = m["target_drifted"] * T_after / (100.0 * drift) if drift > 0 else m["target_drifted"]
+            m["delta_db"]  = m["new_db"] - m["old_db"]
+            if m["delta_db"] > 0.001:
+                m["action"] = "REINFORCE"
+            elif m["delta_db"] < -0.001:
+                m["action"] = "REDUCE"
+            else:
+                m["action"] = "NOOP"
+
+    # Build projected_drifted map for all positions
+    projected_drifted = {}
+    for m in moves:
+        if m["action"] == "CLOSE":
+            continue
+        projected_drifted[m["ticker"]] = m["target_drifted"]
+    for p in positions_list:
+        if p["ticker"] not in projected_drifted and p.get("id") is not None:
+            # Untouched (or not in draft): keep drift
+            contrib = float(p.get("current_value") or p["weight"])
+            projected_drifted[p["ticker"]] = contrib / T_after * 100.0 if T_after > 0 else 0
+
+    return {
+        "moves":              moves,
+        "T_after":            T_after,
+        "initial_cash_after": initial_cash_after,
+        "cash_drifted_after": cash_drifted_after,
+        "projected_drifted":  projected_drifted,
+    }
+
+
 with tab_moves:
     st.caption(
         "Edit allocations directly: set **New %** to 0 to close, increase to reinforce, "
@@ -1574,48 +1726,18 @@ with tab_moves:
             move_tickers = tuple(m["ticker"] for m in moves)
             preview_prices = get_prices(move_tickers)
 
-            # ── Project the post-rebalance state ──────────────────────────────
-            # Touched positions reset entry_price to today, so contribution = new_weight.
-            # Untouched positions keep their existing drift (current_value preserved).
-            # New positions: contribution = new_weight. Closed: removed from sum.
-            # The "After %" column then equals contribution / total_NAV × 100 — this
-            # is what the user will actually see in Active Positions after commit.
-            positions_by_id = {p["id"]: p for p in positions if p.get("id") is not None}
-            proj_contribs   = {}
-            proj_db_sum     = 0.0
-            for d in st.session_state[draft_key]:
-                new_w = d["new_weight"]
-                if d["id"] is not None:
-                    orig = positions_by_id.get(d["id"])
-                    if orig is None:
-                        continue
-                    if new_w == 0:
-                        continue  # CLOSE — drops out
-                    if abs(new_w - d["current_weight"]) > 0.001:
-                        # Touched (rebalance): entry resets to today → contrib = new_w
-                        proj_contribs[d["ticker"]] = new_w
-                        proj_db_sum += new_w
-                    else:
-                        # Untouched: drift preserved (use precomputed current_value)
-                        proj_contribs[d["ticker"]] = float(
-                            orig.get("current_value") or orig["weight"]
-                        )
-                        proj_db_sum += float(orig["weight"])
-                else:
-                    if new_w > 0:
-                        proj_contribs[d["ticker"]] = new_w
-                        proj_db_sum += new_w
-
-            initial_cash_after = max(0.0, 100.0 - proj_db_sum)
-            total_nav_after    = sum(proj_contribs.values()) + initial_cash_after
-            proj_drifted = (
-                {t: c / total_nav_after * 100 for t, c in proj_contribs.items()}
-                if total_nav_after > 0 else {}
+            # ── PRU + auto-conversion: project the post-rebalance state ───────
+            # Touched/new positions land at exactly their typed target_drifted;
+            # entry_price preserved on REDUCE (track record kept), PRU-averaged
+            # on REINFORCE (just like add_position already does).
+            rebalance = _pru_compute_rebalance(
+                positions, st.session_state[draft_key], preview_prices,
             )
-            proj_cash_drifted = (
-                initial_cash_after / total_nav_after * 100
-                if total_nav_after > 0 else 0.0
-            )
+            if rebalance is None:
+                st.error("Targets unsolvable (over-allocation). Reduce some New % values.")
+                st.stop()
+            proj_drifted      = rebalance["projected_drifted"]
+            proj_cash_drifted = rebalance["cash_drifted_after"]
 
             # NAV basis for $ estimate
             nav_basis   = globals().get("nav_total") or _read_initial_capital(_pid)
@@ -1745,36 +1867,56 @@ with tab_moves:
             with cbc2:
                 if st.button("Confirm & execute moves", type="primary", key="moves_commit"):
                     fresh_prices = get_prices(move_tickers)
+                    # PRU model: recompute auto-conversion at commit time with fresh prices
+                    commit_rebalance = _pru_compute_rebalance(
+                        positions, st.session_state[draft_key], fresh_prices,
+                    )
+                    if commit_rebalance is None:
+                        st.error("Targets unsolvable at commit. Aborted.")
+                        st.stop()
                     errors   = []
                     executed = 0
-                    for m in moves:
-                        px = (fresh_prices.get(m["ticker"]) or {}).get("price")
+                    for m in commit_rebalance["moves"]:
+                        px = (fresh_prices.get(m["ticker"]) or {}).get("price") or m.get("current_price")
                         if not px:
                             errors.append(f"{m['ticker']}: no live price")
                             continue
                         try:
-                            if m["action_type"] == "CLOSE":
+                            action = m["action"]
+                            if action == "NOOP":
+                                continue
+                            elif action == "CLOSE":
                                 close_position(m["id"], px, today_str,
                                                reason or "Move from cockpit")
-                            elif m["action_type"] in ("REDUCE", "REINFORCE"):
-                                # Rebalance: set target weight & reset entry_price to today's
-                                # so drifted ≈ new_weight immediately after commit.
-                                set_position_weight(
-                                    m["id"], m["new_weight"], px, today_str,
-                                    perceived_delta=m["delta"],
-                                    reason=reason or "Move from cockpit",
-                                )
-                            elif m["action_type"] == "BUY":
+                            elif action == "REDUCE":
+                                # PRU semantics: entry_price preserved, trim DB by delta
+                                trim_position(m["id"], abs(m["delta_db"]), px, today_str,
+                                              reason or "Move from cockpit")
+                            elif action == "REINFORCE":
+                                # PRU averaging via add_position with the DB-weight delta
                                 add_position({
                                     "ticker":       m["ticker"], "name": m["name"], "isin": None,
                                     "layer":        m["layer"],
-                                    "weight":       m["new_weight"],
+                                    "weight":       m["delta_db"],
                                     "entry_price":  px,
                                     "entry_date":   today_str,
                                     "sector":       m["sector"],
                                     "geography":    m["geography"],
                                     "thematic":     m["thematic"],
-                                    "thesis_short": m.get("thesis_short", ""),
+                                    "thesis_short": "",
+                                    "is_active":    True,
+                                }, portfolio_id=_pid)
+                            elif action == "BUY":
+                                add_position({
+                                    "ticker":       m["ticker"], "name": m["name"], "isin": None,
+                                    "layer":        m["layer"],
+                                    "weight":       m["new_db"],
+                                    "entry_price":  px,
+                                    "entry_date":   today_str,
+                                    "sector":       m["sector"],
+                                    "geography":    m["geography"],
+                                    "thematic":     m["thematic"],
+                                    "thesis_short": "",
                                     "is_active":    True,
                                 }, portfolio_id=_pid)
                             executed += 1
