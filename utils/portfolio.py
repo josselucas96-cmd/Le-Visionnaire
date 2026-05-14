@@ -417,7 +417,16 @@ Always conduct your own due diligence before making any investment decision.
         p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
     current_cash_pct = round(initial_cash / total_current_value * 100, 1)
 
-    chart_start = min(p["entry_date"] for p in positions if p.get("entry_date"))
+    # Chart starts at T-1 (last weekday before inception) so benchmarks
+    # naturally normalize to the same anchor as the portfolio (which has
+    # a CASH row at T-1 in daily_holdings = $initial_capital = base 100).
+    def _previous_trading_day(d_str):
+        c = pd.Timestamp(d_str) - pd.Timedelta(days=1)
+        while c.weekday() >= 5:  # Sat=5, Sun=6
+            c -= pd.Timedelta(days=1)
+        return c.date().isoformat()
+
+    chart_start = _previous_trading_day(inception_date)
     benchmarks  = tuple(b for b in [bench_pri, bench_sec] if b)
     history     = get_history(tickers, chart_start, benchmarks=benchmarks)
 
@@ -452,22 +461,10 @@ Always conduct your own due diligence before making any investment decision.
         last_updated = "—"
 
     # Read NAV series from daily_holdings (real fund accounting).
-    # The series naturally starts at 100 on T-1 (the CASH anchor row).
+    # The series naturally starts at 100 on T-1 (the CASH anchor row in DB).
+    # Benchmarks also start at 100 on T-1 because history is fetched from T-1
+    # and primary_index/secondary_index are normalized to raw.iloc[0] = close[T-1].
     port_index = get_nav_from_holdings(portfolio_id)
-
-    # Benchmarks start their normalization at the first day of history (= inception
-    # close usually). To align visually with the portfolio's T-1 anchor, prepend
-    # a 100 anchor at T-1 for benchmarks too.
-    if port_index is not None and not port_index.empty:
-        t_minus_1 = port_index.index[0]
-        if primary_index is not None and t_minus_1 not in primary_index.index:
-            primary_index = pd.concat(
-                [pd.Series([100.0], index=[t_minus_1]), primary_index]
-            ).sort_index()
-        if secondary_index is not None and t_minus_1 not in secondary_index.index:
-            secondary_index = pd.concat(
-                [pd.Series([100.0], index=[t_minus_1]), secondary_index]
-            ).sort_index()
 
     # Use chart's base-100 method for the headline metric (consistent with chart)
     if port_index is not None and not port_index.empty:
