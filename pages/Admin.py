@@ -19,6 +19,7 @@ from utils.market import (
     get_prices, get_fx_to_usd,
     get_valuation_fundamentals, get_bitcoin_price, BTC_HOLDINGS_NAKAMOTO,
 )
+from utils.nav_history import get_nav_series, get_nav_from_holdings
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
 
 st.set_page_config(page_title="Cockpit | Admin", page_icon=SPECULA_ICON, layout="wide")
@@ -159,7 +160,6 @@ with st.expander("🔬 NAV Model Comparison (legacy vs new)", expanded=False):
         "(build_portfolio_index → nav_history). Public pages still use legacy "
         "until Phase D cutover."
     )
-    from utils.nav_history import get_nav_series, get_nav_from_holdings
     _rows_compare = []
     for _pid_cmp in ("visionnaire", "batisseur", "nakamoto"):
         _old = get_nav_series(_pid_cmp)
