@@ -24,7 +24,13 @@ from utils.metrics import build_portfolio_index
 
 @st.cache_data(ttl=120)
 def get_nav_series(portfolio_id: str) -> pd.Series:
-    """Read NAV history for this portfolio as a date-indexed Series."""
+    """[LEGACY] Read NAV history for this portfolio (cost-basis chart formula).
+
+    Source: `nav_history` table written by `build_portfolio_index`. Has known
+    quirks (PRU vs yfinance-close discrepancy at inception, PRU averaging
+    on reinforces shifts the chart). Will be replaced by `get_nav_from_holdings`
+    in Phase D.
+    """
     sb = get_client()
     rows = (
         sb.table("nav_history")
@@ -39,6 +45,42 @@ def get_nav_series(portfolio_id: str) -> pd.Series:
     return pd.Series(
         {pd.Timestamp(r["date"]): float(r["nav_value"]) for r in rows}
     ).sort_index()
+
+
+@st.cache_data(ttl=120)
+def get_nav_from_holdings(portfolio_id: str) -> pd.Series:
+    """[NEW MODEL] Read NAV history from daily_holdings (real fund accounting).
+
+    Sums `value` across all rows (positions + cash) per date, returns a base-100
+    series normalized to the T-1 anchor row (where NAV = $initial_capital and
+    portfolio holds only cash, pre-investment).
+
+    This is NAV-neutral on rebalances by construction (shares × price + cash$).
+    No PRU dependency, no cost-basis artifacts. Audit-friendly: any user can
+    `SELECT SUM(value) FROM daily_holdings WHERE portfolio_id=X AND date=Y`
+    and reproduce the same number.
+    """
+    sb = get_client()
+    rows = (
+        sb.table("daily_holdings")
+        .select("date, value")
+        .eq("portfolio_id", portfolio_id)
+        .execute()
+        .data
+    )
+    if not rows:
+        return pd.Series(dtype=float)
+
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df["value"] = df["value"].astype(float)
+    nav_per_day = df.groupby("date")["value"].sum().sort_index()
+    if nav_per_day.empty:
+        return pd.Series(dtype=float)
+    base = nav_per_day.iloc[0]  # T-1 anchor = $initial_capital
+    if base <= 0:
+        return pd.Series(dtype=float)
+    return nav_per_day / base * 100
 
 
 def lazy_write_nav(portfolio_id: str, positions: list, cash_units: float,

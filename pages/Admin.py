@@ -151,6 +151,37 @@ def _read_initial_capital(pid):
 
 st.divider()
 
+# ── NAV model comparison (Phase C dual-read, Admin-only) ─────────────────────
+with st.expander("🔬 NAV Model Comparison (legacy vs new)", expanded=False):
+    st.caption(
+        "Dual-read panel for validating the new real-$ fund accounting model "
+        "(daily_holdings) against the legacy cost-basis chart formula "
+        "(build_portfolio_index → nav_history). Public pages still use legacy "
+        "until Phase D cutover."
+    )
+    from utils.nav_history import get_nav_series, get_nav_from_holdings
+    _rows_compare = []
+    for _pid_cmp in ("visionnaire", "batisseur", "nakamoto"):
+        _old = get_nav_series(_pid_cmp)
+        _new = get_nav_from_holdings(_pid_cmp)
+        _old_perf = float(_old.iloc[-1] - 100) if not _old.empty else None
+        _new_perf = float(_new.iloc[-1] - 100) if not _new.empty else None
+        _rows_compare.append({
+            "Portfolio":    _pid_cmp,
+            "Old (legacy)": f"{_old_perf:+.2f}%" if _old_perf is not None else "—",
+            "New (real-$)": f"{_new_perf:+.2f}%" if _new_perf is not None else "—",
+            "Δ (pp)":       f"{(_new_perf - _old_perf):+.2f}" if (_old_perf is not None and _new_perf is not None) else "—",
+            "Rows in DB":   len(_new),
+        })
+    st.dataframe(pd.DataFrame(_rows_compare), use_container_width=True, hide_index=True)
+    st.caption(
+        "Δ explains: new model is NAV-neutral on rebalances (no PRU averaging "
+        "artifacts) and uses yfinance close at T-1 as a clean base. Larger Δ "
+        "on Bâtisseur/Nakamoto reflects the PRU-vs-close gap at inception day."
+    )
+
+st.divider()
+
 # ── Performance snapshot ──────────────────────────────────────────────────────
 with st.expander("Performance", expanded=False):
     import plotly.graph_objects as go
