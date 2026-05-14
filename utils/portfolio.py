@@ -18,7 +18,7 @@ from utils.metrics import (
     annualized_volatility, var_95, correlation_matrix, avg_pairwise_correlation,
     monthly_returns_table,
 )
-from utils.nav_history import lazy_write_nav, get_nav_series
+from utils.nav_history import lazy_write_holdings, get_nav_from_holdings
 from utils.research import get_research
 from utils.nav import render_nav
 from utils.theme import (
@@ -430,12 +430,13 @@ Always conduct your own due diligence before making any investment decision.
     primary_index  = None
     secondary_perf = None
     secondary_index = None
-    cash_units     = float(pf.get("cash_units") or 0)
+    cash_amount    = float(pf.get("cash_amount") or 0)
 
     if not history.empty:
-        # NAV snapshot — frozen daily values in `nav_history`. The chart
-        # reads from the DB; future moves never recompute past days.
-        lazy_write_nav(portfolio_id, positions, cash_units, history)
+        # NEW MODEL — fund accounting (Phase D cutover).
+        # Refreshes today's daily_holdings row with current shares & prices.
+        # Past days are immutable (frozen at write time).
+        lazy_write_holdings(portfolio_id, positions, cash_amount, history)
         if bench_pri and bench_pri in history.columns:
             raw = history[bench_pri].dropna()
             if not raw.empty:
@@ -450,26 +451,22 @@ Always conduct your own due diligence before making any investment decision.
     else:
         last_updated = "—"
 
-    port_index = get_nav_series(portfolio_id)
+    # Read NAV series from daily_holdings (real fund accounting).
+    # The series naturally starts at 100 on T-1 (the CASH anchor row).
+    port_index = get_nav_from_holdings(portfolio_id)
 
-    # Inception anchor: prepend NAV = 100 the day before inception_date so the
-    # chart visually starts at base 100. Represents "capital deposited the day
-    # before market open"; the jump on inception day captures the intraday
-    # difference between PRU and close. Headline perf (iloc[-1] - 100) is
-    # unaffected. Same anchor applied to benchmarks for visual symmetry.
+    # Benchmarks start their normalization at the first day of history (= inception
+    # close usually). To align visually with the portfolio's T-1 anchor, prepend
+    # a 100 anchor at T-1 for benchmarks too.
     if port_index is not None and not port_index.empty:
-        anchor_date = pd.Timestamp(inception_date) - pd.Timedelta(days=1)
-        if anchor_date not in port_index.index:
-            port_index = pd.concat(
-                [pd.Series([100.0], index=[anchor_date]), port_index]
-            ).sort_index()
-        if primary_index is not None and anchor_date not in primary_index.index:
+        t_minus_1 = port_index.index[0]
+        if primary_index is not None and t_minus_1 not in primary_index.index:
             primary_index = pd.concat(
-                [pd.Series([100.0], index=[anchor_date]), primary_index]
+                [pd.Series([100.0], index=[t_minus_1]), primary_index]
             ).sort_index()
-        if secondary_index is not None and anchor_date not in secondary_index.index:
+        if secondary_index is not None and t_minus_1 not in secondary_index.index:
             secondary_index = pd.concat(
-                [pd.Series([100.0], index=[anchor_date]), secondary_index]
+                [pd.Series([100.0], index=[t_minus_1]), secondary_index]
             ).sort_index()
 
     # Use chart's base-100 method for the headline metric (consistent with chart)
@@ -495,6 +492,14 @@ Always conduct your own due diligence before making any investment decision.
         st.caption(
             f"Inception {inception_date} · {len(positions)} positions · "
             f"Benchmark: {bench_pri_lbl}"
+        )
+        st.markdown(
+            "<div style='font-size:0.7rem; color:#555; margin-top:-0.4rem; line-height:1.4;'>"
+            "* Performance calculated from the previous trading day's close, "
+            "simulating capital deposited the evening before, ready to invest "
+            "at next session's open."
+            "</div>",
+            unsafe_allow_html=True,
         )
     with hcol2:
         st.markdown(

@@ -83,6 +83,65 @@ def get_nav_from_holdings(portfolio_id: str) -> pd.Series:
     return nav_per_day / base * 100
 
 
+def lazy_write_holdings(portfolio_id: str, positions: list, cash_amount: float,
+                        history: pd.DataFrame) -> int:
+    """[NEW MODEL] Upsert ONLY today's row in daily_holdings (per ticker + CASH).
+
+    Reads `positions.shares` (current state, post-any-moves) and `portfolios.cash_amount`,
+    multiplies by today's yfinance close (when available), and upserts one row
+    per active ticker plus one CASH row.
+
+    Past days are NEVER touched. If today's close not yet available in yfinance,
+    no-op.
+
+    Returns the number of rows upserted (~N+1 if today written, else 0).
+    """
+    if history.empty or not positions:
+        return 0
+    from datetime import date as _date
+    today = _date.today()
+    today_ts = pd.Timestamp(today)
+    if today_ts not in history.index:
+        return 0
+
+    sb = get_client()
+    rows = []
+    for p in positions:
+        ticker = p.get("ticker")
+        shares = float(p.get("shares") or 0)
+        if shares <= 0.0001 or not ticker:
+            continue
+        if ticker not in history.columns:
+            continue
+        price = history.loc[today_ts, ticker]
+        if pd.isna(price):
+            continue
+        price_f = float(price)
+        rows.append({
+            "portfolio_id": portfolio_id,
+            "date":         today.isoformat(),
+            "ticker":       ticker,
+            "shares":       round(shares, 8),
+            "price":        round(price_f, 4),
+            "value":        round(shares * price_f, 2),
+        })
+    rows.append({
+        "portfolio_id": portfolio_id,
+        "date":         today.isoformat(),
+        "ticker":       "CASH",
+        "shares":       round(float(cash_amount or 0), 2),
+        "price":        1.0,
+        "value":        round(float(cash_amount or 0), 2),
+    })
+
+    if rows:
+        sb.table("daily_holdings").upsert(
+            rows, on_conflict="portfolio_id,date,ticker"
+        ).execute()
+        get_nav_from_holdings.clear()
+    return len(rows)
+
+
 def lazy_write_nav(portfolio_id: str, positions: list, cash_units: float,
                    history: pd.DataFrame) -> int:
     """Upsert ONLY today's row in nav_history. Past days are NEVER touched.
