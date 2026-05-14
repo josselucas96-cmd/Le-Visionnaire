@@ -466,6 +466,20 @@ Always conduct your own due diligence before making any investment decision.
     # and primary_index/secondary_index are normalized to raw.iloc[0] = close[T-1].
     port_index = get_nav_from_holdings(portfolio_id)
 
+    # Align port_index end date with benchmarks' last available date. Without
+    # this, today's port_index row (written via lazy_write_holdings using
+    # intraday yfinance quotes) can appear even when yfinance hasn't yet
+    # delivered today's close for the index (^NDX, ^GSPC, BTC-USD...), making
+    # the portfolio line visually 1 day longer than the benchmark line.
+    _bench_end_dates = []
+    if primary_index is not None and not primary_index.empty:
+        _bench_end_dates.append(primary_index.index[-1])
+    if secondary_index is not None and not secondary_index.empty:
+        _bench_end_dates.append(secondary_index.index[-1])
+    if _bench_end_dates and port_index is not None and not port_index.empty:
+        _common_end = min(_bench_end_dates)
+        port_index = port_index[port_index.index <= _common_end]
+
     # Use chart's base-100 method for the headline metric (consistent with chart)
     if port_index is not None and not port_index.empty:
         portfolio_perf = round(float(port_index.iloc[-1] - 100), 2)
