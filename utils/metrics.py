@@ -5,13 +5,15 @@ import pandas as pd
 def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
     """Reconstruct a base-100 portfolio index from inception.
 
-    Each position is normalized to 100 at the first yfinance close >= its
-    entry_date. This guarantees the chart starts at base 100 by
-    construction. Stored `entry_price` (PRU) is NOT used here — it's
-    consumed separately by the Positions table for `Return %` display
-    (which is a different metric: gain vs cost basis, not vs market base).
+    Each position is normalized to 100 at its stored `entry_price` (PRU) —
+    the real cost basis — so the chart represents "value of $100 invested
+    at PRU prices, evolution over time". Falls back to first yfinance
+    close >= entry_date if PRU is missing.
 
-    Before entry_date the position contributes a flat 100 (no P&L).
+    Note: for portfolios where stored PRU ≠ yfinance close at entry_date,
+    the chart series will start slightly above/below 100 visually. This
+    is a known trade-off — the headline perf (`iloc[-1] - 100`) reflects
+    the gain since cost basis, which is what matters economically.
     """
     if history.empty or not positions:
         return pd.Series(dtype=float)
@@ -40,11 +42,15 @@ def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
         if after.empty:
             continue
 
-        # Chart base = first available yfinance close >= entry_date.
-        # Guarantees portfolio(inception) = 100 by construction.
-        base_price = float(after.iloc[0])
+        # Chart base = stored entry_price (PRU). Fall back to first
+        # yfinance close >= entry_date if PRU missing.
+        entry_price = p.get("entry_price")
+        try:
+            base_price = float(entry_price) if entry_price else float(after.iloc[0])
+        except (TypeError, ValueError):
+            base_price = float(after.iloc[0])
         if base_price <= 0:
-            continue
+            base_price = float(after.iloc[0])
 
         normalized_after = after / base_price * 100
 
@@ -58,9 +64,6 @@ def build_portfolio_index(history: pd.DataFrame, positions: list) -> pd.Series:
         portfolio += full * w
         contributed = True
 
-    # Degenerate case: no position has data after its entry_date.
-    # E.g. inception = today and yfinance hasn't returned today's data yet.
-    # Return an empty Series so the caller can detect "no data" and skip rendering.
     if not contributed:
         return pd.Series(dtype=float)
 
