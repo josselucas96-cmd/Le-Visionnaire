@@ -1574,7 +1574,50 @@ with tab_moves:
             move_tickers = tuple(m["ticker"] for m in moves)
             preview_prices = get_prices(move_tickers)
 
-            # NAV basis for $ estimate (best-effort; falls back to initial capital)
+            # ── Project the post-rebalance state ──────────────────────────────
+            # Touched positions reset entry_price to today, so contribution = new_weight.
+            # Untouched positions keep their existing drift (current_value preserved).
+            # New positions: contribution = new_weight. Closed: removed from sum.
+            # The "After %" column then equals contribution / total_NAV × 100 — this
+            # is what the user will actually see in Active Positions after commit.
+            positions_by_id = {p["id"]: p for p in positions if p.get("id") is not None}
+            proj_contribs   = {}
+            proj_db_sum     = 0.0
+            for d in st.session_state[draft_key]:
+                new_w = d["new_weight"]
+                if d["id"] is not None:
+                    orig = positions_by_id.get(d["id"])
+                    if orig is None:
+                        continue
+                    if new_w == 0:
+                        continue  # CLOSE — drops out
+                    if abs(new_w - d["current_weight"]) > 0.001:
+                        # Touched (rebalance): entry resets to today → contrib = new_w
+                        proj_contribs[d["ticker"]] = new_w
+                        proj_db_sum += new_w
+                    else:
+                        # Untouched: drift preserved (use precomputed current_value)
+                        proj_contribs[d["ticker"]] = float(
+                            orig.get("current_value") or orig["weight"]
+                        )
+                        proj_db_sum += float(orig["weight"])
+                else:
+                    if new_w > 0:
+                        proj_contribs[d["ticker"]] = new_w
+                        proj_db_sum += new_w
+
+            initial_cash_after = max(0.0, 100.0 - proj_db_sum)
+            total_nav_after    = sum(proj_contribs.values()) + initial_cash_after
+            proj_drifted = (
+                {t: c / total_nav_after * 100 for t, c in proj_contribs.items()}
+                if total_nav_after > 0 else {}
+            )
+            proj_cash_drifted = (
+                initial_cash_after / total_nav_after * 100
+                if total_nav_after > 0 else 0.0
+            )
+
+            # NAV basis for $ estimate
             nav_basis   = globals().get("nav_total") or _read_initial_capital(_pid)
             cash_before = globals().get(
                 "current_cash_pct",
@@ -1584,17 +1627,22 @@ with tab_moves:
             total_cash_flow = 0.0
             rows_html = []
             for m in moves:
-                px      = (preview_prices.get(m["ticker"]) or {}).get("price")
-                px_str  = f"${px:.2f}" if px else "—"
-                usd_amt = abs(m["delta"]) / 100.0 * nav_basis if nav_basis else 0.0
+                px        = (preview_prices.get(m["ticker"]) or {}).get("price")
+                px_str    = f"${px:.2f}" if px else "—"
+                usd_amt   = abs(m["delta"]) / 100.0 * nav_basis if nav_basis else 0.0
                 cash_sign = -1 if m["delta"] > 0 else 1
                 total_cash_flow += cash_sign * usd_amt
                 delta_color = "#00D09C" if m["delta"] > 0 else "#FF4B4B"
+                after_pct = proj_drifted.get(m["ticker"])
+                after_str = f"{after_pct:.2f}%" if after_pct is not None else "—"
+                cur_str   = f"{m['current_weight']:.2f}%"
                 rows_html.append(
                     f"<tr>"
                     f"<td style='padding:6px 12px'>{m['action']}</td>"
                     f"<td style='padding:6px 12px'><b>{m['ticker']}</b></td>"
+                    f"<td style='padding:6px 12px; text-align:right'>{cur_str}</td>"
                     f"<td style='padding:6px 12px; text-align:right; color:{delta_color}'>{m['delta']:+.2f}%</td>"
+                    f"<td style='padding:6px 12px; text-align:right; font-weight:600'>{after_str}</td>"
                     f"<td style='padding:6px 12px; text-align:right'>≈ ${usd_amt:,.0f}</td>"
                     f"<td style='padding:6px 12px; text-align:right'>{px_str}</td>"
                     f"</tr>"
@@ -1604,7 +1652,9 @@ with tab_moves:
                 "<thead><tr style='color:#888; border-bottom:1px solid rgba(255,255,255,0.1)'>"
                 "<th style='padding:6px 12px; text-align:left'>Action</th>"
                 "<th style='padding:6px 12px; text-align:left'>Ticker</th>"
-                "<th style='padding:6px 12px; text-align:right'>Δ %</th>"
+                "<th style='padding:6px 12px; text-align:right'>Current %</th>"
+                "<th style='padding:6px 12px; text-align:right'>Δ typed</th>"
+                "<th style='padding:6px 12px; text-align:right'>After %</th>"
                 "<th style='padding:6px 12px; text-align:right'>USD (est.)</th>"
                 "<th style='padding:6px 12px; text-align:right'>Live Price</th>"
                 "</tr></thead><tbody>"
@@ -1615,9 +1665,71 @@ with tab_moves:
 
             st.caption(
                 f"Net cash flow: **${total_cash_flow:+,.0f}** · "
-                f"Cash: **{cash_before:.2f}% → {cash_proj:.2f}%** · "
-                f"Invested: **{(100 - cash_before):.2f}% → {(100 - cash_proj):.2f}%**"
+                f"Cash (drifted): **{cash_before:.2f}% → {proj_cash_drifted:.2f}%** · "
+                f"Invested: **{(100 - cash_before):.2f}% → {(100 - proj_cash_drifted):.2f}%**"
             )
+
+            # ── Full projected portfolio (all positions, sorted by After %) ──
+            with st.expander("📊  Full projected portfolio (after commit)", expanded=False):
+                full_rows = []
+                draft_by_ticker = {d["ticker"]: d for d in st.session_state[draft_key]}
+                # Sort by projected drifted weight descending
+                sorted_tickers = sorted(
+                    proj_drifted.keys(),
+                    key=lambda t: -proj_drifted[t],
+                )
+                for tkr in sorted_tickers:
+                    d = draft_by_ticker.get(tkr)
+                    if d is None:
+                        continue
+                    after_pct   = proj_drifted[tkr]
+                    current_pct = d["current_weight"]
+                    delta       = after_pct - current_pct
+                    delta_color = (
+                        "#00D09C" if delta > 0.005
+                        else "#FF4B4B" if delta < -0.005
+                        else "#888"
+                    )
+                    is_new = d["id"] is None
+                    tag = " <span style='color:#FCA5A5; font-size:0.75rem'>NEW</span>" if is_new else ""
+                    full_rows.append(
+                        f"<tr>"
+                        f"<td style='padding:4px 12px'><b>{tkr}</b>{tag}</td>"
+                        f"<td style='padding:4px 12px; color:#aaa'>{d['name']}</td>"
+                        f"<td style='padding:4px 12px; color:#888'>{d['layer']}</td>"
+                        f"<td style='padding:4px 12px; text-align:right'>{current_pct:.2f}%</td>"
+                        f"<td style='padding:4px 12px; text-align:right; font-weight:600'>{after_pct:.2f}%</td>"
+                        f"<td style='padding:4px 12px; text-align:right; color:{delta_color}'>{delta:+.2f}%</td>"
+                        f"</tr>"
+                    )
+                # Cash row
+                cash_delta = proj_cash_drifted - cash_before
+                cash_color = "#00D09C" if cash_delta > 0.005 else "#FF4B4B" if cash_delta < -0.005 else "#888"
+                full_rows.append(
+                    f"<tr style='border-top:1px solid rgba(255,255,255,0.15)'>"
+                    f"<td style='padding:4px 12px; font-style:italic'>CASH</td>"
+                    f"<td style='padding:4px 12px; color:#aaa; font-style:italic'>Cash USD</td>"
+                    f"<td style='padding:4px 12px; color:#888'>—</td>"
+                    f"<td style='padding:4px 12px; text-align:right'>{cash_before:.2f}%</td>"
+                    f"<td style='padding:4px 12px; text-align:right; font-weight:600'>{proj_cash_drifted:.2f}%</td>"
+                    f"<td style='padding:4px 12px; text-align:right; color:{cash_color}'>{cash_delta:+.2f}%</td>"
+                    f"</tr>"
+                )
+                full_table = (
+                    "<table style='width:100%; border-collapse:collapse'>"
+                    "<thead><tr style='color:#888; border-bottom:1px solid rgba(255,255,255,0.1)'>"
+                    "<th style='padding:6px 12px; text-align:left'>Ticker</th>"
+                    "<th style='padding:6px 12px; text-align:left'>Name</th>"
+                    "<th style='padding:6px 12px; text-align:left'>Layer</th>"
+                    "<th style='padding:6px 12px; text-align:right'>Current %</th>"
+                    "<th style='padding:6px 12px; text-align:right'>After %</th>"
+                    "<th style='padding:6px 12px; text-align:right'>Δ</th>"
+                    "</tr></thead><tbody>"
+                    + "".join(full_rows)
+                    + "</tbody></table>"
+                )
+                st.markdown(full_table, unsafe_allow_html=True)
+
             st.caption("⚠️ Prices will be re-fetched at commit (final entry/exit price = live at commit time).")
 
             reason = st.text_input(
