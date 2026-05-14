@@ -399,8 +399,14 @@ Always conduct your own due diligence before making any investment decision.
     total_w = sum(p["weight"] for p in valid) or 1
     portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
 
-    # Dynamic weights
-    initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
+    # Dynamic weights. `initial_cash` is read from portfolios.cash_units when
+    # populated (PR-1+); we fall back to the legacy `100 - Σ weights` derivation
+    # so the display stays correct for portfolios that haven't been backfilled.
+    _db_cash = pf.get("cash_units")
+    if _db_cash is not None:
+        initial_cash = max(0.0, float(_db_cash))
+    else:
+        initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
     for p in positions:
         if p.get("current_price") and p.get("entry_price"):
             p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])

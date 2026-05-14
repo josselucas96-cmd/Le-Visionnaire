@@ -43,18 +43,21 @@ def get_nav_series(portfolio_id: str) -> pd.Series:
 
 def lazy_write_nav(portfolio_id: str, positions: list, cash_units: float,
                    history: pd.DataFrame) -> int:
-    """Fill any missing NAV rows up to the latest day in `history`.
+    """Fill missing NAV rows + always refresh the latest day.
 
     First call (empty table): backfills inception → today by computing the
-    legacy buy-and-hold index with current positions. The resulting series
-    matches what `build_portfolio_index` returns for the same inputs.
+    legacy buy-and-hold index with current positions.
 
-    Routine call: 0 or 1 row inserted.
+    Routine call:
+    - Past days already in DB are FROZEN — never recomputed (immutability).
+    - The latest day in `chart_series` is upserted so post-move state is
+      reflected within the same trading day. As soon as the next trading
+      day arrives, today becomes "past" and freezes.
 
     `cash_units` is accepted for signature compatibility but unused — the
     legacy index ignores cash and starts at base 100 by construction.
 
-    Returns the number of rows inserted.
+    Returns the number of rows written (insert + upsert).
     """
     if history.empty or not positions:
         return 0
@@ -73,12 +76,18 @@ def lazy_write_nav(portfolio_id: str, positions: list, cash_units: float,
     )
     existing_dates = {r["date"] for r in existing}
 
+    latest_ts   = chart_series.index[-1]
+    latest_date = latest_ts.date().isoformat()
+    latest_nav  = chart_series.iloc[-1]
+
     rows_to_insert = []
     for ts, nav in chart_series.items():
         date_str = ts.date().isoformat()
-        if date_str in existing_dates:
-            continue
         if pd.isna(nav):
+            continue
+        if date_str == latest_date:
+            continue  # latest is upserted below
+        if date_str in existing_dates:
             continue
         rows_to_insert.append({
             "portfolio_id": portfolio_id,
@@ -86,11 +95,24 @@ def lazy_write_nav(portfolio_id: str, positions: list, cash_units: float,
             "nav_value":    round(float(nav), 6),
         })
 
-    if not rows_to_insert:
-        return 0
+    written = 0
+    if rows_to_insert:
+        CHUNK = 100
+        for i in range(0, len(rows_to_insert), CHUNK):
+            sb.table("nav_history").insert(rows_to_insert[i:i + CHUNK]).execute()
+        written += len(rows_to_insert)
 
-    CHUNK = 100
-    for i in range(0, len(rows_to_insert), CHUNK):
-        sb.table("nav_history").insert(rows_to_insert[i:i + CHUNK]).execute()
-    get_nav_series.clear()
-    return len(rows_to_insert)
+    if pd.notna(latest_nav):
+        sb.table("nav_history").upsert(
+            {
+                "portfolio_id": portfolio_id,
+                "date":         latest_date,
+                "nav_value":    round(float(latest_nav), 6),
+            },
+            on_conflict="portfolio_id,date",
+        ).execute()
+        written += 1
+
+    if written:
+        get_nav_series.clear()
+    return written
