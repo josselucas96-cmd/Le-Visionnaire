@@ -612,7 +612,7 @@ Always conduct your own due diligence before making any investment decision.
             "name":           "Name",
             "layer":          "Layer",
             "current_weight": "Alloc.",
-            "entry_price":    "Entry",
+            "entry_price":    "PRU",
             "current_price":  "Price",
             "perf_pct":       "Total Return",
             "change_today":   "Today %",
@@ -633,14 +633,14 @@ Always conduct your own due diligence before making any investment decision.
                 else "" for v in col
             ]
 
-        _numeric_cols = {"Alloc.", "Entry", "Price", "Total Return", "Today %"}
+        _numeric_cols = {"Alloc.", "PRU", "Price", "Total Return", "Today %"}
         empty_row = pd.DataFrame([{
             c: None if c in _numeric_cols else "" for c in display.columns
         }])
         _cash_row = {
             "Ticker": "CASH", "Name": "Cash USD",
             "Alloc.": current_cash_pct,
-            "Entry": None, "Price": None,
+            "PRU": None, "Price": None,
             "Total Return": None, "Today %": None,
             "Sector": "—", "Geography": "USD", "Thematic": "—",
         }
@@ -651,7 +651,7 @@ Always conduct your own due diligence before making any investment decision.
 
         styled = display_full.style.format({
             "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
-            "Entry":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
+            "PRU":          lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
             "Price":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
             "Total Return": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
             "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
@@ -717,7 +717,7 @@ Always conduct your own due diligence before making any investment decision.
         if current_cash_pct > 0:
             cash_row = pd.DataFrame([{
                 "Ticker": "CASH", "Name": "Cash (USD)", "Layer": "Cash", "Alloc.": current_cash_pct,
-                "Entry": None, "Price": None, "Total Return": None, "Today %": None,
+                "PRU": None, "Price": None, "Total Return": None, "Today %": None,
                 "Sector": "Cash/Equivalent", "Geography": "USD",
                 "Thematic": "Cash/Equivalent",
             }])
