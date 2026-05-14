@@ -452,6 +452,26 @@ Always conduct your own due diligence before making any investment decision.
 
     port_index = get_nav_series(portfolio_id)
 
+    # Inception anchor: prepend NAV = 100 the day before inception_date so the
+    # chart visually starts at base 100. Represents "capital deposited the day
+    # before market open"; the jump on inception day captures the intraday
+    # difference between PRU and close. Headline perf (iloc[-1] - 100) is
+    # unaffected. Same anchor applied to benchmarks for visual symmetry.
+    if port_index is not None and not port_index.empty:
+        anchor_date = pd.Timestamp(inception_date) - pd.Timedelta(days=1)
+        if anchor_date not in port_index.index:
+            port_index = pd.concat(
+                [pd.Series([100.0], index=[anchor_date]), port_index]
+            ).sort_index()
+        if primary_index is not None and anchor_date not in primary_index.index:
+            primary_index = pd.concat(
+                [pd.Series([100.0], index=[anchor_date]), primary_index]
+            ).sort_index()
+        if secondary_index is not None and anchor_date not in secondary_index.index:
+            secondary_index = pd.concat(
+                [pd.Series([100.0], index=[anchor_date]), secondary_index]
+            ).sort_index()
+
     # Use chart's base-100 method for the headline metric (consistent with chart)
     if port_index is not None and not port_index.empty:
         portfolio_perf = round(float(port_index.iloc[-1] - 100), 2)
