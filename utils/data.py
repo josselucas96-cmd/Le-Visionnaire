@@ -31,7 +31,8 @@ def get_client():
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 def _adjust_cash_units(sb, portfolio_id: str, delta: float) -> None:
-    """Add `delta` to portfolios.cash_units atomically (read-modify-write)."""
+    """Add `delta` to portfolios.cash_units atomically (read-modify-write).
+    [LEGACY] Cost-basis cash tracking in 100-base. Kept for backward compat."""
     row = (
         sb.table("portfolios")
         .select("cash_units")
@@ -47,6 +48,40 @@ def _adjust_cash_units(sb, portfolio_id: str, delta: float) -> None:
     }).eq("id", portfolio_id).execute()
 
 
+def _adjust_cash_amount(sb, portfolio_id: str, delta: float) -> None:
+    """Add `delta` to portfolios.cash_amount atomically (read-modify-write).
+    [NEW MODEL] Real $$ cash tracking. Source of truth for fund accounting."""
+    row = (
+        sb.table("portfolios")
+        .select("cash_amount")
+        .eq("id", portfolio_id)
+        .execute()
+        .data
+    )
+    if not row:
+        return
+    old = float(row[0].get("cash_amount") or 0)
+    sb.table("portfolios").update({
+        "cash_amount": round(old + delta, 2),
+    }).eq("id", portfolio_id).execute()
+
+
+def _get_initial_capital(sb, portfolio_id: str) -> float:
+    """Read initial_capital_<pid> setting (fallback to legacy 'initial_capital'
+    for Visionnaire, then default $1M)."""
+    keys = [f"initial_capital_{portfolio_id}"]
+    if portfolio_id == "visionnaire":
+        keys.append("initial_capital")
+    for k in keys:
+        row = sb.table("settings").select("value").eq("key", k).execute().data
+        if row and row[0].get("value"):
+            try:
+                return float(row[0]["value"])
+            except (TypeError, ValueError):
+                continue
+    return 1_000_000.0
+
+
 def _existing_units(row: dict) -> float:
     """Resolve units from a position row. Falls back to weight/entry_price
     when the column was not yet backfilled (defensive)."""
@@ -56,6 +91,19 @@ def _existing_units(row: dict) -> float:
     w = float(row.get("weight") or 0)
     p = float(row.get("entry_price") or 0)
     return (w / p) if p > 0 else 0.0
+
+
+def _existing_shares(row: dict, initial_capital: float) -> float:
+    """Resolve shares from a position row. Falls back to (weight × capital / 100) / PRU
+    when the column was not yet backfilled."""
+    s = row.get("shares")
+    if s is not None and float(s) > 0:
+        return float(s)
+    w = float(row.get("weight") or 0)
+    p = float(row.get("entry_price") or 0)
+    if p <= 0 or w <= 0:
+        return 0.0
+    return (w * initial_capital / 100.0) / p
 
 
 def _now_utc_iso() -> str:
@@ -201,10 +249,11 @@ def upsert_setting(key, value):
 def add_position(data: dict, portfolio_id: str = "visionnaire"):
     sb = get_client()
     data = {**data, "portfolio_id": portfolio_id}
+    initial_capital = _get_initial_capital(sb, portfolio_id)
 
     existing = (
         sb.table("positions")
-        .select("id, weight, entry_price, units")
+        .select("id, weight, entry_price, units, shares")
         .eq("portfolio_id", portfolio_id)
         .eq("ticker", data["ticker"])
         .eq("is_active", True)
@@ -214,20 +263,26 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
     new_w = float(data["weight"])
     new_p = float(data["entry_price"])
     new_units = round(new_w / new_p, 8) if new_p > 0 else 0.0
+    # Real $ cost basis of this addition (cash flowing out of the account)
+    dollar_cost = new_w * initial_capital / 100.0
+    new_shares_added = dollar_cost / new_p if new_p > 0 else 0.0
 
     if existing:
         # REINFORCE — shares-weighted PRU averaging
         ex = existing[0]
         old_w = float(ex["weight"])
         old_units = _existing_units(ex)
+        old_shares = _existing_shares(ex, initial_capital)
         total_w = round(old_w + new_w, 4)
         total_units = round(old_units + new_units, 8)
+        total_shares = round(old_shares + new_shares_added, 8)
         new_pru = round(total_w / total_units, 6) if total_units > 0 else 0.0
 
         update_data = {
             "weight":      total_w,
             "entry_price": new_pru,
             "units":       total_units,
+            "shares":      total_shares,
         }
         new_thesis = (data.get("thesis_short") or "").strip()
         if new_thesis:
@@ -245,7 +300,7 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
         }).execute()
     else:
         # NEW POSITION
-        data = {**data, "units": new_units}
+        data = {**data, "units": new_units, "shares": round(new_shares_added, 8)}
         sb.table("positions").insert(data).execute()
         sb.table("transactions").insert({
             "portfolio_id": portfolio_id,
@@ -258,8 +313,10 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
             "executed_at":  _now_utc_iso(),
         }).execute()
 
-    # Cost of the new exposure leaves cash
+    # Cost of the new exposure leaves cash. cost basis (legacy) == real $ here
+    # because we just bought at the recorded price.
     _adjust_cash_units(sb, portfolio_id, -new_w)
+    _adjust_cash_amount(sb, portfolio_id, -dollar_cost)
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -267,49 +324,69 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float,
                   exit_date: str, reason: str):
     sb = get_client()
     pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
+    portfolio_id = pos.get("portfolio_id", "visionnaire")
+    initial_capital = _get_initial_capital(sb, portfolio_id)
+
     old_w = float(pos["weight"])
     new_w = round(old_w - weight_sold, 4)
     old_units = _existing_units(pos)
     # Proportional unit reduction → PRU intact
     new_units = round(old_units * (new_w / old_w), 8) if old_w > 0 else 0.0
-    perf = round((exit_price - pos["entry_price"]) / pos["entry_price"] * 100, 2)
+
+    # Real-$ shares accounting: cost-basis trimmed = weight_sold × capital / 100,
+    # shares sold = that $ ÷ PRU, real proceeds = shares × exit_price.
+    old_shares = _existing_shares(pos, initial_capital)
+    pru = float(pos["entry_price"])
+    shares_sold = (weight_sold * initial_capital / 100.0) / pru if pru > 0 else 0.0
+    new_shares = max(0.0, old_shares - shares_sold)
+    dollar_proceeds = shares_sold * exit_price
+
+    perf = round((exit_price - pru) / pru * 100, 2) if pru > 0 else 0.0
 
     sb.table("positions").update({
         "weight": new_w,
         "units":  new_units,
+        "shares": round(new_shares, 8),
     }).eq("id", position_id).execute()
     sb.table("transactions").insert({
-        "portfolio_id":    pos.get("portfolio_id", "visionnaire"),
+        "portfolio_id":    portfolio_id,
         "date":            exit_date,
         "action":          "TRIM",
         "ticker_out":      pos["ticker"],
         "price_out":       exit_price,
-        "entry_price_out": pos["entry_price"],
+        "entry_price_out": pru,
         "weight_out":      weight_sold,
         "perf_pct":        perf,
         "reason":          reason,
         "executed_at":     _now_utc_iso(),
     }).execute()
 
-    # Cost basis returned to cash (proceeds at cost; realized P&L not booked).
-    portfolio_id = pos.get("portfolio_id", "visionnaire")
+    # cash_units (legacy): cost basis recovered. cash_amount (new): real proceeds.
     _adjust_cash_units(sb, portfolio_id, weight_sold)
+    _adjust_cash_amount(sb, portfolio_id, dollar_proceeds)
     _snapshot_positions(sb, portfolio_id)
 
 
 def close_position(position_id: int, exit_price: float, exit_date: str, reason: str):
     sb = get_client()
     pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
+    portfolio_id = pos.get("portfolio_id", "visionnaire")
+    initial_capital = _get_initial_capital(sb, portfolio_id)
+
     old_w = float(pos["weight"])
-    perf = round((exit_price - pos["entry_price"]) / pos["entry_price"] * 100, 2)
+    pru = float(pos["entry_price"])
+    perf = round((exit_price - pru) / pru * 100, 2) if pru > 0 else 0.0
+
+    old_shares = _existing_shares(pos, initial_capital)
+    dollar_proceeds = old_shares * exit_price
 
     sb.table("transactions").insert({
-        "portfolio_id":    pos.get("portfolio_id", "visionnaire"),
+        "portfolio_id":    portfolio_id,
         "date":            exit_date,
         "action":          "OUT",
         "ticker_out":      pos["ticker"],
         "price_out":       exit_price,
-        "entry_price_out": pos["entry_price"],
+        "entry_price_out": pru,
         "weight_out":      old_w,
         "perf_pct":        perf,
         "reason":          reason,
@@ -320,10 +397,11 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
         "exit_price": exit_price,
         "exit_date":  exit_date,
         "units":      0,
+        "shares":     0,
     }).eq("id", position_id).execute()
 
-    portfolio_id = pos.get("portfolio_id", "visionnaire")
     _adjust_cash_units(sb, portfolio_id, old_w)
+    _adjust_cash_amount(sb, portfolio_id, dollar_proceeds)
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -332,8 +410,14 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
     sb = get_client()
     pos_out = sb.table("positions").select("*").eq("id", out_id).execute().data[0]
     portfolio_id = pos_out.get("portfolio_id", "visionnaire")
+    initial_capital = _get_initial_capital(sb, portfolio_id)
+
     out_w = float(pos_out["weight"])
-    perf = round((out_price - pos_out["entry_price"]) / pos_out["entry_price"] * 100, 2)
+    out_pru = float(pos_out["entry_price"])
+    perf = round((out_price - out_pru) / out_pru * 100, 2) if out_pru > 0 else 0.0
+
+    out_shares = _existing_shares(pos_out, initial_capital)
+    dollar_proceeds = out_shares * out_price
 
     sb.table("transactions").insert({
         "portfolio_id":    portfolio_id,
@@ -345,7 +429,7 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
         "ticker_in":       in_data["ticker"],
         "price_in":        in_data["entry_price"],
         "weight_in":       in_data["weight"],
-        "entry_price_out": pos_out["entry_price"],
+        "entry_price_out": out_pru,
         "perf_pct":        perf,
         "reason":          reason,
         "executed_at":     _now_utc_iso(),
@@ -355,17 +439,24 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
         "exit_price": out_price,
         "exit_date":  date,
         "units":      0,
+        "shares":     0,
     }).eq("id", out_id).execute()
 
     new_w = float(in_data["weight"])
     new_p = float(in_data["entry_price"])
     new_units = round(new_w / new_p, 8) if new_p > 0 else 0.0
+    dollar_cost = new_w * initial_capital / 100.0
+    new_shares = dollar_cost / new_p if new_p > 0 else 0.0
     sb.table("positions").insert({
-        **in_data, "portfolio_id": portfolio_id, "units": new_units,
+        **in_data, "portfolio_id": portfolio_id,
+        "units":  new_units,
+        "shares": round(new_shares, 8),
     }).execute()
 
-    # Net cash flow: cost-basis recovered from out, cost-basis consumed by in
+    # cash_units (legacy): cost-basis recovered − cost-basis consumed.
+    # cash_amount (new): real proceeds out − real cost in.
     _adjust_cash_units(sb, portfolio_id, out_w - new_w)
+    _adjust_cash_amount(sb, portfolio_id, dollar_proceeds - dollar_cost)
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -373,12 +464,12 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
 def apply_dividend_drip(portfolio_id: str, ticker: str, div_per_share: float,
                         reinvest_price: float | None = None,
                         payment_date: str | None = None):
-    """Apply a dividend with automatic reinvestment (DRIP).
+    """Apply a dividend with automatic reinvestment (DRIP). Cash-neutral.
 
-    cash_received = units × div_per_share
-    new units purchased at reinvest_price (default = current PRU)
-    Weight (cost basis) grows by cash_received. Cash position unchanged.
-    PRU recomputes to weight / total_units. Returns the cash_received amount.
+    cash_received$ = shares × div_per_share (real $)
+    new_shares = cash_received$ / reinvest_price
+    PRU recomputes via shares-weighted average. cash_amount + cash_units unchanged.
+    Returns cash_received_dollars.
     """
     sb = get_client()
     pos = (
@@ -393,21 +484,33 @@ def apply_dividend_drip(portfolio_id: str, ticker: str, div_per_share: float,
     if not pos:
         return None
     p = pos[0]
-    old_units = _existing_units(p)
-    if old_units <= 0 or div_per_share <= 0:
+    initial_capital = _get_initial_capital(sb, portfolio_id)
+    old_shares = _existing_shares(p, initial_capital)
+    old_units  = _existing_units(p)
+    old_weight = float(p["weight"])
+    old_pru    = float(p["entry_price"])
+
+    if old_shares <= 0 or div_per_share <= 0:
         return None
     if reinvest_price is None or reinvest_price <= 0:
-        reinvest_price = float(p["entry_price"])
+        reinvest_price = old_pru
 
-    cash_received   = old_units * div_per_share
-    new_units_added = cash_received / reinvest_price
-    total_units     = round(old_units + new_units_added, 8)
-    new_weight      = round(float(p["weight"]) + cash_received, 4)
-    new_pru         = round(new_weight / total_units, 6) if total_units > 0 else 0.0
+    cash_received_dollars = old_shares * div_per_share
+    new_shares_added      = cash_received_dollars / reinvest_price
+    total_shares          = round(old_shares + new_shares_added, 8)
+    # New PRU via real $ cost basis
+    new_pru = round((old_shares * old_pru + cash_received_dollars) / total_shares, 6) \
+              if total_shares > 0 else 0.0
+
+    # Legacy bookkeeping
+    weight_added = cash_received_dollars * 100.0 / initial_capital
+    new_weight   = round(old_weight + weight_added, 4)
+    new_units    = round(new_weight / new_pru, 8) if new_pru > 0 else 0.0
 
     sb.table("positions").update({
-        "units":       total_units,
+        "shares":      total_shares,
         "weight":      new_weight,
+        "units":       new_units,
         "entry_price": new_pru,
     }).eq("id", p["id"]).execute()
 
@@ -421,22 +524,22 @@ def apply_dividend_drip(portfolio_id: str, ticker: str, div_per_share: float,
         "action":       "DRIP",
         "ticker_in":    ticker,
         "price_in":     reinvest_price,
-        "weight_in":    cash_received,
-        "reason":       (f"DRIP ${div_per_share:.4f}/share × {old_units:.6f} units "
-                         f"= ${cash_received:.4f} reinvested @ ${reinvest_price:.4f}"),
+        "weight_in":    round(weight_added, 4),
+        "reason":       (f"DRIP ${div_per_share:.4f}/share × {old_shares:.4f} shares "
+                         f"= ${cash_received_dollars:.2f} reinvested @ ${reinvest_price:.4f}"),
         "executed_at":  _now_utc_iso(),
     }).execute()
-    # cash_units unchanged: DRIP is cash-neutral (dividend received then spent).
+    # cash_amount + cash_units unchanged — DRIP is cash-neutral.
     _snapshot_positions(sb, portfolio_id)
-    return cash_received
+    return cash_received_dollars
 
 
 def apply_split(portfolio_id: str, ticker: str, ratio: float,
                 split_date: str | None = None):
     """Apply a stock split (or reverse split if ratio < 1).
 
-    units × ratio, PRU ÷ ratio, weight unchanged. Logs a transaction with
-    action='SPLIT'.
+    shares × ratio, units × ratio, PRU ÷ ratio. weight + cash unchanged
+    (cost basis preserved: shares × PRU stays constant).
     """
     sb = get_client()
     pos = (
@@ -451,11 +554,15 @@ def apply_split(portfolio_id: str, ticker: str, ratio: float,
     if not pos or ratio <= 0:
         return None
     p = pos[0]
-    old_units = _existing_units(p)
-    new_units = round(old_units * ratio, 8)
-    new_pru   = round(float(p["entry_price"]) / ratio, 6)
+    initial_capital = _get_initial_capital(sb, portfolio_id)
+    old_shares = _existing_shares(p, initial_capital)
+    old_units  = _existing_units(p)
+    new_shares = round(old_shares * ratio, 8)
+    new_units  = round(old_units * ratio, 8)
+    new_pru    = round(float(p["entry_price"]) / ratio, 6)
 
     sb.table("positions").update({
+        "shares":      new_shares,
         "units":       new_units,
         "entry_price": new_pru,
     }).eq("id", p["id"]).execute()
@@ -497,33 +604,41 @@ def delete_event(event_id: int):
 def reset_portfolio(today_str: str, prices: dict, portfolio_id: str = "visionnaire"):
     """
     Reinitialize portfolio for a fresh start:
-    - Reset entry_price and entry_date to today's price for all active positions
-    - Recompute units from new weight/entry_price
+    - Reset entry_price + entry_date to today's price for all active positions
+    - Recompute units (legacy) AND shares (new model) from new weight/entry_price
     - Deactivate STRC cleanly (no exit transaction — it's a reset, not a trade)
-    - Update inception_date in both settings (legacy) and portfolios table.
-    - Recompute cash_units = 100 - Σ active weights.
+    - Update inception_date in portfolios table
+    - Recompute cash_units (legacy) AND cash_amount (new model) from active weights
     """
     sb = get_client()
+    initial_capital = _get_initial_capital(sb, portfolio_id)
     positions = get_positions(portfolio_id=portfolio_id)
     total_w_active = 0.0
     for p in positions:
         ticker = p["ticker"]
         if ticker == "STRC":
-            sb.table("positions").update({"is_active": False, "units": 0}).eq("id", p["id"]).execute()
+            sb.table("positions").update({
+                "is_active": False, "units": 0, "shares": 0,
+            }).eq("id", p["id"]).execute()
             continue
         current_price = prices.get(ticker)
         if not current_price:
             total_w_active += float(p.get("weight") or 0)
             continue
         w = float(p.get("weight") or 0)
-        units = round(w / current_price, 8) if current_price > 0 else 0.0
+        units  = round(w / current_price, 8) if current_price > 0 else 0.0
+        shares = round((w * initial_capital / 100.0) / current_price, 8) if current_price > 0 else 0.0
         sb.table("positions").update({
             "entry_price": current_price,
             "entry_date":  today_str,
             "units":       units,
+            "shares":      shares,
         }).eq("id", p["id"]).execute()
         total_w_active += w
+    cash_units_new  = round(100.0 - total_w_active, 6)
+    cash_amount_new = round(cash_units_new * initial_capital / 100.0, 2)
     sb.table("portfolios").update({
         "inception_date": today_str,
-        "cash_units":     round(100.0 - total_w_active, 6),
+        "cash_units":     cash_units_new,
+        "cash_amount":    cash_amount_new,
     }).eq("id", portfolio_id).execute()
