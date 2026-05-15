@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import date, timedelta
 
-from utils.data import get_positions, get_setting, get_portfolio
+from utils.data import get_positions, get_setting, get_portfolio, get_cash_amount
 from utils.market import get_prices, get_history, get_total_return_factor
 from utils.metrics import (
     daily_returns,
@@ -399,14 +399,9 @@ Always conduct your own due diligence before making any investment decision.
     total_w = sum(p["weight"] for p in valid) or 1
     portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
 
-    # Dynamic weights. `initial_cash` is read from portfolios.cash_units when
-    # populated (PR-1+); we fall back to the legacy `100 - Σ weights` derivation
-    # so the display stays correct for portfolios that haven't been backfilled.
-    _db_cash = pf.get("cash_units")
-    if _db_cash is not None:
-        initial_cash = max(0.0, float(_db_cash))
-    else:
-        initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
+    # Initial cash% derived from `100 - Σ active weights` (cost-basis identity).
+    # portfolios.cash_units is no longer maintained (RLS-blocked, see data.get_cash_amount).
+    initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
     for p in positions:
         if p.get("current_price") and p.get("entry_price"):
             p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
@@ -439,7 +434,9 @@ Always conduct your own due diligence before making any investment decision.
     primary_index  = None
     secondary_perf = None
     secondary_index = None
-    cash_amount    = float(pf.get("cash_amount") or 0)
+    # Cash $ derived from daily_holdings + today's transactions
+    # (portfolios.cash_amount is RLS-blocked since 2026-05-15).
+    cash_amount    = get_cash_amount(portfolio_id)
 
     if not history.empty:
         # NEW MODEL — fund accounting (Phase D cutover).

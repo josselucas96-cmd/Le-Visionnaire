@@ -388,14 +388,10 @@ if positions:
     df_pos = pd.DataFrame(positions)
     total_weight = df_pos["weight"].sum()
 
-    # Dynamic weights + NAV. cash_units from DB (PR-1+) is preferred; falls
-    # back to derived 100-Σ-weights for portfolios that lack the column.
+    # Initial cash% derived from `100 - Σ weights` (cost-basis identity).
+    # portfolios.cash_units is no longer maintained (RLS-blocked, see data.get_cash_amount).
     initial_capital = _read_initial_capital(_pid)
-    _db_cash = _pf.get("cash_units")
-    if _db_cash is not None:
-        initial_cash = max(0.0, float(_db_cash))
-    else:
-        initial_cash = max(0.0, 100.0 - total_weight)
+    initial_cash = max(0.0, 100.0 - total_weight)
     for p in positions:
         if p.get("current_price") and p.get("entry_price"):
             p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])

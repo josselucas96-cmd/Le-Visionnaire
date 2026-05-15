@@ -3,13 +3,14 @@
 Move semantics (PR-3):
 - Every move on a position keeps `weight`, `entry_price` (PRU) AND `units`
   in sync. `units = weight / PRU` for invariance.
-- `cash_units` on the portfolio row is mutated by delta on each move (not
-  derived from weights) so dividends and external capital can be modelled
-  without violating the invariant.
 - PRU on REINFORCE uses the shares-weighted average (total cost / total
-  units) — the mathematically correct formula. The legacy NAV-weighted
-  formula was off by a small amount whenever reinforce price ≠ original
-  PRU.
+  units) — the mathematically correct formula.
+
+Cash tracking (post-2026-05-15):
+- `portfolios.cash_units` / `portfolios.cash_amount` are NOT maintained.
+  RLS on `portfolios` blocks anon-key UPDATEs silently, so we derive cash
+  on read instead. Source of truth = `daily_holdings` CASH row +
+  same-day transactions. See `get_cash_amount`.
 
 Audit trail (PR-5):
 - Every move stamps `executed_at` (TIMESTAMPTZ) on the transaction row.
@@ -30,42 +31,6 @@ def get_client():
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
-def _adjust_cash_units(sb, portfolio_id: str, delta: float) -> None:
-    """Add `delta` to portfolios.cash_units atomically (read-modify-write).
-    [LEGACY] Cost-basis cash tracking in 100-base. Kept for backward compat."""
-    row = (
-        sb.table("portfolios")
-        .select("cash_units")
-        .eq("id", portfolio_id)
-        .execute()
-        .data
-    )
-    if not row:
-        return
-    old = float(row[0].get("cash_units") or 0)
-    sb.table("portfolios").update({
-        "cash_units": round(old + delta, 6),
-    }).eq("id", portfolio_id).execute()
-
-
-def _adjust_cash_amount(sb, portfolio_id: str, delta: float) -> None:
-    """Add `delta` to portfolios.cash_amount atomically (read-modify-write).
-    [NEW MODEL] Real $$ cash tracking. Source of truth for fund accounting."""
-    row = (
-        sb.table("portfolios")
-        .select("cash_amount")
-        .eq("id", portfolio_id)
-        .execute()
-        .data
-    )
-    if not row:
-        return
-    old = float(row[0].get("cash_amount") or 0)
-    sb.table("portfolios").update({
-        "cash_amount": round(old + delta, 2),
-    }).eq("id", portfolio_id).execute()
-
-
 def _get_initial_capital(sb, portfolio_id: str) -> float:
     """Read initial_capital_<pid> setting (fallback to legacy 'initial_capital'
     for Visionnaire, then default $1M)."""
@@ -109,6 +74,74 @@ def _existing_shares(row: dict, initial_capital: float) -> float:
 def _now_utc_iso() -> str:
     """Current UTC timestamp as ISO 8601 (with timezone)."""
     return datetime.now(timezone.utc).isoformat()
+
+
+@st.cache_data(ttl=120)
+def get_cash_amount(portfolio_id: str) -> float:
+    """Derive current cash $ for a portfolio from immutable sources.
+
+    `portfolios.cash_amount` is unreliable (RLS blocks anon-key writes silently
+    since 2026-05-15). Instead we derive on read from:
+      1. Latest `daily_holdings` CASH row strictly BEFORE today (= yesterday's
+         close cash, or initial_capital if no prior row exists).
+      2. + Σ today's transaction $-deltas (TRIM/CLOSE proceeds, IN/SWITCH costs).
+
+    DRIP and SPLIT are cash-neutral by design (skipped).
+
+    Cached 2 min; callers must `.clear()` after a move (handled inside the
+    move helpers below).
+    """
+    from datetime import date as _date
+    sb = get_client()
+    initial_capital = _get_initial_capital(sb, portfolio_id)
+    today_str = _date.today().isoformat()
+
+    rows = (
+        sb.table("daily_holdings")
+        .select("date, value")
+        .eq("portfolio_id", portfolio_id)
+        .eq("ticker", "CASH")
+        .lt("date", today_str)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    baseline = float(rows[0]["value"]) if rows else float(initial_capital)
+
+    txns = (
+        sb.table("transactions")
+        .select("action, weight_in, weight_out, price_in, price_out, entry_price_out")
+        .eq("portfolio_id", portfolio_id)
+        .eq("date", today_str)
+        .execute()
+        .data
+    )
+    delta = 0.0
+    for t in txns:
+        action = (t.get("action") or "").upper()
+        if action == "IN":
+            w_in = float(t.get("weight_in") or 0)
+            delta -= w_in * initial_capital / 100.0
+        elif action in ("TRIM", "OUT"):
+            w_out = float(t.get("weight_out") or 0)
+            pru_out = float(t.get("entry_price_out") or 0)
+            p_out = float(t.get("price_out") or 0)
+            if pru_out > 0:
+                shares_sold = (w_out * initial_capital / 100.0) / pru_out
+                delta += shares_sold * p_out
+        elif action == "SWITCH":
+            w_in = float(t.get("weight_in") or 0)
+            w_out = float(t.get("weight_out") or 0)
+            pru_out = float(t.get("entry_price_out") or 0)
+            p_out = float(t.get("price_out") or 0)
+            if pru_out > 0:
+                shares_sold = (w_out * initial_capital / 100.0) / pru_out
+                delta += shares_sold * p_out
+            delta -= w_in * initial_capital / 100.0
+        # DRIP / SPLIT: cash-neutral, skip.
+
+    return round(baseline + delta, 2)
 
 
 def _snapshot_positions(sb, portfolio_id: str, snapshot_type: str = "move",
@@ -313,10 +346,10 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
             "executed_at":  _now_utc_iso(),
         }).execute()
 
-    # Cost of the new exposure leaves cash. cost basis (legacy) == real $ here
-    # because we just bought at the recorded price.
-    _adjust_cash_units(sb, portfolio_id, -new_w)
-    _adjust_cash_amount(sb, portfolio_id, -dollar_cost)
+    # Cash is derived on read from daily_holdings + today's transactions
+    # (see `get_cash_amount`). The transaction we just inserted records the
+    # cost basis and price, so no portfolios.cash_* write is needed.
+    get_cash_amount.clear()
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -361,9 +394,8 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float,
         "executed_at":     _now_utc_iso(),
     }).execute()
 
-    # cash_units (legacy): cost basis recovered. cash_amount (new): real proceeds.
-    _adjust_cash_units(sb, portfolio_id, weight_sold)
-    _adjust_cash_amount(sb, portfolio_id, dollar_proceeds)
+    # Cash derived on read (see `get_cash_amount`).
+    get_cash_amount.clear()
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -400,8 +432,8 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
         "shares":     0,
     }).eq("id", position_id).execute()
 
-    _adjust_cash_units(sb, portfolio_id, old_w)
-    _adjust_cash_amount(sb, portfolio_id, dollar_proceeds)
+    # Cash derived on read (see `get_cash_amount`).
+    get_cash_amount.clear()
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -453,10 +485,8 @@ def switch_position(out_id: int, out_price: float, in_data: dict,
         "shares": round(new_shares, 8),
     }).execute()
 
-    # cash_units (legacy): cost-basis recovered − cost-basis consumed.
-    # cash_amount (new): real proceeds out − real cost in.
-    _adjust_cash_units(sb, portfolio_id, out_w - new_w)
-    _adjust_cash_amount(sb, portfolio_id, dollar_proceeds - dollar_cost)
+    # Cash derived on read (see `get_cash_amount`).
+    get_cash_amount.clear()
     _snapshot_positions(sb, portfolio_id)
 
 
@@ -468,7 +498,7 @@ def apply_dividend_drip(portfolio_id: str, ticker: str, div_per_share: float,
 
     cash_received$ = shares × div_per_share (real $)
     new_shares = cash_received$ / reinvest_price
-    PRU recomputes via shares-weighted average. cash_amount + cash_units unchanged.
+    PRU recomputes via shares-weighted average. Cash-neutral (no $-delta).
     Returns cash_received_dollars.
     """
     sb = get_client()
@@ -529,7 +559,7 @@ def apply_dividend_drip(portfolio_id: str, ticker: str, div_per_share: float,
                          f"= ${cash_received_dollars:.2f} reinvested @ ${reinvest_price:.4f}"),
         "executed_at":  _now_utc_iso(),
     }).execute()
-    # cash_amount + cash_units unchanged — DRIP is cash-neutral.
+    # DRIP is cash-neutral (no $-delta vs derived cash).
     _snapshot_positions(sb, portfolio_id)
     return cash_received_dollars
 
@@ -608,12 +638,15 @@ def reset_portfolio(today_str: str, prices: dict, portfolio_id: str = "visionnai
     - Recompute units (legacy) AND shares (new model) from new weight/entry_price
     - Deactivate STRC cleanly (no exit transaction — it's a reset, not a trade)
     - Update inception_date in portfolios table
-    - Recompute cash_units (legacy) AND cash_amount (new model) from active weights
+
+    Note: portfolios.cash_* are not maintained (RLS-blocked, see get_cash_amount).
+    Note: portfolios.inception_date update is also RLS-blocked via anon key —
+    if the UI reset doesn't take effect, run the corresponding UPDATE in the
+    Supabase SQL editor as a one-shot.
     """
     sb = get_client()
     initial_capital = _get_initial_capital(sb, portfolio_id)
     positions = get_positions(portfolio_id=portfolio_id)
-    total_w_active = 0.0
     for p in positions:
         ticker = p["ticker"]
         if ticker == "STRC":
@@ -623,7 +656,6 @@ def reset_portfolio(today_str: str, prices: dict, portfolio_id: str = "visionnai
             continue
         current_price = prices.get(ticker)
         if not current_price:
-            total_w_active += float(p.get("weight") or 0)
             continue
         w = float(p.get("weight") or 0)
         units  = round(w / current_price, 8) if current_price > 0 else 0.0
@@ -634,11 +666,6 @@ def reset_portfolio(today_str: str, prices: dict, portfolio_id: str = "visionnai
             "units":       units,
             "shares":      shares,
         }).eq("id", p["id"]).execute()
-        total_w_active += w
-    cash_units_new  = round(100.0 - total_w_active, 6)
-    cash_amount_new = round(cash_units_new * initial_capital / 100.0, 2)
     sb.table("portfolios").update({
         "inception_date": today_str,
-        "cash_units":     cash_units_new,
-        "cash_amount":    cash_amount_new,
     }).eq("id", portfolio_id).execute()

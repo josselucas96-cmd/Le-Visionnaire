@@ -87,8 +87,9 @@ def lazy_write_holdings(portfolio_id: str, positions: list, cash_amount: float,
                         history: pd.DataFrame) -> int:
     """[NEW MODEL] Upsert ONLY today's row in daily_holdings (per ticker + CASH).
 
-    Reads `positions.shares` (current state, post-any-moves) and `portfolios.cash_amount`,
-    multiplies by today's yfinance close (when available), and upserts one row
+    Reads `positions.shares` (current state, post-any-moves) and receives the
+    derived `cash_amount` from the caller (see `utils.data.get_cash_amount`).
+    Multiplies by today's yfinance close (when available), and upserts one row
     per active ticker plus one CASH row.
 
     Past days are NEVER touched. If today's close not yet available in yfinance,
