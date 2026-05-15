@@ -583,6 +583,15 @@ Always conduct your own due diligence before making any investment decision.
             )
             layout["margin"]["b"] = 60
             fig.update_layout(**layout)
+            # Add visual padding on the x-axis so the chart doesn't end "glued"
+            # to the right edge. Scales with the history range (~4% on each side).
+            if not port_index.empty:
+                _span = port_index.index[-1] - port_index.index[0]
+                _pad = max(_span * 0.04, pd.Timedelta(days=1))
+                fig.update_xaxes(range=[
+                    port_index.index[0] - _pad,
+                    port_index.index[-1] + _pad,
+                ])
             st.plotly_chart(fig, use_container_width=True)
 
             port_ret = daily_returns(port_index)
