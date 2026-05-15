@@ -14,6 +14,7 @@ from utils.data import (
     get_setting, upsert_setting, reset_portfolio,
     get_events, add_event, delete_event,
     get_portfolios, get_portfolio, update_portfolio,
+    get_cash_amount,
 )
 from utils.market import (
     get_prices, get_fx_to_usd,
@@ -388,21 +389,33 @@ if positions:
     df_pos = pd.DataFrame(positions)
     total_weight = df_pos["weight"].sum()
 
-    # Initial cash% derived from `100 - Σ weights` (cost-basis identity).
-    # portfolios.cash_units is no longer maintained (RLS-blocked, see data.get_cash_amount).
+    # Fund-accounting allocation (real $): position $-value = shares × current_price;
+    # cash $ derived from daily_holdings via get_cash_amount (portfolios.cash_amount
+    # is RLS-blocked, see data.py docstring). current_weight = position$ / NAV × 100.
     initial_capital = _read_initial_capital(_pid)
-    initial_cash = max(0.0, 100.0 - total_weight)
+    cash_amount = get_cash_amount(_pid)
     for p in positions:
-        if p.get("current_price") and p.get("entry_price"):
-            p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
+        cp = p.get("current_price")
+        shares = float(p.get("shares") or 0)
+        if cp and shares > 0:
+            p["current_value_usd"] = shares * float(cp)
+        elif cp and p.get("entry_price"):
+            cost = float(p.get("weight") or 0) * initial_capital / 100.0
+            p["current_value_usd"] = cost * (float(cp) / float(p["entry_price"]))
         else:
-            p["current_value"] = p["weight"]
-    total_current_value = sum(p["current_value"] for p in positions) + initial_cash
+            p["current_value_usd"] = float(p.get("weight") or 0) * initial_capital / 100.0
+    nav_total_usd = sum(p["current_value_usd"] for p in positions) + cash_amount
+    if nav_total_usd <= 0:
+        nav_total_usd = initial_capital
     for p in positions:
-        p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
-        p["nav_usd"] = round(p["current_weight"] / 100 * initial_capital * (total_current_value / 100), 0)
-    current_cash_pct = round(initial_cash / total_current_value * 100, 1)
-    nav_total = round(initial_capital * total_current_value / 100, 0)
+        p["current_weight"] = round(p["current_value_usd"] / nav_total_usd * 100, 2)
+        p["nav_usd"] = round(p["current_value_usd"], 0)
+    current_cash_pct = round(cash_amount / nav_total_usd * 100, 1)
+    nav_total = round(nav_total_usd, 0)
+    # `initial_cash` is the cost-basis cash% at inception (= 100 - Σ weights). Kept
+    # for the "CASH — Initial" label below; differs from current_cash_pct once trims
+    # have realized gains beyond cost basis.
+    initial_cash = max(0.0, 100.0 - total_weight)
 
     st.caption(
         f"Alloc. deployed: **{total_weight:.1f}%** · "
