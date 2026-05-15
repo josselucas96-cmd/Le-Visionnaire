@@ -399,18 +399,29 @@ Always conduct your own due diligence before making any investment decision.
     total_w = sum(p["weight"] for p in valid) or 1
     portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
 
-    # Initial cash% derived from `100 - Σ active weights` (cost-basis identity).
-    # portfolios.cash_units is no longer maintained (RLS-blocked, see data.get_cash_amount).
-    initial_cash = max(0.0, 100.0 - sum(p["weight"] for p in positions))
+    # Fund-accounting allocation (real $). Each position $-value = shares × price;
+    # cash $ derived from daily_holdings (see data.get_cash_amount). current_weight
+    # = position$ / NAV × 100. Was previously cost-basis (weight × price/PRU) — that
+    # under-counted realized gains sitting in cash post-rebalance.
+    initial_capital = float(pf.get("initial_capital") or 1_000_000)
+    cash_amount     = get_cash_amount(portfolio_id)
     for p in positions:
-        if p.get("current_price") and p.get("entry_price"):
-            p["current_value"] = p["weight"] * (p["current_price"] / p["entry_price"])
+        cp = p.get("current_price")
+        shares = float(p.get("shares") or 0)
+        if cp and shares > 0:
+            p["current_value_usd"] = shares * float(cp)
+        elif cp and p.get("entry_price"):
+            # Fallback for positions without a shares value (pre-backfill rows).
+            cost = float(p.get("weight") or 0) * initial_capital / 100.0
+            p["current_value_usd"] = cost * (float(cp) / float(p["entry_price"]))
         else:
-            p["current_value"] = p["weight"]
-    total_current_value = sum(p["current_value"] for p in positions) + initial_cash
+            p["current_value_usd"] = float(p.get("weight") or 0) * initial_capital / 100.0
+    nav_now = sum(p["current_value_usd"] for p in positions) + cash_amount
+    if nav_now <= 0:
+        nav_now = initial_capital
     for p in positions:
-        p["current_weight"] = round(p["current_value"] / total_current_value * 100, 2)
-    current_cash_pct = round(initial_cash / total_current_value * 100, 1)
+        p["current_weight"] = round(p["current_value_usd"] / nav_now * 100, 2)
+    current_cash_pct = round(cash_amount / nav_now * 100, 1)
 
     # Chart starts at T-1 (last weekday before inception) so benchmarks
     # naturally normalize to the same anchor as the portfolio (which has
@@ -434,10 +445,6 @@ Always conduct your own due diligence before making any investment decision.
     primary_index  = None
     secondary_perf = None
     secondary_index = None
-    # Cash $ derived from daily_holdings + today's transactions
-    # (portfolios.cash_amount is RLS-blocked since 2026-05-15).
-    cash_amount    = get_cash_amount(portfolio_id)
-
     if not history.empty:
         # NEW MODEL — fund accounting (Phase D cutover).
         # Refreshes today's daily_holdings row with current shares & prices.
