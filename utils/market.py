@@ -65,9 +65,15 @@ def get_valuation_fundamentals(tickers: tuple) -> dict:
 
 @st.cache_data(ttl=300)  # Refresh every 5 minutes
 def get_prices(tickers: tuple) -> dict:
-    """Current price, daily % change, market cap (in listing currency) and
-    currency code for each ticker. Market cap is local-currency; convert
-    via get_fx_to_usd if a USD figure is needed.
+    """[LEGACY — live yfinance] Current price, daily % change, market cap
+    (in listing currency) and currency code for each ticker.
+
+    Each call hits yfinance N times (sequential). Slow at scale + risk of
+    Yahoo rate-limiting. See `get_prices_from_db` for the cached version
+    that reads from Supabase (populated by daily_refresh.py cron).
+
+    Kept for the Admin cockpit move-execution flow which needs truly live
+    prices at commit time (not EOD).
     """
     result = {}
     for ticker in tickers:
@@ -86,6 +92,56 @@ def get_prices(tickers: tuple) -> dict:
         except Exception:
             result[ticker] = {"price": None, "change_pct": None,
                               "market_cap": None, "currency": None}
+    return result
+
+
+@st.cache_data(ttl=600)  # Refresh every 10 min — cron writes every 24h
+def get_prices_from_db(tickers: tuple) -> dict:
+    """[NEW] Read prices from Supabase `current_prices` table.
+
+    Populated by daily_refresh.py cron (GitHub Action, 22:07 UTC daily).
+    No yfinance calls here → fast (single Supabase query) and no rate-limit
+    risk. Trade-off: prices are EOD (last close), not intraday-live.
+
+    Returns the same dict shape as `get_prices` so callers can swap with a
+    one-line import change.
+
+    Tickers missing from the table (e.g., newly added position not yet
+    fetched by the cron) get {price: None, ...} so caller can fall back.
+    """
+    from utils.data import get_client
+    sb = get_client()
+    if not tickers:
+        return {}
+
+    try:
+        rows = (
+            sb.table("current_prices")
+            .select("ticker, price, change_pct, market_cap, currency")
+            .in_("ticker", list(tickers))
+            .execute()
+            .data
+        )
+    except Exception:
+        # If the table doesn't exist yet or DB is down, return all-None
+        # so the caller can fall back to get_prices (yfinance) gracefully.
+        return {tk: {"price": None, "change_pct": None,
+                     "market_cap": None, "currency": None} for tk in tickers}
+
+    by_ticker = {r["ticker"]: r for r in rows}
+    result = {}
+    for tk in tickers:
+        r = by_ticker.get(tk)
+        if r is None:
+            result[tk] = {"price": None, "change_pct": None,
+                          "market_cap": None, "currency": None}
+        else:
+            result[tk] = {
+                "price":      round(float(r["price"]), 2) if r["price"] is not None else None,
+                "change_pct": round(float(r["change_pct"]), 2) if r["change_pct"] is not None else None,
+                "market_cap": float(r["market_cap"]) if r["market_cap"] is not None else None,
+                "currency":   r["currency"] or "USD",
+            }
     return result
 
 

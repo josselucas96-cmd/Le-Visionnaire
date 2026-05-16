@@ -218,6 +218,71 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     }
 
 
+def refresh_current_prices(sb) -> dict:
+    """Upsert latest price + metadata per unique ticker into `current_prices`.
+
+    Why: visitor pages currently call yfinance directly (1 call per ticker
+    × N visitors / cache_TTL). With this table populated nightly, the site
+    can read prices from Supabase in 1 query — eliminating Yahoo rate-limit
+    risk and dropping page load from ~30s to ~2s.
+
+    Uses fast_info (same source as utils/market.get_prices). During off-hours
+    (when this cron runs) fast_info returns the last close.
+
+    Schema: ticker PK + price, change_pct, market_cap, currency, fetched_at.
+    """
+    # Gather all unique tickers across active positions in all portfolios
+    all_tickers: set[str] = set()
+    for pid in PORTFOLIOS:
+        rows = (
+            sb.table("positions").select("ticker")
+            .eq("portfolio_id", pid).eq("is_active", True)
+            .execute().data
+        )
+        for r in rows:
+            tk = r.get("ticker")
+            if tk:
+                all_tickers.add(tk)
+
+    print(f"\n[current_prices] refreshing {len(all_tickers)} unique tickers...", flush=True)
+
+    payload = []
+    failed = []
+    now_iso = None
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    for tk in sorted(all_tickers):
+        try:
+            info = yf.Ticker(tk).fast_info
+            price = info.last_price
+            prev = info.previous_close
+            if price is None or prev is None:
+                failed.append(tk)
+                continue
+            mc = getattr(info, "market_cap", None)
+            ccy = getattr(info, "currency", None) or "USD"
+            payload.append({
+                "ticker":     tk,
+                "price":      round(float(price), 4),
+                "change_pct": round((float(price) - float(prev)) / float(prev) * 100, 4) if prev else None,
+                "market_cap": float(mc) if mc is not None else None,
+                "currency":   ccy,
+                "fetched_at": now_iso,
+            })
+        except Exception as e:
+            print(f"  ! {tk}: fast_info error ({e})", flush=True)
+            failed.append(tk)
+
+    if payload:
+        sb.table("current_prices").upsert(payload, on_conflict="ticker").execute()
+        print(f"[current_prices] upserted {len(payload)} rows.", flush=True)
+    if failed:
+        print(f"[current_prices] FAILED to fetch: {failed}", flush=True)
+
+    return {"ok": len(payload), "failed": failed}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -274,6 +339,13 @@ def main():
             print(f"  ERROR on {pid}: {e}", file=sys.stderr, flush=True)
             results.append({"portfolio": pid, "error": str(e)})
 
+    # Refresh current_prices (latest price/metadata per ticker, for frontend)
+    try:
+        cp_result = refresh_current_prices(sb)
+    except Exception as e:
+        print(f"\n[current_prices] refresh failed: {e}", file=sys.stderr, flush=True)
+        cp_result = {"ok": 0, "failed": ["(crashed)"]}
+
     # Summary
     print(f"\n[daily_refresh] done. Summary:")
     for r in results:
@@ -281,6 +353,9 @@ def main():
             print(f"  {r['portfolio']:13} ERROR — {r['error']}")
         else:
             print(f"  {r['portfolio']:13} {r['rows_written']:3} rows  NAV ${r['nav']:>11,.2f}")
+    failed_n = len(cp_result.get("failed", []))
+    failed_suffix = f" ({failed_n} failed)" if failed_n else ""
+    print(f"  current_prices  {cp_result['ok']:3} tickers updated{failed_suffix}")
 
     # Exit with non-zero if any portfolio failed
     if any("error" in r for r in results):
