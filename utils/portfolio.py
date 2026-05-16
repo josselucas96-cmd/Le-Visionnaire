@@ -11,7 +11,11 @@ import plotly.express as px
 from datetime import date, timedelta
 
 from utils.data import get_positions, get_setting, get_portfolio, get_cash_amount
-from utils.market import get_prices_from_db as get_prices, get_history, get_total_return_factor
+from utils.market import (
+    get_prices_from_db as get_prices,
+    get_history,
+    get_total_return_factor_from_db as get_total_return_factor,
+)
 from utils.metrics import (
     daily_returns,
     sharpe_ratio, max_drawdown, beta_vs_spy,
