@@ -6,11 +6,13 @@ name: Daily holdings refresh
 
 on:
   schedule:
-    # 22:07 UTC, Mon-Fri (= 23:07 CH winter / 00:07 CH next day in summer).
-    # ~1-2h after US market close (16:00 ET = 20-21 UTC depending on DST).
-    # Buffer ensures yfinance has published the official Close.
+    # 22:07 UTC every day (= 23:07 CH winter / 00:07 CH next day in summer).
+    # ~1-2h after US market close on weekdays.
+    # Runs Sat/Sun too because Nakamoto's benchmark (Bitcoin) trades 24/7 —
+    # weekend rows propagate Friday's equity close so the portfolio line
+    # stays aligned with the BTC line on the chart.
     # Minute 07 is off-peak to avoid GitHub Actions queue delays.
-    - cron: '7 22 * * 1-5'
+    - cron: '7 22 * * *'
 
   # Allow manual trigger from the GitHub UI (Actions tab → Run workflow).
   # Useful to test or to manually catch up after a failed run.

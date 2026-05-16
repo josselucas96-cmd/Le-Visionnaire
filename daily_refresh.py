@@ -2,33 +2,45 @@
 
 Goal
 ----
-After every US market close, write the day's row in `daily_holdings` for each
-portfolio. This makes the public chart EOD-accurate without depending on
-visitor traffic (`lazy_write_holdings`, the visitor-triggered version, has
-holes when nobody visits the site between close and midnight).
+After every US market close (or on weekends/holidays), write the day's row
+in `daily_holdings` for each portfolio. This makes the public chart EOD-
+accurate without depending on visitor traffic (`lazy_write_holdings`, the
+visitor-triggered version, has holes when nobody visits the site between
+close and midnight).
+
+Runs 7/7 since 2026-05-16. Weekend/holiday rationale: the Nakamoto
+benchmark is Bitcoin (24/7). On Sat/Sun, the BTC line extends past the
+portfolio line, creating a visual disconnect. By writing weekend rows
+that propagate the latest equity close, the portfolio line aligns
+timewise with Bitcoin (flat over the weekend, since equities don't move).
+Visionnaire/Bâtisseur are unaffected (their benchmarks are 5/7 too).
 
 Run
 ---
 Locally (debug):
     SUPABASE_URL=... SUPABASE_KEY=... python daily_refresh.py
-    # or pass --date 2026-05-15 to backfill a specific past trading day
+    # or pass --date 2026-05-15 to backfill a specific past day
 
 GitHub Action (production):
-    See .github/workflows/daily-refresh.yml — runs Mon-Fri 21:07 UTC
-    (~23:00 CH summer / 22:00 CH winter, ~1h after US market close).
+    See .github/workflows/daily-refresh.yml — runs daily 22:07 UTC
+    (~23-00:00 CH, ~1-2h after US market close on weekdays).
 
 What it writes
 --------------
 For each portfolio (visionnaire, batisseur, nakamoto):
-  - 1 row per active ticker: shares × yfinance Close = value
+  - 1 row per active ticker: shares × latest_close ≤ target_date = value
   - 1 CASH row: shares = $ cash, price = 1.0
+
+On weekend/holiday: yfinance has no Close for target_date, so we fall
+back to the latest available close ≤ target_date (= previous trading
+day). Shares and cash are still derived from the CURRENT positions/
+transactions (reflects any moves committed at any time of day).
 
 Cash $ is derived (same logic as utils/data.get_cash_amount):
   - baseline = latest CASH row strictly before target_date
   - + Σ same-day transaction deltas (TRIM/CLOSE proceeds, IN/SWITCH costs)
 
-Idempotent (upsert on portfolio_id, date, ticker). Skips if yfinance has no
-close for target_date (= holiday, future date, or yfinance lag).
+Idempotent (upsert on portfolio_id, date, ticker).
 """
 import argparse
 import os
@@ -43,27 +55,40 @@ PORTFOLIOS = ["visionnaire", "batisseur", "nakamoto"]
 INITIAL_CAPITAL_FALLBACK = 1_000_000.0
 
 
-def fetch_close_price(ticker: str, target_date_str: str) -> float | None:
-    """Fetch yfinance Close for target_date_str. Returns None if not available
-    (holiday, future date, or yfinance lag)."""
+def fetch_close_price(ticker: str, target_date_str: str) -> tuple[float | None, str | None]:
+    """Fetch the latest Close ≤ target_date_str.
+
+    On a trading day: returns the close for that day.
+    On weekend/holiday: returns the close from the most recent trading day
+    before target_date_str (so equity tickers carry forward Friday's close
+    into Sat/Sun rows).
+
+    Returns (price, actual_close_date_str) or (None, None) if no data found.
+    """
     try:
         from datetime import datetime, timedelta
-        start = target_date_str
-        end_dt = datetime.strptime(target_date_str, "%Y-%m-%d") + timedelta(days=2)
-        df = yf.download(ticker, start=start, end=end_dt.strftime("%Y-%m-%d"),
-                         progress=False, auto_adjust=False)
-        if df.empty or "Close" not in df.columns:
-            return None
         import pandas as pd
-        target_ts = pd.Timestamp(target_date_str)
-        if target_ts not in df.index:
-            return None
-        close = df.loc[target_ts, "Close"]
-        # yfinance sometimes returns a Series (single-row, multi-column index)
-        return float(close.iloc[0]) if hasattr(close, "iloc") else float(close)
+
+        # Fetch a 10-day window ending at target_date to find the latest available
+        target = datetime.strptime(target_date_str, "%Y-%m-%d")
+        start = (target - timedelta(days=10)).strftime("%Y-%m-%d")
+        end = (target + timedelta(days=1)).strftime("%Y-%m-%d")
+        df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
+        if df.empty or "Close" not in df.columns:
+            return None, None
+
+        # Keep only rows with date ≤ target_date_str
+        df = df[df.index <= pd.Timestamp(target_date_str)]
+        if df.empty:
+            return None, None
+
+        last_idx = df.index[-1]
+        close = df.loc[last_idx, "Close"]
+        price = float(close.iloc[0]) if hasattr(close, "iloc") else float(close)
+        return price, last_idx.strftime("%Y-%m-%d")
     except Exception as e:
         print(f"  ! {ticker}: yfinance fetch error ({e})", flush=True)
-        return None
+        return None, None
 
 
 def get_initial_capital(sb, portfolio_id: str) -> float:
@@ -155,15 +180,18 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     }]
     nav = cash_amount
     skipped = []
+    propagated = []  # tickers where price comes from a date before target
     for p in positions:
         tk = p["ticker"]
         shares = float(p.get("shares") or 0)
         if shares <= 0 or not tk:
             continue
-        price = fetch_close_price(tk, target_date_str)
+        price, actual_date = fetch_close_price(tk, target_date_str)
         if price is None:
             skipped.append(tk)
             continue
+        if actual_date != target_date_str:
+            propagated.append((tk, actual_date))
         value = shares * price
         nav += value
         rows.append({
@@ -186,6 +214,7 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
         "nav": nav,
         "cash": cash_amount,
         "skipped_tickers": skipped,
+        "propagated": propagated,
     }
 
 
@@ -211,24 +240,22 @@ def main():
     target = args.date or _date.today().isoformat()
     print(f"[daily_refresh] target date: {target}", flush=True)
 
-    # Sanity: skip if target is a weekend
-    from datetime import datetime
-    weekday = datetime.strptime(target, "%Y-%m-%d").weekday()
-    if weekday >= 5:
-        print(f"[daily_refresh] {target} is a weekend (weekday={weekday}). Nothing to do.", flush=True)
+    # Probe: can we find any close ≤ target for SPY? (sanity check for very
+    # early dates or yfinance being totally down).
+    probe_price, probe_date = fetch_close_price("SPY", target)
+    if probe_price is None:
+        print(f"[daily_refresh] yfinance has no SPY close at all near {target}. "
+              f"Likely yfinance is down or target is before 1993. Exiting.", flush=True)
         sys.exit(0)
-
-    # Probe: does yfinance have a close for any common ticker on target?
-    probe = fetch_close_price("SPY", target)
-    if probe is None:
-        print(f"[daily_refresh] yfinance has no SPY close on {target}. "
-              f"Probably a US holiday or yfinance lag. Exiting without write.", flush=True)
-        sys.exit(0)
+    if probe_date != target:
+        from datetime import datetime
+        weekday = datetime.strptime(target, "%Y-%m-%d").weekday()
+        label = "weekend" if weekday >= 5 else "US holiday or pre-market"
+        print(f"[daily_refresh] {target} is not a trading day ({label}). "
+              f"Will propagate the latest close from {probe_date} for all equity tickers.", flush=True)
 
     if args.dry_run:
         print("[daily_refresh] DRY RUN — no DB writes will happen.", flush=True)
-        # Replace the upsert with a no-op by intercepting via stub
-        original_upsert = sb.table
 
     results = []
     for pid in PORTFOLIOS:
@@ -237,8 +264,12 @@ def main():
             r = refresh_portfolio(sb, pid, target)
             results.append(r)
             print(f"  written {r['rows_written']} rows, NAV=${r['nav']:,.2f}, cash=${r['cash']:,.2f}", flush=True)
+            if r.get("propagated"):
+                propagated_str = ", ".join(f"{t}<-{d}" for t, d in r["propagated"][:3])
+                more = f" (+{len(r['propagated'])-3} more)" if len(r["propagated"]) > 3 else ""
+                print(f"  PROPAGATED prices (target was non-trading day): {propagated_str}{more}", flush=True)
             if r["skipped_tickers"]:
-                print(f"  SKIPPED (no yfinance close): {r['skipped_tickers']}", flush=True)
+                print(f"  SKIPPED (no yfinance data found): {r['skipped_tickers']}", flush=True)
         except Exception as e:
             print(f"  ERROR on {pid}: {e}", file=sys.stderr, flush=True)
             results.append({"portfolio": pid, "error": str(e)})
