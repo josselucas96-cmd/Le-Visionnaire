@@ -245,13 +245,66 @@ def _strc_dividend_dates(entry_str: str) -> list[tuple]:
     return payments
 
 
+@st.cache_data(ttl=600)  # 10 min — cron rewrites every 24h, no need to refresh more often
+def get_total_return_factor_from_db(tickers: tuple, entry_dates: tuple,
+                                    prices_at_entry: tuple) -> dict:
+    """[NEW] Read pre-computed dividend reinvestment factors from Supabase.
+
+    Same signature and return shape as `get_total_return_factor` so callers
+    can swap with a one-line import change.
+
+    Reads `dividend_factors` table populated by daily_refresh.py cron.
+    Fallback to {shares_factor: 1.0, div_return_pct: 0.0} for any pair
+    missing from the table (e.g., newly added position before next cron run).
+
+    `prices_at_entry` is accepted for signature compatibility but unused —
+    the factor depends only on (ticker, entry_date) since the cron uses the
+    actual reinvestment prices at each dividend payment date.
+    """
+    from utils.data import get_client
+    if not tickers:
+        return {}
+
+    sb = get_client()
+    pairs = list(zip(tickers, entry_dates))
+    unique_tickers = sorted(set(tickers))
+
+    try:
+        rows = (
+            sb.table("dividend_factors")
+            .select("ticker, entry_date, shares_factor, div_return_pct")
+            .in_("ticker", unique_tickers)
+            .execute()
+            .data
+        )
+    except Exception:
+        # Graceful fallback: table missing or DB down → all factors = 1.0
+        return {tk: {"shares_factor": 1.0, "div_return_pct": 0.0} for tk in tickers}
+
+    by_pair = {(r["ticker"], r["entry_date"]): r for r in rows}
+    result = {}
+    for tk, ed in pairs:
+        r = by_pair.get((tk, ed))
+        if r is None:
+            result[tk] = {"shares_factor": 1.0, "div_return_pct": 0.0}
+        else:
+            result[tk] = {
+                "shares_factor":  float(r["shares_factor"]),
+                "div_return_pct": float(r["div_return_pct"]),
+            }
+    return result
+
+
 @st.cache_data(ttl=3600)
 def get_total_return_factor(tickers: tuple, entry_dates: tuple, prices_at_entry: tuple) -> dict:
-    """
-    Compute total return factor for each ticker assuming dividend reinvestment.
+    """[LEGACY — live yfinance] Compute total return factor for each ticker
+    assuming dividend reinvestment.
 
     For each dividend payment since entry:
         shares multiplied by (1 + div_per_share / price_on_payment_date)
+
+    Slow at scale (~30s for 50 tickers) — see `get_total_return_factor_from_db`
+    for the pre-computed Supabase version (read in <100ms).
 
     Returns dict {ticker: {"shares_factor": float, "div_return_pct": float}}
     where shares_factor = accumulated shares per initial share (>= 1.0)

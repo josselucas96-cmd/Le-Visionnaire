@@ -218,6 +218,113 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     }
 
 
+def _compute_dividend_factor(ticker: str, entry_date_str: str) -> tuple[float, float]:
+    """Compute (shares_factor, div_return_pct) for one (ticker, entry_date) pair.
+
+    Replicates utils.market.get_total_return_factor logic without Streamlit deps.
+    For each dividend paid since entry_date: shares *= (1 + div / price_on_pay_date).
+
+    Returns (1.0, 0.0) if no dividends, ticker has no history, or any error.
+    """
+    try:
+        import pandas as pd
+        from datetime import date as _dt
+        today_str = _dt.today().isoformat()
+        entry_ts = pd.Timestamp(entry_date_str)
+
+        divs = yf.Ticker(ticker).dividends
+        if divs.empty:
+            return 1.0, 0.0
+        if divs.index.tz is not None:
+            divs.index = divs.index.tz_localize(None)
+        since = divs[divs.index >= entry_ts]
+        if since.empty:
+            return 1.0, 0.0
+
+        hist = yf.download(ticker, start=entry_date_str, end=today_str,
+                           auto_adjust=True, progress=False)
+        if hist.empty:
+            return 1.0, 0.0
+        if isinstance(hist.columns, pd.MultiIndex):
+            hist = hist["Close"][ticker]
+        else:
+            hist = hist["Close"]
+        if hist.index.tz is not None:
+            hist.index = hist.index.tz_localize(None)
+
+        shares = 1.0
+        for pay_date, div in since.items():
+            available = hist[hist.index <= pay_date]
+            if available.empty:
+                continue
+            price_on_day = float(available.iloc[-1])
+            if price_on_day > 0:
+                shares *= (1 + float(div) / price_on_day)
+
+        return round(shares, 6), round((shares - 1) * 100, 4)
+    except Exception as e:
+        print(f"  ! {ticker}@{entry_date_str}: dividend computation error ({e})", flush=True)
+        return 1.0, 0.0
+
+
+def refresh_dividend_factors(sb) -> dict:
+    """Upsert dividend reinvestment factor per (ticker, entry_date) into
+    `dividend_factors`.
+
+    Why: utils.market.get_total_return_factor is the biggest cold-start
+    bottleneck on the public site — it calls `yf.Ticker(t).dividends` and
+    `yf.download(t, ...)` for each (ticker, entry_date) pair (~50 pairs,
+    ~30s total). With this table pre-computed by the cron, the site reads
+    it in <100ms.
+
+    Schema: (ticker, entry_date) PK + shares_factor, div_return_pct, fetched_at.
+    """
+    pairs: set[tuple[str, str]] = set()
+    for pid in PORTFOLIOS:
+        rows = (
+            sb.table("positions").select("ticker, entry_date")
+            .eq("portfolio_id", pid).eq("is_active", True)
+            .execute().data
+        )
+        for r in rows:
+            tk = r.get("ticker")
+            ed = r.get("entry_date")
+            if tk and ed:
+                pairs.add((tk, ed))
+
+    print(f"\n[dividend_factors] refreshing {len(pairs)} unique (ticker, entry_date) pairs...", flush=True)
+
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = []
+    failed = []
+
+    for ticker, entry_date in sorted(pairs):
+        shares_factor, div_return_pct = _compute_dividend_factor(ticker, entry_date)
+        if shares_factor == 1.0 and div_return_pct == 0.0:
+            # Either truly no dividends (write the row so caller knows it was
+            # checked), or an error was logged above. Always write — fallback
+            # logic in callers handles both.
+            pass
+        payload.append({
+            "ticker":         ticker,
+            "entry_date":     entry_date,
+            "shares_factor":  shares_factor,
+            "div_return_pct": div_return_pct,
+            "fetched_at":     now_iso,
+        })
+
+    if payload:
+        sb.table("dividend_factors").upsert(
+            payload, on_conflict="ticker,entry_date"
+        ).execute()
+        print(f"[dividend_factors] upserted {len(payload)} rows.", flush=True)
+    if failed:
+        print(f"[dividend_factors] FAILED: {failed}", flush=True)
+
+    return {"ok": len(payload), "failed": failed}
+
+
 def refresh_current_prices(sb) -> dict:
     """Upsert latest price + metadata per unique ticker into `current_prices`.
 
@@ -346,6 +453,13 @@ def main():
         print(f"\n[current_prices] refresh failed: {e}", file=sys.stderr, flush=True)
         cp_result = {"ok": 0, "failed": ["(crashed)"]}
 
+    # Refresh dividend_factors (precomputed total return factor per ticker/entry_date)
+    try:
+        df_result = refresh_dividend_factors(sb)
+    except Exception as e:
+        print(f"\n[dividend_factors] refresh failed: {e}", file=sys.stderr, flush=True)
+        df_result = {"ok": 0, "failed": ["(crashed)"]}
+
     # Summary
     print(f"\n[daily_refresh] done. Summary:")
     for r in results:
@@ -355,7 +469,10 @@ def main():
             print(f"  {r['portfolio']:13} {r['rows_written']:3} rows  NAV ${r['nav']:>11,.2f}")
     failed_n = len(cp_result.get("failed", []))
     failed_suffix = f" ({failed_n} failed)" if failed_n else ""
-    print(f"  current_prices  {cp_result['ok']:3} tickers updated{failed_suffix}")
+    print(f"  current_prices    {cp_result['ok']:3} tickers updated{failed_suffix}")
+    df_failed_n = len(df_result.get("failed", []))
+    df_failed_suffix = f" ({df_failed_n} failed)" if df_failed_n else ""
+    print(f"  dividend_factors  {df_result['ok']:3} pairs updated{df_failed_suffix}")
 
     # Exit with non-zero if any portfolio failed
     if any("error" in r for r in results):
