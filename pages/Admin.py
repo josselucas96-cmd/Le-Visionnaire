@@ -20,7 +20,8 @@ from utils.market import (
     get_prices_from_db as get_prices,   # display path: read from Supabase (fast, EOD)
     get_prices as get_prices_live,      # move execution path: yfinance live (needed at commit time)
     get_fx_to_usd,
-    get_valuation_fundamentals, get_bitcoin_price, BTC_HOLDINGS_NAKAMOTO,
+    get_valuation_fundamentals_from_db as get_valuation_fundamentals,  # phase 3 cutover 2026-05-17
+    get_bitcoin_price, BTC_HOLDINGS_NAKAMOTO,
 )
 from utils.nav_history import get_nav_series, get_nav_from_holdings
 from utils.research import get_research, upsert_research, delete_research, upload_pdf
@@ -465,7 +466,7 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
     if not positions:
         st.info("No positions to evaluate.")
     else:
-        from utils.market import get_valuation_fundamentals
+        from utils.market import get_valuation_fundamentals_from_db as get_valuation_fundamentals
         from utils.data   import update_position_valuation
 
         cap_col, refresh_col = st.columns([5, 1])

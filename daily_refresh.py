@@ -340,6 +340,96 @@ def refresh_dividend_factors(sb, portfolio_ids: list[str]) -> dict:
     return {"ok": len(payload), "failed": failed}
 
 
+def refresh_fundamentals(sb, portfolio_ids: list[str]) -> dict:
+    """Upsert valuation fundamentals per unique ticker into `fundamentals`.
+
+    Why: utils.market.get_valuation_fundamentals calls `yf.Ticker(t).info` per
+    ticker — the SLOWEST yfinance endpoint (5-10s/call) and the most prone to
+    rate-limiting. With this table pre-computed nightly, the site reads it in
+    <100ms and the cockpit's P/S, Fwd PE, EV/mNAV columns finally fill in
+    reliably.
+
+    Fundamentals don't move intraday — daily refresh is plenty.
+
+    Schema: ticker PK + market_cap, enterprise_value, revenue_ttm, ebitda,
+    margins (ratios 0-1), free_cashflow, forward_pe, trailing_pe, analyst_rg,
+    fetched_at.
+    """
+    import pandas as pd
+    all_tickers: set[str] = set()
+    for pid in portfolio_ids:
+        rows = (
+            sb.table("positions").select("ticker")
+            .eq("portfolio_id", pid).eq("is_active", True)
+            .execute().data
+        )
+        for r in rows:
+            tk = r.get("ticker")
+            if tk:
+                all_tickers.add(tk)
+
+    print(f"\n[fundamentals] refreshing {len(all_tickers)} unique tickers (tk.info — slow)...", flush=True)
+
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = []
+    failed = []
+
+    for tk in sorted(all_tickers):
+        try:
+            ticker = yf.Ticker(tk)
+            info = ticker.info
+            rev = info.get("totalRevenue")
+            fcf = info.get("freeCashflow")
+            fcf_margin = (fcf / rev) if (rev and fcf is not None and rev > 0) else None
+
+            # Analyst consensus revenue growth (forward, +1y)
+            analyst_rg = None
+            try:
+                rev_est = ticker.revenue_estimate
+                if rev_est is not None and not rev_est.empty:
+                    if "+1y" in rev_est.index and "growth" in rev_est.columns:
+                        g = rev_est.loc["+1y", "growth"]
+                        if pd.notna(g):
+                            analyst_rg = float(g) * 100
+                    if analyst_rg is None and "+1y" in rev_est.index and "0y" in rev_est.index:
+                        cur = rev_est.loc["0y", "avg"]
+                        nxt = rev_est.loc["+1y", "avg"]
+                        if pd.notna(cur) and pd.notna(nxt) and cur > 0:
+                            analyst_rg = (float(nxt) - float(cur)) / float(cur) * 100
+            except Exception:
+                pass
+            if analyst_rg is None and info.get("revenueGrowth") is not None:
+                analyst_rg = float(info["revenueGrowth"]) * 100
+
+            payload.append({
+                "ticker":           tk,
+                "market_cap":       float(info["marketCap"]) if info.get("marketCap") is not None else None,
+                "enterprise_value": float(info["enterpriseValue"]) if info.get("enterpriseValue") is not None else None,
+                "revenue_ttm":      float(rev) if rev is not None else None,
+                "ebitda":           float(info["ebitda"]) if info.get("ebitda") is not None else None,
+                "gross_margin":     float(info["grossMargins"]) if info.get("grossMargins") is not None else None,
+                "operating_margin": float(info["operatingMargins"]) if info.get("operatingMargins") is not None else None,
+                "free_cashflow":    float(fcf) if fcf is not None else None,
+                "fcf_margin":       float(fcf_margin) if fcf_margin is not None else None,
+                "forward_pe":       float(info["forwardPE"]) if info.get("forwardPE") is not None else None,
+                "trailing_pe":      float(info["trailingPE"]) if info.get("trailingPE") is not None else None,
+                "analyst_rg":       float(analyst_rg) if analyst_rg is not None else None,
+                "fetched_at":       now_iso,
+            })
+        except Exception as e:
+            print(f"  ! {tk}: tk.info error ({e})", flush=True)
+            failed.append(tk)
+
+    if payload:
+        sb.table("fundamentals").upsert(payload, on_conflict="ticker").execute()
+        print(f"[fundamentals] upserted {len(payload)} rows.", flush=True)
+    if failed:
+        print(f"[fundamentals] FAILED: {failed}", flush=True)
+
+    return {"ok": len(payload), "failed": failed}
+
+
 def refresh_current_prices(sb, portfolio_ids: list[str]) -> dict:
     """Upsert latest price + metadata per unique ticker into `current_prices`.
 
@@ -480,6 +570,13 @@ def main():
         print(f"\n[dividend_factors] refresh failed: {e}", file=sys.stderr, flush=True)
         df_result = {"ok": 0, "failed": ["(crashed)"]}
 
+    # Refresh fundamentals (P/S, Fwd PE, EV/mNAV, margins, etc — slow tk.info path)
+    try:
+        fd_result = refresh_fundamentals(sb, portfolio_ids)
+    except Exception as e:
+        print(f"\n[fundamentals] refresh failed: {e}", file=sys.stderr, flush=True)
+        fd_result = {"ok": 0, "failed": ["(crashed)"]}
+
     # Summary
     print(f"\n[daily_refresh] done. Summary:")
     for r in results:
@@ -493,6 +590,9 @@ def main():
     df_failed_n = len(df_result.get("failed", []))
     df_failed_suffix = f" ({df_failed_n} failed)" if df_failed_n else ""
     print(f"  dividend_factors  {df_result['ok']:3} pairs updated{df_failed_suffix}")
+    fd_failed_n = len(fd_result.get("failed", []))
+    fd_failed_suffix = f" ({fd_failed_n} failed)" if fd_failed_n else ""
+    print(f"  fundamentals      {fd_result['ok']:3} tickers updated{fd_failed_suffix}")
 
     # Exit with non-zero if any portfolio failed
     if any("error" in r for r in results):

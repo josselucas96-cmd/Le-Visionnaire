@@ -4,12 +4,75 @@ import pandas as pd
 from datetime import datetime, date
 
 
+@st.cache_data(ttl=600)  # 10 min — cron writes daily, no need to refresh more often
+def get_valuation_fundamentals_from_db(tickers: tuple) -> dict:
+    """[NEW] Read pre-computed valuation fundamentals from Supabase.
+
+    Same signature and return shape as `get_valuation_fundamentals` so callers
+    can swap with a one-line import change.
+
+    Populated nightly by daily_refresh.py cron (which calls the slow tk.info
+    yfinance endpoint). Frontend reads in <100ms; no rate-limit risk.
+
+    Missing tickers fall back to all-None (same as the legacy fn).
+    """
+    from utils.data import get_client
+    if not tickers:
+        return {}
+    sb = get_client()
+
+    try:
+        rows = (
+            sb.table("fundamentals")
+            .select("ticker, market_cap, enterprise_value, revenue_ttm, ebitda, "
+                    "gross_margin, operating_margin, free_cashflow, fcf_margin, "
+                    "forward_pe, trailing_pe, analyst_rg")
+            .in_("ticker", list(tickers))
+            .execute()
+            .data
+        )
+    except Exception:
+        return {tk: _empty_fundamentals() for tk in tickers}
+
+    by_ticker = {r["ticker"]: r for r in rows}
+    result = {}
+    for tk in tickers:
+        r = by_ticker.get(tk)
+        if r is None:
+            result[tk] = _empty_fundamentals()
+        else:
+            result[tk] = {
+                "market_cap":       float(r["market_cap"]) if r["market_cap"] is not None else None,
+                "enterprise_value": float(r["enterprise_value"]) if r["enterprise_value"] is not None else None,
+                "revenue_ttm":      float(r["revenue_ttm"]) if r["revenue_ttm"] is not None else None,
+                "ebitda":           float(r["ebitda"]) if r["ebitda"] is not None else None,
+                "gross_margin":     float(r["gross_margin"]) if r["gross_margin"] is not None else None,
+                "operating_margin": float(r["operating_margin"]) if r["operating_margin"] is not None else None,
+                "free_cashflow":    float(r["free_cashflow"]) if r["free_cashflow"] is not None else None,
+                "fcf_margin":       float(r["fcf_margin"]) if r["fcf_margin"] is not None else None,
+                "forward_pe":       float(r["forward_pe"]) if r["forward_pe"] is not None else None,
+                "trailing_pe":      float(r["trailing_pe"]) if r["trailing_pe"] is not None else None,
+                "analyst_rg":       float(r["analyst_rg"]) if r["analyst_rg"] is not None else None,
+            }
+    return result
+
+
+def _empty_fundamentals() -> dict:
+    return {"market_cap": None, "enterprise_value": None,
+            "revenue_ttm": None, "ebitda": None,
+            "gross_margin": None, "operating_margin": None,
+            "free_cashflow": None, "fcf_margin": None,
+            "forward_pe": None, "trailing_pe": None,
+            "analyst_rg": None}
+
+
 @st.cache_data(ttl=3600)  # Refresh every hour — fundamentals don't move intraday
 def get_valuation_fundamentals(tickers: tuple) -> dict:
-    """For each ticker, return a dict with the fields needed by the Valo
-    Tracking table. Margins are returned as ratios 0-1 (caller multiplies
-    by 100 if it wants percentages). Missing fields are returned as None
-    rather than raising — yfinance is patchy on non-US tickers.
+    """[LEGACY — live yfinance] For each ticker, return a dict with the fields
+    needed by the Valo Tracking table. Margins are returned as ratios 0-1.
+
+    Slow at scale (~5-10s per ticker via tk.info, high rate-limit risk).
+    See `get_valuation_fundamentals_from_db` for the pre-cached Supabase version.
     """
     result = {}
     for t in tickers:
