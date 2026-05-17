@@ -41,7 +41,9 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ── Cockpit ───────────────────────────────────────────────────────────────────
-_portfolios_admin = get_portfolios()
+# active_only=False so the Admin sees ALL portfolios including hidden ones
+# (e.g., the sandbox `test` portfolio used for infra testing without touching live).
+_portfolios_admin = get_portfolios(active_only=False)
 if not _portfolios_admin:
     st.error("No portfolios configured in the `portfolios` table.")
     st.stop()
@@ -69,6 +71,7 @@ _PF_VIS = {
     "visionnaire": ("Le Visionnaire", "High-Conviction Equity",        "#6366F1"),
     "batisseur":   ("Le Bâtisseur",   "Quality Compounders + Tactical", "#F5B60A"),
     "nakamoto":    ("Le Nakamoto",    "Bitcoin Treasury Equities",      "#FF6A00"),
+    "test":        ("Portfolio_Test", "Sandbox — infra testing only",   "#22C55E"),
 }
 
 st.markdown("""

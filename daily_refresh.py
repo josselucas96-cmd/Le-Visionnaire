@@ -51,8 +51,23 @@ import yfinance as yf
 from supabase import create_client
 
 
-PORTFOLIOS = ["visionnaire", "batisseur", "nakamoto"]
 INITIAL_CAPITAL_FALLBACK = 1_000_000.0
+
+# PORTFOLIOS is now read dynamically from the `portfolios` table at runtime
+# (see `get_all_portfolio_ids` below). This means any new portfolio added to
+# the DB — including hidden sandboxes like `test` — is automatically picked
+# up on the next cron run without needing a code push.
+
+
+def get_all_portfolio_ids(sb) -> list[str]:
+    """Return all portfolio IDs from the DB (active and inactive).
+
+    Inactive portfolios (e.g., the `test` sandbox with is_active=False) are
+    included so the cron keeps their daily_holdings up to date. The Admin
+    cockpit shows them; only the public landing filters them out.
+    """
+    rows = sb.table("portfolios").select("id").order("display_order").execute().data
+    return [r["id"] for r in rows]
 
 
 def fetch_close_price(ticker: str, target_date_str: str) -> tuple[float | None, str | None]:
@@ -267,7 +282,7 @@ def _compute_dividend_factor(ticker: str, entry_date_str: str) -> tuple[float, f
         return 1.0, 0.0
 
 
-def refresh_dividend_factors(sb) -> dict:
+def refresh_dividend_factors(sb, portfolio_ids: list[str]) -> dict:
     """Upsert dividend reinvestment factor per (ticker, entry_date) into
     `dividend_factors`.
 
@@ -280,7 +295,7 @@ def refresh_dividend_factors(sb) -> dict:
     Schema: (ticker, entry_date) PK + shares_factor, div_return_pct, fetched_at.
     """
     pairs: set[tuple[str, str]] = set()
-    for pid in PORTFOLIOS:
+    for pid in portfolio_ids:
         rows = (
             sb.table("positions").select("ticker, entry_date")
             .eq("portfolio_id", pid).eq("is_active", True)
@@ -325,7 +340,7 @@ def refresh_dividend_factors(sb) -> dict:
     return {"ok": len(payload), "failed": failed}
 
 
-def refresh_current_prices(sb) -> dict:
+def refresh_current_prices(sb, portfolio_ids: list[str]) -> dict:
     """Upsert latest price + metadata per unique ticker into `current_prices`.
 
     Why: visitor pages currently call yfinance directly (1 call per ticker
@@ -340,7 +355,7 @@ def refresh_current_prices(sb) -> dict:
     """
     # Gather all unique tickers across active positions in all portfolios
     all_tickers: set[str] = set()
-    for pid in PORTFOLIOS:
+    for pid in portfolio_ids:
         rows = (
             sb.table("positions").select("ticker")
             .eq("portfolio_id", pid).eq("is_active", True)
@@ -429,8 +444,13 @@ def main():
     if args.dry_run:
         print("[daily_refresh] DRY RUN — no DB writes will happen.", flush=True)
 
+    # Read portfolio IDs from DB dynamically (so new portfolios are auto-picked
+    # up without code change — e.g., the `test` sandbox).
+    portfolio_ids = get_all_portfolio_ids(sb)
+    print(f"[daily_refresh] portfolios to refresh: {portfolio_ids}", flush=True)
+
     results = []
-    for pid in PORTFOLIOS:
+    for pid in portfolio_ids:
         print(f"\n[{pid}] refreshing {target}...", flush=True)
         try:
             r = refresh_portfolio(sb, pid, target)
@@ -448,14 +468,14 @@ def main():
 
     # Refresh current_prices (latest price/metadata per ticker, for frontend)
     try:
-        cp_result = refresh_current_prices(sb)
+        cp_result = refresh_current_prices(sb, portfolio_ids)
     except Exception as e:
         print(f"\n[current_prices] refresh failed: {e}", file=sys.stderr, flush=True)
         cp_result = {"ok": 0, "failed": ["(crashed)"]}
 
     # Refresh dividend_factors (precomputed total return factor per ticker/entry_date)
     try:
-        df_result = refresh_dividend_factors(sb)
+        df_result = refresh_dividend_factors(sb, portfolio_ids)
     except Exception as e:
         print(f"\n[dividend_factors] refresh failed: {e}", file=sys.stderr, flush=True)
         df_result = {"ok": 0, "failed": ["(crashed)"]}
