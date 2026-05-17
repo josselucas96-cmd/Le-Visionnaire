@@ -17,7 +17,9 @@ from utils.data import (
     get_cash_amount,
 )
 from utils.market import (
-    get_prices, get_fx_to_usd,
+    get_prices_from_db as get_prices,   # display path: read from Supabase (fast, EOD)
+    get_prices as get_prices_live,      # move execution path: yfinance live (needed at commit time)
+    get_fx_to_usd,
     get_valuation_fundamentals, get_bitcoin_price, BTC_HOLDINGS_NAKAMOTO,
 )
 from utils.nav_history import get_nav_series, get_nav_from_holdings
@@ -189,8 +191,8 @@ st.divider()
 # ── Performance snapshot ──────────────────────────────────────────────────────
 with st.expander("Performance", expanded=False):
     import plotly.graph_objects as go
-    from utils.market import get_history, get_prices as _get_prices
-    from utils.metrics import (build_portfolio_index, daily_returns, sharpe_ratio,
+    from utils.market import get_history, get_prices_from_db as _get_prices
+    from utils.metrics import (daily_returns, sharpe_ratio,
                                max_drawdown, beta_vs_spy, annualized_volatility, monthly_returns_table)
     from utils.theme import PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR, BG, TEXT_MID, POSITIVE, NEGATIVE, TRIM
     _positions_perf = get_positions(portfolio_id=_pid)
@@ -214,23 +216,42 @@ with st.expander("Performance", expanded=False):
                 p["perf_pct"] = None
         _valid = [p for p in _positions_perf if p["perf_pct"] is not None]
         _total_w = sum(p["weight"] for p in _valid) or 1
-        _port_perf = sum(p["weight"] * p["perf_pct"] / _total_w for p in _valid)
+
+        # Chart base 100 via fund accounting (daily_holdings), aligned to T-1
+        # anchor like the public page. Was: build_portfolio_index (cost-basis,
+        # had PRU-vs-yfinance gap making chart start ≠ 100).
+        def _prev_trading_day(d_str):
+            c = pd.Timestamp(d_str) - pd.Timedelta(days=1)
+            while c.weekday() >= 5:
+                c -= pd.Timedelta(days=1)
+            return c.date().isoformat()
+        _chart_start = _prev_trading_day(_inception)
         _bench_tickers = tuple(b for b in (_bench_pri, _bench_sec) if b)
-        _history = get_history(_tickers_perf + _bench_tickers, _inception)
+        _history = get_history(_tickers_perf + _bench_tickers, _chart_start)
+        _port_index = get_nav_from_holdings(_pid)
         _pri_perf = None
         _pri_index = None
         _sec_index = None
-        if not _history.empty:
-            _port_index = build_portfolio_index(_history, _positions_perf)
-            if _bench_pri and _bench_pri in _history.columns:
+        if not _port_index.empty:
+            _port_perf = round(_port_index.iloc[-1] - 100, 2)
+            if _bench_pri and not _history.empty and _bench_pri in _history.columns:
                 _pri_raw = _history[_bench_pri].dropna()
                 if not _pri_raw.empty:
                     _pri_index = _pri_raw / _pri_raw.iloc[0] * 100
                     _pri_perf = round(_pri_index.iloc[-1] - 100, 2)
-            if _bench_sec and _bench_sec in _history.columns:
+            if _bench_sec and not _history.empty and _bench_sec in _history.columns:
                 _sec_raw = _history[_bench_sec].dropna()
                 if not _sec_raw.empty:
                     _sec_index = _sec_raw / _sec_raw.iloc[0] * 100
+            # Trim port_index to benchmark's last date (avoid 1-day mismatch)
+            _bench_ends = []
+            if _pri_index is not None and not _pri_index.empty:
+                _bench_ends.append(_pri_index.index[-1])
+            if _sec_index is not None and not _sec_index.empty:
+                _bench_ends.append(_sec_index.index[-1])
+            if _bench_ends:
+                _common_end = min(_bench_ends)
+                _port_index = _port_index[_port_index.index <= _common_end]
             _port_ret = daily_returns(_port_index)
             _bench_ret = daily_returns(_pri_index) if _pri_index is not None else pd.Series()
             _alpha = round(_port_perf - (_pri_perf or 0), 2)
@@ -1772,7 +1793,10 @@ with tab_moves:
             st.subheader(f"Confirm moves — {_pf.get('name', _pid)} ({len(moves)} transaction(s))")
 
             move_tickers = tuple(m["ticker"] for m in moves)
-            preview_prices = get_prices(move_tickers)
+            # Moves preview/commit MUST use live yfinance prices (intraday) so
+            # the user sees the actual execution price at commit time. Display
+            # paths use the EOD cached get_prices, but trading uses live.
+            preview_prices = get_prices_live(move_tickers)
 
             # ── PRU + auto-conversion: project the post-rebalance state ───────
             # Touched/new positions land at exactly their typed target_drifted;
@@ -1914,7 +1938,7 @@ with tab_moves:
                     st.rerun()
             with cbc2:
                 if st.button("Confirm & execute moves", type="primary", key="moves_commit"):
-                    fresh_prices = get_prices(move_tickers)
+                    fresh_prices = get_prices_live(move_tickers)
                     # PRU model: recompute auto-conversion at commit time with fresh prices
                     commit_rebalance = _pru_compute_rebalance(
                         positions, st.session_state[draft_key], fresh_prices,
