@@ -26,7 +26,7 @@ on:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repo
@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install supabase yfinance pandas
+          pip install supabase yfinance pandas toml openpyxl
 
       - name: Run daily refresh
         env:
@@ -52,3 +52,19 @@ jobs:
           else
             python daily_refresh.py
           fi
+
+      - name: Set up local secrets.toml for build_audit_workbook
+        # build_audit_workbook.py reads secrets from .streamlit/secrets.toml.
+        # In CI we don't have that file, so synthesize it from the env vars.
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          mkdir -p .streamlit
+          cat > .streamlit/secrets.toml <<EOF
+          supabase_url = "$SUPABASE_URL"
+          supabase_key = "$SUPABASE_KEY"
+          EOF
+
+      - name: Build audit workbook + upload to Supabase Storage
+        run: python build_audit_workbook.py

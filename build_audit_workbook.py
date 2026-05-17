@@ -29,7 +29,11 @@ from openpyxl.utils import get_column_letter
 from supabase import create_client
 
 
-PORTFOLIOS = ["visionnaire", "batisseur", "nakamoto"]
+# Read portfolio list dynamically from DB (same pattern as daily_refresh.py)
+# This auto-includes new portfolios (e.g., test sandbox) without code change.
+def _get_all_portfolio_ids(sb):
+    rows = sb.table("portfolios").select("id").order("display_order").execute().data
+    return [r["id"] for r in rows]
 TODAY = _date.today().isoformat()
 WORKBOOK_PATH = Path(__file__).parent / "daily_holdings_audit.xlsx"
 
@@ -461,8 +465,10 @@ def main():
     wb.remove(wb.active)  # drop default empty sheet
 
     summaries: list[tuple[str, float, int, int]] = []
+    portfolio_ids = _get_all_portfolio_ids(sb)
+    print(f"Portfolios found in DB: {portfolio_ids}")
 
-    for pid in PORTFOLIOS:
+    for pid in portfolio_ids:
         # Portfolio metadata
         pf = sb.table("portfolios").select("*").eq("id", pid).execute().data
         if not pf:
@@ -511,7 +517,7 @@ def main():
     build_readme(wb, summaries)
     # Reorder: README first, then per portfolio (holdings, moves)
     desired = ["README"]
-    for pid in PORTFOLIOS:
+    for pid in portfolio_ids:
         for suffix in ["", " Moves"]:
             name = f"{pid.capitalize()}{suffix}"
             if name in wb.sheetnames:
@@ -521,6 +527,28 @@ def main():
 
     wb.save(WORKBOOK_PATH)
     print(f"\nWrote {WORKBOOK_PATH}")
+
+    # Upload to Supabase Storage so a fixed public URL always points to the
+    # latest version (no need to git-commit binary file or run local script).
+    # Bucket `audit-workbook` must exist and be PUBLIC (configured manually
+    # via Supabase Dashboard → Storage → New bucket).
+    try:
+        with open(WORKBOOK_PATH, "rb") as f:
+            file_bytes = f.read()
+        # upsert=True overwrites the existing file with the same name
+        sb.storage.from_("audit-workbook").upload(
+            path="daily_holdings_audit.xlsx",
+            file=file_bytes,
+            file_options={
+                "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "upsert": "true",
+            },
+        )
+        public_url = sb.storage.from_("audit-workbook").get_public_url("daily_holdings_audit.xlsx")
+        print(f"Uploaded to Supabase Storage: {public_url}")
+    except Exception as e:
+        print(f"WARN: Supabase Storage upload failed: {e}")
+        print("(workbook still saved locally — manual download possible)")
 
 
 if __name__ == "__main__":
