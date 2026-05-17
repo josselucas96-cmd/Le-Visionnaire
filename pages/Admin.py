@@ -371,6 +371,12 @@ if positions:
     for p in positions:
         p["current_weight"] = round(p["current_value_usd"] / nav_total_usd * 100, 2)
         p["nav_usd"] = round(p["current_value_usd"], 0)
+        # `current_value` (in % of initial_capital units) is what
+        # _pru_compute_rebalance uses for T_untouched. Without this set,
+        # the formula falls back to stored cost-basis weight and the
+        # target-drifted math is off (user types 6%, gets ~6.5% in
+        # current % because T_after is inflated by ~9pp on this portfolio).
+        p["current_value"] = p["current_value_usd"] / initial_capital * 100.0
     current_cash_pct = round(cash_amount / nav_total_usd * 100, 1)
     nav_total = round(nav_total_usd, 0)
     # `initial_cash` is the cost-basis cash% at inception (= 100 - Σ weights). Kept
