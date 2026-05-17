@@ -175,6 +175,138 @@ def _donut_chart(df, col, title):
     return fig
 
 
+def render_performance_chart_section(
+    portfolio_name: str,
+    accent_color: str,
+    inception_date: str,
+    bench_pri_lbl: str | None,
+    bench_sec_lbl: str | None,
+    port_index,
+    primary_index,
+    secondary_index,
+    min_days_stats: int = 60,
+):
+    """Render the Performance content: chart + Sharpe/Max DD/Beta + Monthly Returns
+    table.
+
+    Pure rendering function — the caller provides pre-computed series (port_index,
+    primary_index, secondary_index) and is responsible for wrapping this call in
+    a `with st.expander(...)` or other container.
+
+    Used by both the public portfolio pages and the Admin cockpit so the visual
+    stays in sync.
+
+    Sharpe and Beta are gated behind `min_days_stats` trading days of history
+    (default 60) to avoid showing meaningless stats on a young portfolio.
+    """
+    if port_index is None or port_index.empty:
+        st.info("No performance data yet.")
+        return
+
+    n_returns = len(port_index.pct_change().dropna())
+    stats_ready = n_returns >= min_days_stats
+    stats_help = f"Available after {min_days_stats} trading days (currently {n_returns})"
+
+    # ── Chart ──
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=port_index.index, y=port_index.values,
+        name=portfolio_name,
+        line=dict(color=accent_color, width=3, shape="spline", smoothing=0.8),
+        hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
+    ))
+    if secondary_index is not None and not secondary_index.empty:
+        fig.add_trace(go.Scatter(
+            x=secondary_index.index, y=secondary_index.values,
+            name=bench_sec_lbl,
+            visible="legendonly",
+            line=dict(color="#6B7280", width=1.5, dash="dot",
+                      shape="spline", smoothing=0.6),
+            hovertemplate=f"%{{x|%b %d, %Y}}<br>{bench_sec_lbl}: %{{y:.1f}}<extra></extra>",
+        ))
+    if primary_index is not None and not primary_index.empty:
+        fig.add_trace(go.Scatter(
+            x=primary_index.index, y=primary_index.values,
+            name=bench_pri_lbl,
+            line=dict(color="#9CA3AF", width=1.5, dash="dash",
+                      shape="spline", smoothing=0.6),
+            hovertemplate=f"%{{x|%b %d, %Y}}<br>{bench_pri_lbl}: %{{y:.1f}}<extra></extra>",
+        ))
+    fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
+    layout = chart_layout(height=380)
+    layout["hovermode"] = "x unified"
+    layout["yaxis"]["title"] = "Base 100"
+    layout["legend"] = dict(
+        orientation="h",
+        yanchor="top", y=-0.18,
+        xanchor="center", x=0.5,
+        font=dict(size=10),
+        bgcolor="rgba(0,0,0,0)",
+    )
+    layout["margin"]["b"] = 60
+    fig.update_layout(**layout)
+    # x-axis padding so the chart doesn't end glued to the right edge
+    _span = port_index.index[-1] - port_index.index[0]
+    _pad = max(_span * 0.04, pd.Timedelta(days=1))
+    fig.update_xaxes(range=[
+        port_index.index[0] - _pad,
+        port_index.index[-1] + _pad,
+    ])
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ── Sharpe / Max Drawdown / Beta ──
+    port_ret = daily_returns(port_index)
+    secondary_ret = daily_returns(secondary_index) if (secondary_index is not None and not secondary_index.empty) else pd.Series()
+
+    r1, r2, r3 = st.columns(3)
+    with r1:
+        if stats_ready:
+            s = sharpe_ratio(port_ret)
+            st.metric("Sharpe Ratio (ann.)",
+                      f"{s:.2f}" if s is not None else "—",
+                      help="Annualized Sharpe, risk-free rate 5%")
+        else:
+            st.metric("Sharpe Ratio (ann.)", "—", help=stats_help)
+    with r2:
+        md = max_drawdown(port_index)
+        st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
+    with r3:
+        beta_label = f"Beta vs {bench_sec_lbl}" if bench_sec_lbl else "Beta"
+        if stats_ready:
+            b = beta_vs_spy(port_ret, secondary_ret)
+            st.metric(beta_label, f"{b:.2f}" if b is not None else "—")
+        else:
+            st.metric(beta_label, "—", help=stats_help)
+
+    # ── Monthly returns table ──
+    st.write("")
+    st.markdown('<div class="pf-section-label">Monthly Returns (%)</div>', unsafe_allow_html=True)
+    mrt = monthly_returns_table(port_index, inception_date=inception_date)
+    if not mrt.empty:
+        _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        inc_ts   = pd.Timestamp(inception_date)
+        inc_col  = _MONTHS[inc_ts.month - 1]
+        inc_year = inc_ts.year
+
+        def _color_monthly(col):
+            return [
+                "color: #00D09C" if pd.notna(v) and v > 0
+                else "color: #FF4B4B" if pd.notna(v) and v < 0
+                else "" for v in col
+            ]
+        fmt = {m: (lambda v: f"{v:+.1f}" if pd.notna(v) else "") for m in mrt.columns}
+        styled_mrt = mrt.style.format(fmt).apply(_color_monthly)
+        if inc_year in mrt.index and inc_col in mrt.columns:
+            styled_mrt = styled_mrt.format(
+                lambda v: f"{v:+.1f}*" if pd.notna(v) else "",
+                subset=pd.IndexSlice[[inc_year], [inc_col]],
+            )
+        st.dataframe(styled_mrt, use_container_width=True,
+                     height=38 + min(len(mrt), 10) * 35)
+        st.caption(f"\\* Partial month — return from inception ({inception_date}) to month-end.")
+
+
 def render_portfolio_page(portfolio_id: str, options: dict | None = None):
     """Render the full portfolio page for a given portfolio.
 
@@ -548,115 +680,18 @@ Always conduct your own due diligence before making any investment decision.
         else:
             st.metric("Today", "—")
 
-    # ── Performance ───────────────────────────────────────────────────────────
+    # ── Performance (shared with Admin via render_performance_chart_section) ──
     with st.expander("Performance", expanded=True):
-        if port_index is not None and not port_index.empty:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=port_index.index, y=port_index.values,
-                name=portfolio_name,
-                line=dict(color=accent, width=3, shape="spline", smoothing=0.8),
-                hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
-            ))
-            # Secondary benchmark (legend-only by default) — light grey
-            if secondary_index is not None:
-                fig.add_trace(go.Scatter(
-                    x=secondary_index.index, y=secondary_index.values,
-                    name=bench_sec_lbl,
-                    visible="legendonly",
-                    line=dict(color="#6B7280", width=1.5, dash="dot",
-                              shape="spline", smoothing=0.6),
-                    hovertemplate=f"%{{x|%b %d, %Y}}<br>{bench_sec_lbl}: %{{y:.1f}}<extra></extra>",
-                ))
-            # Primary benchmark (visible by default) — light, dashed
-            if primary_index is not None:
-                fig.add_trace(go.Scatter(
-                    x=primary_index.index, y=primary_index.values,
-                    name=bench_pri_lbl,
-                    visible=True,
-                    line=dict(color="#9CA3AF", width=1.5, dash="dash",
-                              shape="spline", smoothing=0.6),
-                    hovertemplate=f"%{{x|%b %d, %Y}}<br>{bench_pri_lbl}: %{{y:.1f}}<extra></extra>",
-                ))
-            fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
-            layout = chart_layout(height=380)
-            layout["hovermode"] = "x unified"
-            layout["yaxis"]["title"] = "Base 100"
-            layout["legend"] = dict(
-                orientation="h",
-                yanchor="top", y=-0.18,
-                xanchor="center", x=0.5,
-                font=dict(size=10),
-                bgcolor="rgba(0,0,0,0)",
-            )
-            layout["margin"]["b"] = 60
-            fig.update_layout(**layout)
-            # Add visual padding on the x-axis so the chart doesn't end "glued"
-            # to the right edge. Scales with the history range (~4% on each side).
-            if not port_index.empty:
-                _span = port_index.index[-1] - port_index.index[0]
-                _pad = max(_span * 0.04, pd.Timedelta(days=1))
-                fig.update_xaxes(range=[
-                    port_index.index[0] - _pad,
-                    port_index.index[-1] + _pad,
-                ])
-            st.plotly_chart(fig, use_container_width=True)
-
-            port_ret = daily_returns(port_index)
-            secondary_ret = daily_returns(secondary_index) if secondary_index is not None else pd.Series()
-
-            r1, r2, r3 = st.columns(3)
-            _stats_ready = _n_returns >= _MIN_DAYS_STATS
-            _stats_help = f"Available after {_MIN_DAYS_STATS} trading days (currently {_n_returns})"
-            with r1:
-                if _stats_ready:
-                    s = sharpe_ratio(port_ret)
-                    st.metric("Sharpe Ratio (ann.)",
-                              f"{s:.2f}" if s is not None else "—",
-                              help="Annualized Sharpe, risk-free rate 5%")
-                else:
-                    st.metric("Sharpe Ratio (ann.)", "—", help=_stats_help)
-            with r2:
-                md = max_drawdown(port_index)
-                st.metric("Max Drawdown",
-                          f"{md:.2f}%" if md is not None else "—")
-            with r3:
-                beta_label = f"Beta vs {bench_sec_lbl}" if bench_sec_lbl else "Beta"
-                if _stats_ready:
-                    b = beta_vs_spy(port_ret, secondary_ret)
-                    st.metric(beta_label,
-                              f"{b:.2f}" if b is not None else "—")
-                else:
-                    st.metric(beta_label, "—", help=_stats_help)
-
-            # Monthly returns
-            st.write("")
-            st.markdown('<div class="pf-section-label">Monthly Returns (%)</div>', unsafe_allow_html=True)
-            mrt = monthly_returns_table(port_index, inception_date=inception_date)
-            if not mrt.empty:
-                _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-                _inc_ts   = pd.Timestamp(inception_date)
-                _inc_col  = _MONTHS[_inc_ts.month - 1]
-                _inc_year = _inc_ts.year
-
-                def color_monthly(col):
-                    return [
-                        "color: #00D09C" if pd.notna(v) and v > 0
-                        else "color: #FF4B4B" if pd.notna(v) and v < 0
-                        else "" for v in col
-                    ]
-                fmt = {m: (lambda v: f"{v:+.1f}" if pd.notna(v) else "") for m in mrt.columns}
-                styled_mrt = mrt.style.format(fmt).apply(color_monthly)
-                # Asterisk on the inception cell only (partial month from inception)
-                if _inc_year in mrt.index and _inc_col in mrt.columns:
-                    styled_mrt = styled_mrt.format(
-                        lambda v: f"{v:+.1f}*" if pd.notna(v) else "",
-                        subset=pd.IndexSlice[[_inc_year], [_inc_col]],
-                    )
-                st.dataframe(styled_mrt, use_container_width=True,
-                             height=38 + min(len(mrt), 10) * 35)
-                st.caption(f"\\* Partial month — return from inception ({inception_date}) to month-end.")
+        render_performance_chart_section(
+            portfolio_name=portfolio_name,
+            accent_color=accent,
+            inception_date=inception_date,
+            bench_pri_lbl=bench_pri_lbl,
+            bench_sec_lbl=bench_sec_lbl,
+            port_index=port_index,
+            primary_index=primary_index,
+            secondary_index=secondary_index,
+        )
 
     st.divider()
 

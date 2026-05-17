@@ -188,15 +188,16 @@ with st.expander("🔬 NAV Model Comparison (legacy vs new)", expanded=False):
 
 st.divider()
 
-# ── Performance snapshot ──────────────────────────────────────────────────────
+# ── Performance snapshot (uses the same render fn as the public pages) ────────
 with st.expander("Performance", expanded=False):
-    import plotly.graph_objects as go
+    from utils.portfolio import render_performance_chart_section
     from utils.market import get_history, get_prices_from_db as _get_prices
-    from utils.metrics import (daily_returns, sharpe_ratio,
-                               max_drawdown, beta_vs_spy, annualized_volatility, monthly_returns_table)
-    from utils.theme import PORTFOLIO_LINE, BENCHMARK_LINE, HLINE_COLOR, BG, TEXT_MID, POSITIVE, NEGATIVE, TRIM
+    from utils.theme import PORTFOLIO_LINE
+
     _positions_perf = get_positions(portfolio_id=_pid)
-    if _positions_perf:
+    if not _positions_perf:
+        st.info("No positions to compute performance.")
+    else:
         _inception = str(_pf.get("inception_date", "2026-04-01"))
         _bench_pri = _pf.get("benchmark_primary")
         _bench_pri_lbl = _pf.get("benchmark_primary_label") or _bench_pri or ""
@@ -205,21 +206,14 @@ with st.expander("Performance", expanded=False):
         _accent = _pf.get("color_primary") or PORTFOLIO_LINE
         _portfolio_name = _pf.get("name", _pid)
         _tickers_perf = tuple(p["ticker"] for p in _positions_perf)
+
+        # Fetch live (cached) prices to compute "Today" weighted average
         _prices_perf = _get_prices(_tickers_perf)
         for p in _positions_perf:
             live = _prices_perf.get(p["ticker"], {})
-            p["current_price"] = live.get("price")
-            p["change_today"]  = live.get("change_pct")
-            if p["current_price"] and p["entry_price"]:
-                p["perf_pct"] = round((p["current_price"] - p["entry_price"]) / p["entry_price"] * 100, 2)
-            else:
-                p["perf_pct"] = None
-        _valid = [p for p in _positions_perf if p["perf_pct"] is not None]
-        _total_w = sum(p["weight"] for p in _valid) or 1
+            p["change_today"] = live.get("change_pct")
 
-        # Chart base 100 via fund accounting (daily_holdings), aligned to T-1
-        # anchor like the public page. Was: build_portfolio_index (cost-basis,
-        # had PRU-vs-yfinance gap making chart start ≠ 100).
+        # Fetch benchmark series from T-1 anchor (same convention as public)
         def _prev_trading_day(d_str):
             c = pd.Timestamp(d_str) - pd.Timedelta(days=1)
             while c.weekday() >= 5:
@@ -228,126 +222,68 @@ with st.expander("Performance", expanded=False):
         _chart_start = _prev_trading_day(_inception)
         _bench_tickers = tuple(b for b in (_bench_pri, _bench_sec) if b)
         _history = get_history(_tickers_perf + _bench_tickers, _chart_start)
+
+        _primary_index = None
+        _primary_perf = None
+        _secondary_index = None
+        if not _history.empty:
+            if _bench_pri and _bench_pri in _history.columns:
+                _raw = _history[_bench_pri].dropna()
+                if not _raw.empty:
+                    _primary_index = _raw / _raw.iloc[0] * 100
+                    _primary_perf = round(_primary_index.iloc[-1] - 100, 2)
+            if _bench_sec and _bench_sec in _history.columns:
+                _raw = _history[_bench_sec].dropna()
+                if not _raw.empty:
+                    _secondary_index = _raw / _raw.iloc[0] * 100
+
         _port_index = get_nav_from_holdings(_pid)
-        _pri_perf = None
-        _pri_index = None
-        _sec_index = None
-        if not _port_index.empty:
-            _port_perf = round(_port_index.iloc[-1] - 100, 2)
-            if _bench_pri and not _history.empty and _bench_pri in _history.columns:
-                _pri_raw = _history[_bench_pri].dropna()
-                if not _pri_raw.empty:
-                    _pri_index = _pri_raw / _pri_raw.iloc[0] * 100
-                    _pri_perf = round(_pri_index.iloc[-1] - 100, 2)
-            if _bench_sec and not _history.empty and _bench_sec in _history.columns:
-                _sec_raw = _history[_bench_sec].dropna()
-                if not _sec_raw.empty:
-                    _sec_index = _sec_raw / _sec_raw.iloc[0] * 100
-            # Trim port_index to benchmark's last date (avoid 1-day mismatch)
-            _bench_ends = []
-            if _pri_index is not None and not _pri_index.empty:
-                _bench_ends.append(_pri_index.index[-1])
-            if _sec_index is not None and not _sec_index.empty:
-                _bench_ends.append(_sec_index.index[-1])
-            if _bench_ends:
-                _common_end = min(_bench_ends)
-                _port_index = _port_index[_port_index.index <= _common_end]
-            _port_ret = daily_returns(_port_index)
-            _bench_ret = daily_returns(_pri_index) if _pri_index is not None else pd.Series()
-            _alpha = round(_port_perf - (_pri_perf or 0), 2)
-            _today_valid = [p for p in _positions_perf if p.get("change_today") is not None]
-            _today = sum(p["weight"] * p["change_today"] for p in _today_valid) / _total_w if _today_valid else None
+        # Trim port_index to benchmark end date (same as public)
+        _bench_ends = []
+        if _primary_index is not None and not _primary_index.empty:
+            _bench_ends.append(_primary_index.index[-1])
+        if _secondary_index is not None and not _secondary_index.empty:
+            _bench_ends.append(_secondary_index.index[-1])
+        if _bench_ends and _port_index is not None and not _port_index.empty:
+            _port_index = _port_index[_port_index.index <= min(_bench_ends)]
 
-            pc1, pc2, pc3, pc4 = st.columns(4)
-            with pc1:
-                s = "+" if _port_perf >= 0 else ""
-                st.metric("Portfolio (inception)", f"{s}{_port_perf:.2f}%")
-            with pc2:
-                s = "+" if (_pri_perf or 0) >= 0 else ""
-                st.metric(f"{_bench_pri_lbl} (inception)" if _bench_pri_lbl else "Benchmark (inception)",
-                          f"{s}{_pri_perf:.2f}%" if _pri_perf is not None else "—")
-            with pc3:
-                s = "+" if _alpha >= 0 else ""
-                st.metric("Alpha", f"{s}{_alpha:.2f}%")
-            with pc4:
-                if _today is not None:
-                    s = "+" if _today >= 0 else ""
-                    st.metric("Today", f"{s}{_today:.2f}%")
-                else:
-                    st.metric("Today", "—")
+        # Metrics row (4 cols) — Admin-specific layout, kept inline since
+        # the public page renders these outside the expander differently.
+        _port_perf = round(float(_port_index.iloc[-1] - 100), 2) if (_port_index is not None and not _port_index.empty) else 0.0
+        _alpha = round(_port_perf - (_primary_perf or 0), 2)
+        _today_valid = [p for p in _positions_perf if p.get("change_today") is not None]
+        _total_w = sum(p["weight"] for p in _today_valid) or 1
+        _today = sum(p["weight"] * p["change_today"] for p in _today_valid) / _total_w if _today_valid else None
 
-            # Chart
-            _fig = go.Figure()
-            _fig.add_trace(go.Scatter(
-                x=_port_index.index, y=_port_index.values, name=_portfolio_name,
-                line=dict(color=_accent, width=3, shape="spline", smoothing=0.8),
-                hovertemplate="%{x|%b %d, %Y}<br>Portfolio: %{y:.1f}<extra></extra>",
-            ))
-            if _pri_index is not None:
-                _fig.add_trace(go.Scatter(
-                    x=_pri_index.index, y=_pri_index.values, name=_bench_pri_lbl or _bench_pri,
-                    line=dict(color=BENCHMARK_LINE, width=1.5, dash="dot", shape="spline", smoothing=0.6),
-                    hovertemplate=f"%{{x|%b %d, %Y}}<br>{_bench_pri_lbl or _bench_pri}: %{{y:.1f}}<extra></extra>",
-                ))
-            if _sec_index is not None:
-                _fig.add_trace(go.Scatter(
-                    x=_sec_index.index, y=_sec_index.values, name=_bench_sec_lbl or _bench_sec,
-                    visible="legendonly",
-                    line=dict(color="#9CA3AF", width=1.5, dash="dash", shape="spline", smoothing=0.6),
-                    hovertemplate=f"%{{x|%b %d, %Y}}<br>{_bench_sec_lbl or _bench_sec}: %{{y:.1f}}<extra></extra>",
-                ))
-            _fig.add_hline(y=100, line_dash="dash", line_color=HLINE_COLOR, line_width=1)
-            _fig.update_layout(
-                plot_bgcolor=BG, paper_bgcolor=BG,
-                font=dict(color=TEXT_MID, size=11),
-                height=340, hovermode="x unified",
-                yaxis=dict(title="Base 100", gridcolor="#161D2E", zeroline=False),
-                xaxis=dict(gridcolor="#161D2E"),
-                margin=dict(l=0, r=0, t=20, b=0),
-                legend=dict(orientation="h", yanchor="top", y=-0.1, xanchor="center", x=0.5,
-                            font=dict(size=10), bgcolor="rgba(0,0,0,0)"),
-            )
-            st.plotly_chart(_fig, use_container_width=True)
+        pc1, pc2, pc3, pc4 = st.columns(4)
+        with pc1:
+            s = "+" if _port_perf >= 0 else ""
+            st.metric("Portfolio (inception)", f"{s}{_port_perf:.2f}%")
+        with pc2:
+            s = "+" if (_primary_perf or 0) >= 0 else ""
+            st.metric(f"{_bench_pri_lbl} (inception)" if _bench_pri_lbl else "Benchmark (inception)",
+                      f"{s}{_primary_perf:.2f}%" if _primary_perf is not None else "—")
+        with pc3:
+            s = "+" if _alpha >= 0 else ""
+            st.metric("Alpha", f"{s}{_alpha:.2f}%")
+        with pc4:
+            if _today is not None:
+                s = "+" if _today >= 0 else ""
+                st.metric("Today", f"{s}{_today:.2f}%")
+            else:
+                st.metric("Today", "—")
 
-            sr1, sr2, sr3 = st.columns(3)
-            with sr1:
-                s = sharpe_ratio(_port_ret)
-                st.metric("Sharpe (ann.)", f"{s:.2f}" if s is not None else "—")
-            with sr2:
-                md = max_drawdown(_port_index)
-                st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
-            with sr3:
-                _beta_lbl = f"Beta vs {_bench_pri_lbl}" if _bench_pri_lbl else "Beta"
-                b = beta_vs_spy(_port_ret, _bench_ret)
-                st.metric(_beta_lbl, f"{b:.2f}" if b is not None else "—")
-
-            # Monthly returns
-            st.write("")
-            st.markdown("**Monthly Returns (%)**")
-            _mrt = monthly_returns_table(_port_index, inception_date=_inception)
-            if not _mrt.empty:
-                _MONTHS_ADM = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-                _inc_ts   = pd.Timestamp(_inception)
-                _inc_col  = _MONTHS_ADM[_inc_ts.month - 1]
-                _inc_year = _inc_ts.year
-
-                def _color_m(col):
-                    return ["color: #00D09C" if pd.notna(v) and v > 0
-                            else "color: #FF4B4B" if pd.notna(v) and v < 0
-                            else "" for v in col]
-                _fmt = {m: (lambda v: f"{v:+.1f}" if pd.notna(v) else "") for m in _mrt.columns}
-                _styled_mrt = _mrt.style.format(_fmt).apply(_color_m)
-                if _inc_year in _mrt.index and _inc_col in _mrt.columns:
-                    _styled_mrt = _styled_mrt.format(
-                        lambda v: f"{v:+.1f}*" if pd.notna(v) else "",
-                        subset=pd.IndexSlice[[_inc_year], [_inc_col]],
-                    )
-                st.dataframe(_styled_mrt,
-                             use_container_width=True, height=38 + min(len(_mrt), 10) * 35)
-                st.caption(f"\\* Partial month — return from inception ({_inception}) to month-end.")
-    else:
-        st.info("No positions to compute performance.")
+        # Chart + Sharpe/MD/Beta + Monthly Returns — shared with public pages
+        render_performance_chart_section(
+            portfolio_name=_portfolio_name,
+            accent_color=_accent,
+            inception_date=_inception,
+            bench_pri_lbl=_bench_pri_lbl,
+            bench_sec_lbl=_bench_sec_lbl,
+            port_index=_port_index,
+            primary_index=_primary_index,
+            secondary_index=_secondary_index,
+        )
 
 st.divider()
 
