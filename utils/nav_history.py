@@ -61,13 +61,30 @@ def get_nav_from_holdings(portfolio_id: str) -> pd.Series:
     and reproduce the same number.
     """
     sb = get_client()
-    rows = (
-        sb.table("daily_holdings")
-        .select("date, value")
-        .eq("portfolio_id", portfolio_id)
-        .execute()
-        .data
-    )
+
+    # CRITICAL: paginate. Supabase default limit is 1000 rows. Portfolio_Test
+    # has ~3700 rows (138 days × 27 tickers). Without pagination, we'd get
+    # only the first 1000 rows with the LAST date partial (some tickers cut
+    # off by the limit), creating a fake "NAV drop" on the chart.
+    rows = []
+    offset = 0
+    PAGE = 1000
+    while True:
+        chunk = (
+            sb.table("daily_holdings")
+            .select("date, value")
+            .eq("portfolio_id", portfolio_id)
+            .range(offset, offset + PAGE - 1)
+            .execute()
+            .data
+        )
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+
     if not rows:
         return pd.Series(dtype=float)
 

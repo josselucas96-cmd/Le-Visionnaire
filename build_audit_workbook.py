@@ -62,15 +62,30 @@ def fetch_price(ticker: str) -> float | None:
 
 # ── Holdings sheet ────────────────────────────────────────────────────────────
 def fetch_holdings(sb, portfolio_id: str) -> list[dict]:
-    return (
-        sb.table("daily_holdings")
-        .select("date, ticker, shares, price, value")
-        .eq("portfolio_id", portfolio_id)
-        .order("date")
-        .order("ticker")
-        .execute()
-        .data
-    )
+    """Paginated fetch — Supabase default limit is 1000 rows. Portfolio_Test
+    has 3700+ rows (138 days × 27 tickers); without pagination the last
+    date would be partial and the workbook NAV calc wrong."""
+    rows = []
+    offset = 0
+    PAGE = 1000
+    while True:
+        chunk = (
+            sb.table("daily_holdings")
+            .select("date, ticker, shares, price, value")
+            .eq("portfolio_id", portfolio_id)
+            .order("date")
+            .order("ticker")
+            .range(offset, offset + PAGE - 1)
+            .execute()
+            .data
+        )
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+    return rows
 
 
 def build_holdings_sheet(wb: Workbook, portfolio_id: str, rows: list[dict],
