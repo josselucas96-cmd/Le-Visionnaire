@@ -55,10 +55,14 @@ _pf_names = [p["name"] for p in _portfolios_admin]
 if "admin_pf_id" not in st.session_state or st.session_state.admin_pf_id not in _pf_ids:
     st.session_state.admin_pf_id = _pf_ids[0]
 
-# Title row + Logout
-col_title, col_logout = st.columns([8, 1])
+# Title row + Articles Admin link + Logout
+col_title, col_articles, col_logout = st.columns([7, 1.2, 1])
 with col_title:
     st.title("Cockpit")
+with col_articles:
+    st.write("")
+    st.write("")
+    st.page_link("pages/Articles_Admin.py", label="Articles Admin")
 with col_logout:
     st.write("")
     st.write("")

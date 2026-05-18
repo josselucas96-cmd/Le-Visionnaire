@@ -5,7 +5,7 @@ from utils.theme import NAV_ACTIVE_COLOR, NAV_ACTIVE_BG, BG, BORDER
 def render_nav(current: str):
     """
     Renders the top navigation bar.
-    current: one of 'specula', 'visionnaire', 'nakamoto', 'history', 'research', 'about'
+    current: one of 'specula', 'visionnaire', 'nakamoto', 'history', 'research', 'articles', 'about'
 
     Portfolio button is a dropdown with Le Visionnaire + Le Nakamoto.
     Links use target="_self" so clicks work (target="_top" was breaking clicks
@@ -52,6 +52,7 @@ def render_nav(current: str):
     simple_pages = [
         ("Accueil",      "/",         "specula"),
         ("Stock Papers", "/Research", "research"),
+        ("Articles",     "/Articles", "articles"),
         ("About",        "/About",    "about"),
     ]
     accueil_label, accueil_href, accueil_key = simple_pages[0]
