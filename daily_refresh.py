@@ -70,7 +70,7 @@ def get_all_portfolio_ids(sb) -> list[str]:
     return [r["id"] for r in rows]
 
 
-def fetch_close_price(ticker: str, target_date_str: str) -> tuple[float | None, str | None]:
+def fetch_close_price(ticker: str, target_date_str: str, retries: int = 3) -> tuple[float | None, str | None]:
     """Fetch the latest Close ≤ target_date_str.
 
     On a trading day: returns the close for that day.
@@ -78,32 +78,42 @@ def fetch_close_price(ticker: str, target_date_str: str) -> tuple[float | None, 
     before target_date_str (so equity tickers carry forward Friday's close
     into Sat/Sun rows).
 
+    Retries on transient failures (empty result / network / rate-limit).
+    yfinance gets rate-limited from GitHub Actions' shared IPs, which caused
+    5 days of missing data 2026-05-18→22 (cf. the self-healing backfill below).
+
     Returns (price, actual_close_date_str) or (None, None) if no data found.
     """
-    try:
-        from datetime import datetime, timedelta
-        import pandas as pd
+    from datetime import datetime, timedelta
+    import time
+    import pandas as pd
 
-        # Fetch a 10-day window ending at target_date to find the latest available
-        target = datetime.strptime(target_date_str, "%Y-%m-%d")
-        start = (target - timedelta(days=10)).strftime("%Y-%m-%d")
-        end = (target + timedelta(days=1)).strftime("%Y-%m-%d")
-        df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
-        if df.empty or "Close" not in df.columns:
+    target = datetime.strptime(target_date_str, "%Y-%m-%d")
+    start = (target - timedelta(days=10)).strftime("%Y-%m-%d")
+    end = (target + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    for attempt in range(1, retries + 1):
+        try:
+            # Fetch a 10-day window ending at target_date to find the latest available
+            df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
+            if df.empty or "Close" not in df.columns:
+                raise ValueError("empty frame")
+
+            # Keep only rows with date ≤ target_date_str
+            df = df[df.index <= pd.Timestamp(target_date_str)]
+            if df.empty:
+                return None, None  # genuinely no data ≤ target (e.g. pre-listing)
+
+            last_idx = df.index[-1]
+            close = df.loc[last_idx, "Close"]
+            price = float(close.iloc[0]) if hasattr(close, "iloc") else float(close)
+            return price, last_idx.strftime("%Y-%m-%d")
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(2 * attempt)  # 2s, 4s backoff — let rate-limit cool off
+                continue
+            print(f"  ! {ticker}: yfinance fetch error after {retries} tries ({e})", flush=True)
             return None, None
-
-        # Keep only rows with date ≤ target_date_str
-        df = df[df.index <= pd.Timestamp(target_date_str)]
-        if df.empty:
-            return None, None
-
-        last_idx = df.index[-1]
-        close = df.loc[last_idx, "Close"]
-        price = float(close.iloc[0]) if hasattr(close, "iloc") else float(close)
-        return price, last_idx.strftime("%Y-%m-%d")
-    except Exception as e:
-        print(f"  ! {ticker}: yfinance fetch error ({e})", flush=True)
-        return None, None
 
 
 def get_initial_capital(sb, portfolio_id: str) -> float:
@@ -231,6 +241,54 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
         "skipped_tickers": skipped,
         "propagated": propagated,
     }
+
+
+def backfill_recent_gaps(sb, portfolio_ids: list[str], target_date_str: str,
+                         lookback_days: int = 7) -> list[dict]:
+    """Self-heal: fill any missing (portfolio, date) rows in the last N days.
+
+    Why: a single failed cron run (e.g. yfinance rate-limit from GitHub Actions'
+    shared IPs) used to leave a PERMANENT hole — nothing ever went back to fill
+    it (cf. the 2026-05-18→22 gap on batisseur/nakamoto). With this, every run
+    looks back `lookback_days` calendar days and writes any date a portfolio is
+    missing, so a transient failure self-corrects on the next successful run.
+
+    Dates are processed chronologically per portfolio so `derive_cash_at_date`
+    chains cash baselines correctly. Existing rows are never overwritten
+    (respects the daily_holdings immutability rule — we only ADD missing days).
+    """
+    from datetime import datetime, timedelta
+    target = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    # Candidate dates: [target-lookback, target-1]. `target` itself is written
+    # by the main loop, so we don't duplicate it here.
+    candidates = [
+        (target - timedelta(days=k)).isoformat()
+        for k in range(lookback_days, 0, -1)
+    ]
+
+    healed = []
+    for pid in portfolio_ids:
+        # Which of the candidate dates already have rows?
+        existing = (
+            sb.table("daily_holdings")
+            .select("date")
+            .eq("portfolio_id", pid)
+            .gte("date", candidates[0])
+            .lte("date", candidates[-1])
+            .execute()
+            .data
+        )
+        present = {r["date"] for r in existing}
+        missing = [d for d in candidates if d not in present]
+        for d in missing:
+            try:
+                r = refresh_portfolio(sb, pid, d)
+                healed.append({"portfolio": pid, "date": d, "rows": r["rows_written"]})
+                print(f"  [backfill] {pid} {d}: wrote {r['rows_written']} rows, "
+                      f"NAV=${r['nav']:,.0f}", flush=True)
+            except Exception as e:
+                print(f"  [backfill] {pid} {d}: ERROR {e}", flush=True)
+    return healed
 
 
 def _compute_dividend_factor(ticker: str, entry_date_str: str) -> tuple[float, float]:
@@ -538,6 +596,18 @@ def main():
     # up without code change — e.g., the `test` sandbox).
     portfolio_ids = get_all_portfolio_ids(sb)
     print(f"[daily_refresh] portfolios to refresh: {portfolio_ids}", flush=True)
+
+    # Self-heal: backfill any missing days from the last week BEFORE writing
+    # today's row (chronological order keeps cash baselines correct). This makes
+    # the cron resilient to transient failures — a missed day fills itself on the
+    # next run instead of leaving a permanent hole.
+    if not args.dry_run:
+        print(f"\n[daily_refresh] checking last 7 days for gaps to backfill...", flush=True)
+        healed = backfill_recent_gaps(sb, portfolio_ids, target, lookback_days=7)
+        if healed:
+            print(f"[daily_refresh] backfilled {len(healed)} missing (portfolio, date) rows.", flush=True)
+        else:
+            print(f"[daily_refresh] no gaps found.", flush=True)
 
     results = []
     for pid in portfolio_ids:
