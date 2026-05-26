@@ -1292,7 +1292,7 @@ def _moves_classify(current: float, new: float) -> str:
     return "REDUCE"
 
 
-def _pru_compute_rebalance(positions_list, draft, prices_live):
+def _pru_compute_rebalance(positions_list, draft, prices_live, nav_factor=None):
     """PRU model + auto-conversion of typed targets to DB weights.
 
     Returns dict with:
@@ -1400,7 +1400,16 @@ def _pru_compute_rebalance(positions_list, draft, prices_live):
     if denominator <= 0:
         return None  # over-allocation / unsolvable
 
-    T_after            = 100.0 * (T_untouched + 100.0 - sum_untouched_DB) / denominator
+    # NAV is conserved by any cash<->stock reshuffle, so the post-rebalance NAV
+    # factor equals the CURRENT one. The old closed-form derived T_after from
+    # cost-basis weights, which under-credited the proceeds of closing a drifted
+    # position (e.g. RKLB +90% -> T_after came out ~7pt too low, sizing new
+    # positions below target and inflating the untouched projection). When the
+    # caller passes the true current NAV factor, use it directly.
+    if nav_factor is not None and nav_factor > 0:
+        T_after = nav_factor
+    else:
+        T_after = 100.0 * (T_untouched + 100.0 - sum_untouched_DB) / denominator
     initial_cash_after = 100.0 - sum_untouched_DB - T_after * (K + L) / 100.0
     cash_drifted_after = initial_cash_after / T_after * 100.0 if T_after > 0 else 0.0
 
@@ -1427,7 +1436,8 @@ def _pru_compute_rebalance(positions_list, draft, prices_live):
     projected_drifted = {}
     for m in moves:
         if m["action"] == "CLOSE":
-            continue
+            projected_drifted[m["ticker"]] = 0.0  # closed -> 0; also prevents the
+            continue                               # untouched fallback re-adding it
         projected_drifted[m["ticker"]] = m["target_drifted"]
     for p in positions_list:
         if p["ticker"] not in projected_drifted and p.get("id") is not None:
@@ -1721,8 +1731,11 @@ with tab_moves:
             # Touched/new positions land at exactly their typed target_drifted;
             # entry_price preserved on REDUCE (track record kept), PRU-averaged
             # on REINFORCE (just like add_position already does).
+            _ic = _read_initial_capital(_pid)
+            _nav_factor = (globals().get("nav_total") or _ic) / _ic * 100.0
             rebalance = _pru_compute_rebalance(
                 positions, st.session_state[draft_key], preview_prices,
+                nav_factor=_nav_factor,
             )
             if rebalance is None:
                 st.error("Targets unsolvable (over-allocation). Reduce some New % values.")
@@ -1858,9 +1871,14 @@ with tab_moves:
             with cbc2:
                 if st.button("Confirm & execute moves", type="primary", key="moves_commit"):
                     fresh_prices = get_prices_live(move_tickers)
-                    # PRU model: recompute auto-conversion at commit time with fresh prices
+                    # PRU model: recompute auto-conversion at commit time with fresh prices.
+                    # Pass the true current NAV factor so targets convert exactly
+                    # (NAV is conserved by the reshuffle — see _pru_compute_rebalance).
+                    _ic = _read_initial_capital(_pid)
+                    _nav_factor = (globals().get("nav_total") or _ic) / _ic * 100.0
                     commit_rebalance = _pru_compute_rebalance(
                         positions, st.session_state[draft_key], fresh_prices,
+                        nav_factor=_nav_factor,
                     )
                     if commit_rebalance is None:
                         st.error("Targets unsolvable at commit. Aborted.")
