@@ -203,6 +203,47 @@ def render_performance_chart_section(
         st.info("No performance data yet.")
         return
 
+    # ── Align to the real equity trading calendar ─────────────────────────────
+    # The portfolio line is read from daily_holdings, which carries a row for
+    # EVERY calendar day since the 7/7 cron (Friday's close propagated through
+    # weekends AND market holidays like Memorial Day). Equity markets don't trade
+    # those days, so such points show as flat segments that dangle past the
+    # benchmark. Fix: show the portfolio only on the days the equity market
+    # actually traded — i.e. the dates present in the equity benchmark (handles
+    # weekends AND holidays automatically). A 24/7 benchmark (Bitcoin, whose index
+    # contains weekend dates) is NOT used as the calendar and is left intact so
+    # its real weekend moves still show (e.g. Le Nakamoto's BTC line).
+    def _is_24_7(idx):
+        return len(idx) > 0 and bool((idx.weekday >= 5).any())
+
+    equity_dates = None
+    for _b in (primary_index, secondary_index):
+        if _b is not None and not _b.empty and not _is_24_7(_b.index):
+            equity_dates = _b.index if equity_dates is None else equity_dates.union(_b.index)
+
+    if equity_dates is not None and len(equity_dates) > 0:
+        port_index = port_index[port_index.index.isin(equity_dates)]
+    else:
+        # No equity benchmark available → fall back to weekday-only.
+        port_index = port_index[port_index.index.weekday < 5]
+    if port_index.empty:
+        st.info("No performance data yet.")
+        return
+
+    _last_common = port_index.index[-1]
+
+    def _align_bench(bench):
+        """Clip every benchmark to the portfolio's last shown date so no line
+        dangles past the portfolio. A 24/7 benchmark (Bitcoin) keeps its interior
+        weekend points (the weekend moves still show) — it just no longer trails
+        several days past the portfolio's last day (e.g. on Le Nakamoto)."""
+        if bench is None or bench.empty:
+            return bench
+        return bench[bench.index <= _last_common]
+
+    primary_index   = _align_bench(primary_index)
+    secondary_index = _align_bench(secondary_index)
+
     n_returns = len(port_index.pct_change().dropna())
     stats_ready = n_returns >= min_days_stats
     stats_help = f"Available after {min_days_stats} trading days (currently {n_returns})"
@@ -245,12 +286,18 @@ def render_performance_chart_section(
     )
     layout["margin"]["b"] = 60
     fig.update_layout(**layout)
-    # x-axis padding so the chart doesn't end glued to the right edge
-    _span = port_index.index[-1] - port_index.index[0]
+    # x-axis padding so the chart doesn't end glued to the right edge.
+    # Right edge = latest date across all shown series, so a 24/7 benchmark
+    # (Bitcoin) extending past the portfolio's last weekday isn't clipped.
+    _right_end = port_index.index[-1]
+    for _b in (primary_index, secondary_index):
+        if _b is not None and not _b.empty:
+            _right_end = max(_right_end, _b.index[-1])
+    _span = _right_end - port_index.index[0]
     _pad = max(_span * 0.04, pd.Timedelta(days=1))
     fig.update_xaxes(range=[
         port_index.index[0] - _pad,
-        port_index.index[-1] + _pad,
+        _right_end + _pad,
     ])
     st.plotly_chart(fig, use_container_width=True)
 
