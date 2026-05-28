@@ -155,7 +155,31 @@ def get_prices(tickers: tuple) -> dict:
         except Exception:
             result[ticker] = {"price": None, "change_pct": None,
                               "market_cap": None, "currency": None}
+    _convert_prices_to_usd(result)
     return result
+
+
+def _convert_prices_to_usd(result: dict) -> None:
+    """In-place: convert each entry's `price` (and `market_cap`) to USD.
+    Positions/NAV are USD-denominated, so foreign listings MUST be converted
+    (else value = shares × price is in the listing currency = the FX bug).
+    USD tickers get factor 1.0 (no change → Le Visionnaire untouched). If the FX
+    rate is unknown, the entry is left native (better than a wrong USD figure).
+
+    NOTE: the `currency` label is left as the NATIVE listing currency on purpose.
+    No caller applies FX to `price` (that omission WAS the bug), so there's no
+    double-conversion risk — and the native label is still needed elsewhere
+    (e.g. Admin's EV/mNAV ratio converts enterprise_value using it)."""
+    ccys = tuple({r.get("currency") for r in result.values() if r.get("currency")})
+    if not any(c and c != "USD" for c in ccys):
+        return  # all USD — nothing to do (e.g. Le Visionnaire)
+    fx = get_fx_to_usd(ccys)
+    for r in result.values():
+        f = usd_factor(r.get("currency"), fx)
+        if r.get("price") is not None and f is not None and f != 1.0:
+            r["price"] = round(r["price"] * f, 4)
+            if r.get("market_cap") is not None:
+                r["market_cap"] = r["market_cap"] * f
 
 
 @st.cache_data(ttl=600)  # Refresh every 10 min — cron writes every 24h
@@ -205,6 +229,7 @@ def get_prices_from_db(tickers: tuple) -> dict:
                 "market_cap": float(r["market_cap"]) if r["market_cap"] is not None else None,
                 "currency":   r["currency"] or "USD",
             }
+    _convert_prices_to_usd(result)
     return result
 
 
@@ -233,17 +258,41 @@ def get_bitcoin_price() -> float | None:
         return None
 
 
+# Currencies quoted in a MINOR unit (1/100 of the major unit). e.g. London
+# small-caps quote in pence (GBp/GBX) = GBP/100; some JSE lines in ZAc, etc.
+# yfinance reports the listing price in these minor units, so the USD factor
+# is (major-currency rate) / 100.
+_MINOR_UNIT = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ZAX": "ZAR", "ILA": "ILS"}
+
+
+def usd_factor(currency: str | None, fx: dict) -> float | None:
+    """USD conversion factor for a listing currency, given an fx dict from
+    `get_fx_to_usd`. USD -> 1.0. Minor-unit quotes (pence etc.) divide by 100.
+    Returns None when the rate is unknown so callers can avoid a wrong figure.
+    """
+    if not currency or currency == "USD":
+        return 1.0
+    rate = fx.get(currency)
+    if rate is None:
+        return None
+    return rate / 100.0 if currency in _MINOR_UNIT else rate
+
+
 @st.cache_data(ttl=3600)  # FX rates don't move much intraday
 def get_fx_to_usd(currencies: tuple) -> dict:
     """Returns {currency_code: rate_to_usd}. USD maps to 1.0; unknown / failed
     lookups map to None so the caller can show '—' instead of a wrong figure.
+
+    For minor-unit currencies (GBp pence, etc.) we fetch the MAJOR currency rate
+    and store it under the original key; the /100 is applied by `usd_factor`.
     """
     result = {"USD": 1.0}
     for ccy in currencies:
         if not ccy or ccy == "USD" or ccy in result:
             continue
+        major = _MINOR_UNIT.get(ccy, ccy)  # GBp -> GBP for the FX pair lookup
         try:
-            pair = f"{ccy}USD=X"
+            pair = f"{major}USD=X"
             info = yf.Ticker(pair).fast_info
             rate = info.last_price
             result[ccy] = float(rate) if rate else None

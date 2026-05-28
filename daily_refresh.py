@@ -53,6 +53,49 @@ from supabase import create_client
 
 INITIAL_CAPITAL_FALLBACK = 1_000_000.0
 
+# ── FX (standalone copy of utils.market.usd_factor) ──────────────────────────
+# The cron can't import utils.market (no streamlit installed in the Action), so
+# this mirrors that logic. Positions/NAV are USD; foreign listings must be
+# converted to USD. Minor-unit quotes (pence GBp etc.) divide by 100.
+_MINOR_UNIT = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ZAX": "ZAR", "ILA": "ILS"}
+
+
+def _fx_to_usd(currencies) -> dict:
+    rates = {"USD": 1.0}
+    for ccy in set(c for c in currencies if c):
+        if ccy == "USD" or ccy in rates:
+            continue
+        major = _MINOR_UNIT.get(ccy, ccy)
+        try:
+            rates[ccy] = float(yf.Ticker(f"{major}USD=X").fast_info.last_price)
+        except Exception:
+            rates[ccy] = None
+    return rates
+
+
+def _usd_factor(ccy, fx) -> float | None:
+    if not ccy or ccy == "USD":
+        return 1.0
+    r = fx.get(ccy)
+    if r is None:
+        return None
+    return r / 100.0 if ccy in _MINOR_UNIT else r
+
+
+def _currency_map(sb, tickers) -> dict:
+    """{ticker: listing currency} read from current_prices (written by the cron).
+    Currency is static per ticker, so a prior run's value is fine."""
+    out = {}
+    if not tickers:
+        return out
+    try:
+        for r in (sb.table("current_prices").select("ticker, currency")
+                  .in_("ticker", list(tickers)).execute().data):
+            out[r["ticker"]] = r.get("currency") or "USD"
+    except Exception:
+        pass
+    return out
+
 # PORTFOLIOS is now read dynamically from the `portfolios` table at runtime
 # (see `get_all_portfolio_ids` below). This means any new portfolio added to
 # the DB — including hidden sandboxes like `test` — is automatically picked
@@ -195,6 +238,11 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     )
     cash_amount = derive_cash_at_date(sb, portfolio_id, target_date_str, initial_capital)
 
+    # FX: convert each foreign ticker's native close to USD (value = shares ×
+    # price_usd). Currency per ticker from current_prices; usd_factor handles pence.
+    ccy_map = _currency_map(sb, [p["ticker"] for p in positions if p.get("ticker")])
+    fx = _fx_to_usd(ccy_map.values())
+
     rows = [{
         "portfolio_id": portfolio_id,
         "date":         target_date_str,
@@ -217,14 +265,16 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
             continue
         if actual_date != target_date_str:
             propagated.append((tk, actual_date))
-        value = shares * price
+        f = _usd_factor(ccy_map.get(tk, "USD"), fx) or 1.0
+        price_usd = price * f
+        value = shares * price_usd
         nav += value
         rows.append({
             "portfolio_id": portfolio_id,
             "date":         target_date_str,
             "ticker":       tk,
             "shares":       round(shares, 8),
-            "price":        round(price, 4),
+            "price":        round(price_usd, 4),
             "value":        round(value, 2),
         })
 

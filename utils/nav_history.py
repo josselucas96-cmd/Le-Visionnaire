@@ -20,6 +20,7 @@ import streamlit as st
 
 from utils.data import get_client
 from utils.metrics import build_portfolio_index
+from utils.market import get_fx_to_usd, usd_factor
 
 
 @st.cache_data(ttl=120)
@@ -123,6 +124,22 @@ def lazy_write_holdings(portfolio_id: str, positions: list, cash_amount: float,
         return 0
 
     sb = get_client()
+
+    # FX: positions/NAV are USD-denominated. Convert each foreign ticker's native
+    # close to USD so value = shares × price holds in USD. Currencies come from
+    # current_prices (written by the cron); usd_factor handles pence etc. We store
+    # the USD price so daily_holdings stays internally consistent (value=shares×price).
+    _tickers = [p.get("ticker") for p in positions if p.get("ticker")]
+    _ccy_map = {}
+    if _tickers:
+        try:
+            for r in (sb.table("current_prices").select("ticker, currency")
+                      .in_("ticker", _tickers).execute().data):
+                _ccy_map[r["ticker"]] = r.get("currency") or "USD"
+        except Exception:
+            pass
+    _fx = get_fx_to_usd(tuple({c for c in _ccy_map.values() if c}))
+
     rows = []
     for p in positions:
         ticker = p.get("ticker")
@@ -134,14 +151,15 @@ def lazy_write_holdings(portfolio_id: str, positions: list, cash_amount: float,
         price = history.loc[today_ts, ticker]
         if pd.isna(price):
             continue
-        price_f = float(price)
+        f = usd_factor(_ccy_map.get(ticker, "USD"), _fx) or 1.0
+        price_usd = float(price) * f
         rows.append({
             "portfolio_id": portfolio_id,
             "date":         today.isoformat(),
             "ticker":       ticker,
             "shares":       round(shares, 8),
-            "price":        round(price_f, 4),
-            "value":        round(shares * price_f, 2),
+            "price":        round(price_usd, 4),
+            "value":        round(shares * price_usd, 2),
         })
     rows.append({
         "portfolio_id": portfolio_id,

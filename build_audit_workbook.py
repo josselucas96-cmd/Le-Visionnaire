@@ -49,13 +49,34 @@ SECTION_FONT = Font(bold=True, size=11)
 # ── yfinance ──────────────────────────────────────────────────────────────────
 _PRICE_CACHE: dict[str, float | None] = {}
 
+# FX (standalone copy of utils.market.usd_factor — no streamlit in the cron).
+# Foreign listings are converted to USD; minor units (pence GBp) divide by 100.
+_MINOR_UNIT = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ZAX": "ZAR", "ILA": "ILS"}
+_FX_CACHE: dict[str, float | None] = {"USD": 1.0}
+
+def _usd_factor(ccy: str | None) -> float:
+    if not ccy or ccy == "USD":
+        return 1.0
+    if ccy not in _FX_CACHE:
+        major = _MINOR_UNIT.get(ccy, ccy)
+        try:
+            _FX_CACHE[ccy] = float(yf.Ticker(f"{major}USD=X").fast_info.last_price)
+        except Exception:
+            _FX_CACHE[ccy] = None
+    r = _FX_CACHE[ccy]
+    if r is None:
+        return 1.0  # unknown rate -> leave native (avoid crash)
+    return r / 100.0 if ccy in _MINOR_UNIT else r
+
 def fetch_price(ticker: str) -> float | None:
+    """Latest price in USD (converts foreign listings)."""
     if ticker == "CASH":
         return 1.0
     if ticker in _PRICE_CACHE:
         return _PRICE_CACHE[ticker]
     try:
-        p = float(yf.Ticker(ticker).fast_info.last_price)
+        fi = yf.Ticker(ticker).fast_info
+        p = float(fi.last_price) * _usd_factor(getattr(fi, "currency", None))
         _PRICE_CACHE[ticker] = p
         return p
     except Exception as e:
