@@ -1,0 +1,39 @@
+name: Ping portfolios (keep daily_holdings fresh)
+
+# Loads the public portfolio pages with a headless browser so Streamlit runs
+# each page's script → lazy_write_holdings writes today's daily_holdings row.
+# The yfinance calls happen on Streamlit Cloud's IP (not rate-limited), unlike
+# daily_refresh.py which runs yfinance directly on GitHub's rate-limited IPs.
+# See scripts/ping_portfolios.py for the full rationale.
+
+on:
+  schedule:
+    # 22:20 UTC daily — a bit after daily_refresh.py (22:07) and ~1-2h after US
+    # market close, so yfinance has today's EOD close. No-op on weekends/holidays.
+    - cron: '20 22 * * *'
+
+  # Manual trigger (Actions tab → Run workflow) for testing / catch-up.
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright + Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Ping portfolio pages
+        run: python scripts/ping_portfolios.py
