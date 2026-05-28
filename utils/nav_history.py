@@ -138,6 +138,17 @@ def lazy_write_holdings(portfolio_id: str, positions: list, cash_amount: float,
                 _ccy_map[r["ticker"]] = r.get("currency") or "USD"
         except Exception:
             pass
+    # Fallback for brand-new tickers not yet in current_prices (added since the
+    # last cron): fetch the listing currency live so a foreign newcomer isn't
+    # written without FX (which would inflate it by the FX factor).
+    _missing = [tk for tk in _tickers if tk not in _ccy_map]
+    if _missing:
+        import yfinance as yf
+        for tk in _missing:
+            try:
+                _ccy_map[tk] = getattr(yf.Ticker(tk).fast_info, "currency", None) or "USD"
+            except Exception:
+                _ccy_map[tk] = "USD"
     _fx = get_fx_to_usd(tuple({c for c in _ccy_map.values() if c}))
 
     rows = []

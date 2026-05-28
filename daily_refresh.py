@@ -94,6 +94,14 @@ def _currency_map(sb, tickers) -> dict:
             out[r["ticker"]] = r.get("currency") or "USD"
     except Exception:
         pass
+    # Fallback for brand-new tickers not yet in current_prices: fetch live, so a
+    # foreign newcomer isn't written without FX (which would inflate it).
+    for tk in tickers:
+        if tk not in out:
+            try:
+                out[tk] = getattr(yf.Ticker(tk).fast_info, "currency", None) or "USD"
+            except Exception:
+                out[tk] = "USD"
     return out
 
 # PORTFOLIOS is now read dynamically from the `portfolios` table at runtime
