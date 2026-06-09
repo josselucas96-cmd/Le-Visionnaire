@@ -38,33 +38,33 @@ NEGATIVE    = "#FF4B4B"
 # ── Per-portfolio configuration ───────────────────────────────────────────────
 CONFIGS = {
     "visionnaire": {
-        "report_date":      "2026-04-30",
+        "report_date":      "2026-05-31",
         "subfolder":        "Le Visionnaire",
-        "risk_indicator":   6,
         "horizon":          "5 years minimum",
+        "strategy_summary": "High-conviction equity (not UCITS)",
         "objective": (
             "Le Visionnaire is an unconstrained international equity paper portfolio focused "
-            "on high-conviction, concentrated positions. It targets long-term outperformance of "
+            "on high-conviction, concentrated positions. It aims for long-term outperformance of "
             "the Nasdaq 100 over rolling 5-year horizons, through rigorous selection of companies "
             "that compound shareholder value through innovation and structural differentiation."
         ),
         "market_comment": [
-            "April 2026 was a resilient month for US equities despite mid-month volatility. The S&P 500 and Nasdaq 100 closed on modest gains, supported by the Q1 earnings season and the continued strength of US consumer spending.",
-            "The Fed held its wait-and-see stance, with no rate cut this month. Markets now price in a single cut for 2026, down from two at the start of the year.",
-            "Q1 earnings: positive-surprise ratio remains elevated, largely carried by the Magnificent 7. Sector dispersion stays wide — the signal of a more discriminating market.",
+            "May 2026 delivered a strong tape for US equities. The Nasdaq 100 led the rally on renewed enthusiasm for the AI capex cycle and a broadening of the Magnificent 7 outperformance into the second tier of large-cap tech.",
+            "The Fed kept rates unchanged but the tone of the May minutes turned slightly more dovish, with the median Committee member now signaling one cut into year-end and softer-than-expected core PCE giving markets confidence to reprice the long end lower.",
+            "Q1 earnings season closed with a positive-surprise ratio above historical averages. Guidance dispersion remains wide: AI infrastructure names lifted prints, while consumer discretionary continued to flag a more discerning end-customer.",
         ],
         "mgmt_comment": [
-            "Le Visionnaire's inception was April 13. Over 17 trading days the portfolio is up +8.69%, ahead of the Nasdaq 100 by +0.53%. Too short a window to draw conclusions.",
-            "<strong>Observation phase.</strong> We let the portfolio breathe to measure its real behaviour against the benchmarks. No management action this month.",
-            "<strong>Benchmark convergence.</strong> Le Visionnaire trades at the top of its expected range versus the Nasdaq 100. The concentrated structure is expressing itself — no pathological divergence at this stage.",
-            "<strong>Internal correlation monitoring.</strong> The sectoral concentration (Tech, Healthcare) calls for vigilance on common-factor risk. Pairwise correlation tracking is now active.",
+            "Le Visionnaire closes May at <strong>+23.68% since inception</strong> (April 13), with a monthly performance of <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong> for the month. The portfolio's high-Beta exposure to the AI and consumer-growth themes captured the broad market tailwind. Cash at month-end: <strong>{cash_pct}%</strong>.",
+            "<strong>Rebalance #1 (May 14) — profit-taking on winners.</strong> Partial trims on TSLA (12% → 10%), AMD (7.6% → 5%), and RKLB (8% → 5%) to recycle capital into Celsius (CELH 7.2% → 10%) and Hims (HIMS 8.4% → 10%), both reinforced on unchanged fundamentals after price weakness. Cash rose to 14.2%.",
+            "<strong>Rebalance #2 (May 26) — cash deployment.</strong> Four pure additions on validated theses: Nu Holdings (4%, LatAm fintech), SoFi (4%, US neo-bank, GAAP-profitable since 2024), NIO (1%, tactical EV China), and Super Micro (1%, AI hardware sized small given the risk). Cash drawn down from 14.5% to 4.5%.",
+            "<strong>Construction discipline.</strong> The portfolio operates at the top of its position-count range (20 names including Moonshots) with no hard caps reached on any individual line. Conviction-driven sizing is being respected: NVDA, CELH, and HIMS sit at the largest weights, expressing the highest-confidence theses.",
         ],
     },
     "batisseur": {
         "report_date":      "2026-07-31",   # placeholder, update at launch
         "subfolder":        "Le Bâtisseur",
-        "risk_indicator":   5,
         "horizon":          "5 years minimum",
+        "strategy_summary": "Quality compounders (UCITS 5/10/40-inspired)",
         "objective": (
             "Le Bâtisseur is an unconstrained equity paper portfolio focused on quality compounding "
             "and capital allocation discipline. The core targets high-grade businesses, exceptional "
@@ -82,12 +82,12 @@ CONFIGS = {
     "nakamoto": {
         "report_date":      "2026-05-02",
         "subfolder":        "Le Nakamoto",
-        "risk_indicator":   7,
         "horizon":          "4 years minimum",
+        "strategy_summary": "Digital Asset Treasuries (DAT)",
         "objective": (
             "Le Nakamoto is a digital-asset-treasury (DAT) paper portfolio designed to deliver "
             "amplified Bitcoin exposure through actively managed equity positions in companies "
-            "holding BTC on their balance sheet. The portfolio aims to outperform Bitcoin spot "
+            "holding BTC on their balance sheet. The portfolio aims for outperformance of Bitcoin spot "
             "over rolling 3- to 5-year horizons through rigorous DAT selection and tactical "
             "allocation between BTC DATs and an Income overlay."
         ),
@@ -127,6 +127,103 @@ def fetch_positions(portfolio_id):
         .execute()
         .data
     )
+
+
+def fetch_positions_as_of(portfolio_id, as_of_date: str):
+    """Positions that were ACTIVE on `as_of_date`. Used for retroactive monthly
+    reports — picks up positions later closed (exit_date > as_of) and excludes
+    positions opened after as_of."""
+    rows = (
+        sb.table("positions")
+        .select("*")
+        .eq("portfolio_id", portfolio_id)
+        .lte("entry_date", as_of_date)
+        .execute()
+        .data
+    )
+    # Exclude:
+    # - positions exited on/before as_of_date
+    # - "ghost" positions (weight=0, no exit_date) — desactivated but never properly closed
+    return [
+        r for r in rows
+        if (r.get("exit_date") is None or str(r["exit_date"]) > as_of_date)
+        and float(r.get("weight") or 0) > 0
+    ]
+
+
+def fetch_prices_as_of(tickers: tuple, as_of_date: str, portfolio_id: str) -> dict:
+    """Prices at as_of_date, read from `daily_holdings` (frozen close prices)."""
+    if not tickers:
+        return {}
+    rows = (
+        sb.table("daily_holdings")
+        .select("ticker, price")
+        .eq("portfolio_id", portfolio_id)
+        .eq("date", as_of_date)
+        .in_("ticker", list(tickers))
+        .execute()
+        .data
+    )
+    return {r["ticker"]: float(r["price"]) for r in rows if r.get("price")}
+
+
+def fetch_t1_anchor(portfolio_id: str) -> str | None:
+    """First date in daily_holdings = T-1 anchor (day before inception, cash-only)."""
+    rows = (sb.table("daily_holdings").select("date")
+            .eq("portfolio_id", portfolio_id)
+            .order("date").limit(1).execute().data)
+    return rows[0]["date"] if rows else None
+
+
+def fetch_nav_and_cash_at(portfolio_id: str, as_of_date: str) -> tuple[float, float]:
+    """Returns (nav_total, cash_value) from daily_holdings at as_of_date.
+    Both in absolute $. Cash % = cash / nav * 100."""
+    rows = (
+        sb.table("daily_holdings")
+        .select("ticker, value")
+        .eq("portfolio_id", portfolio_id)
+        .eq("date", as_of_date)
+        .execute().data
+    )
+    if not rows:
+        return 0.0, 0.0
+    nav = sum(float(r["value"]) for r in rows)
+    cash = next((float(r["value"]) for r in rows if r["ticker"] == "CASH"), 0.0)
+    return nav, cash
+
+
+def build_nav_series_from_holdings(portfolio_id: str, end_date: str) -> pd.Series:
+    """True fund-accounting NAV time series from `daily_holdings`. Returns a
+    date-indexed Series in base 100 at the first row (the T-1 anchor = initial
+    capital). Handles Supabase 1000-row pagination."""
+    rows = []
+    offset = 0
+    PAGE = 1000
+    while True:
+        chunk = (
+            sb.table("daily_holdings")
+            .select("date, value")
+            .eq("portfolio_id", portfolio_id)
+            .lte("date", end_date)
+            .range(offset, offset + PAGE - 1)
+            .execute().data
+        )
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+    if not rows:
+        return pd.Series(dtype=float)
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df["value"] = df["value"].astype(float)
+    daily_nav = df.groupby("date")["value"].sum().sort_index()
+    if daily_nav.empty:
+        return pd.Series(dtype=float)
+    base = daily_nav.iloc[0]
+    return daily_nav / base * 100
 
 
 def fetch_history(tickers: tuple, start: str, end: str, benchmarks: tuple) -> pd.DataFrame:
@@ -202,6 +299,52 @@ def compute_position_metrics(positions: list, prices: dict) -> tuple[list, float
     return positions, cash_pct
 
 
+def compute_mtd_attribution(positions: list, portfolio_id: str, report_date: str) -> None:
+    """Adds p['perf_mtd_pct'] and p['contribution_mtd'] (in pp of NAV start) to
+    each position in-place. MTD = month-to-date for the month of report_date.
+
+    Approximation: uses the position's CURRENT share count for the whole month
+    (over- or under-states contribution for positions reinforced/trimmed mid-month).
+    For positions added during the month, uses entry_price as the basis.
+    """
+    rd = pd.Timestamp(report_date)
+    month_start = (rd - pd.offsets.MonthEnd(1)).strftime("%Y-%m-%d")
+    nav_start, _ = fetch_nav_and_cash_at(portfolio_id, month_start)
+    if nav_start <= 0:
+        # Inception was after month_start: fall back to inception NAV (paper = initial capital)
+        nav_start = 1_000_000.0  # default; truthful for our paper portfolios
+
+    tickers = tuple(p["ticker"] for p in positions)
+    prices_start = fetch_prices_as_of(tickers, month_start, portfolio_id)
+    prices_end   = fetch_prices_as_of(tickers, report_date, portfolio_id)
+
+    for p in positions:
+        t = p["ticker"]
+        shares = float(p.get("shares") or 0)
+        entry_date = pd.Timestamp(p["entry_date"])
+        end_price = prices_end.get(t)
+        if not end_price or shares <= 0:
+            p["perf_mtd_pct"]     = None
+            p["contribution_mtd"] = None
+            continue
+
+        if entry_date.strftime("%Y-%m-%d") > month_start:
+            # Added during the month: basis = entry_price
+            basis_price = float(p["entry_price"])
+        else:
+            # Existed before month start: basis = price at month_start
+            basis_price = prices_start.get(t) or float(p["entry_price"])
+
+        if basis_price <= 0:
+            p["perf_mtd_pct"]     = None
+            p["contribution_mtd"] = None
+            continue
+
+        pnl_dollar = shares * (end_price - basis_price)
+        p["perf_mtd_pct"]     = round((end_price / basis_price - 1) * 100, 2)
+        p["contribution_mtd"] = round(pnl_dollar / nav_start * 100, 3)
+
+
 def aggregate_alloc(positions: list, key: str, cash_pct: float) -> list[tuple[str, float]]:
     df = pd.DataFrame(positions)
     if key not in df.columns:
@@ -275,12 +418,13 @@ def render_html(ctx: dict) -> str:
     }.get(ctx["portfolio_id"], "PAPER PORTFOLIO")
 
     period_label = pd.Timestamp(cfg["report_date"]).strftime("%B %Y")
-    risk_idx = cfg["risk_indicator"]
     horizon  = cfg["horizon"]
 
     css = f"""
-    @page {{ size: A4 portrait; margin: 12mm 14mm; }}
-    * {{ box-sizing: border-box; }}
+    @page {{ size: A4 portrait; margin: 0; }}
+    * {{ box-sizing: border-box;
+         -webkit-print-color-adjust: exact;
+         print-color-adjust: exact; }}
     html, body {{
         margin: 0; padding: 0;
         background: {DARK_BG};
@@ -293,9 +437,11 @@ def render_html(ctx: dict) -> str:
         background: {DARK_BG};
         padding: 14mm 12mm;
         page-break-after: always;
-        max-width: 210mm;
+        page-break-inside: avoid;
+        width: 210mm;
+        height: 297mm;
         margin: 0 auto;
-        min-height: 297mm;
+        overflow: hidden;
     }}
     .page:last-child {{ page-break-after: auto; }}
     h1, h2, h3 {{ font-family: 'Cormorant Garamond', Georgia, serif; margin: 0; color: {TEXT_LIGHT}; }}
@@ -453,9 +599,10 @@ def render_html(ctx: dict) -> str:
 
     .alloc-grid {{
         display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 10px;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 8px;
         margin-bottom: 8px;
+        align-items: start;
     }}
     .alloc-table {{ width: 100%; border-collapse: collapse; font-size: 8.5px; }}
     .alloc-table caption {{
@@ -535,11 +682,13 @@ def render_html(ctx: dict) -> str:
     .page-num {{ text-align: right; font-size: 7.5px; color: {TEXT_DIM}; margin-top: 6px; }}
     """
 
-    # Risk cells (1-7), highlight active
-    risk_cells_html = "".join(
-        f"<div class='risk-cell{' active' if i == risk_idx else ''}'>{i}</div>"
-        for i in range(1, 8)
-    )
+    # Key Figures box (replaces PRIIPS-style 1-7 risk indicator + recommended
+    # horizon — removed for compliance). Shows the headline NAV/perf numbers.
+    nav_eom_str = f"${ctx['nav_eom']:,.0f}" if ctx.get('nav_eom') else "—"
+    mtd_str     = f"{ctx['pf_mtd_pct']:+.2f}%" if ctx.get('pf_mtd_pct') is not None else "—"
+    itd_perf    = (ctx['port_index_last'] - 100) if ctx.get('port_index_last') else None
+    itd_str     = f"{itd_perf:+.2f}%" if itd_perf is not None else "—"
+    cash_str    = f"{ctx['cash_pct']:.2f}%"
 
     # Monthly returns matrix (year rows × 12 month columns)
     months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -560,9 +709,10 @@ def render_html(ctx: dict) -> str:
     def alloc_rows(items):
         return "".join(f"<tr><td class='cat'>{cat}</td><td>{w:.1f}%</td></tr>"
                        for cat, w in items)
-    alloc_layer  = alloc_rows(ctx["alloc_layer"])
-    alloc_sector = alloc_rows(ctx["alloc_sector"])
-    alloc_geo    = alloc_rows(ctx["alloc_geo"])
+    alloc_layer    = alloc_rows(ctx["alloc_layer"])
+    alloc_sector   = alloc_rows(ctx["alloc_sector"])
+    alloc_geo      = alloc_rows(ctx["alloc_geo"])
+    alloc_thematic = alloc_rows(ctx["alloc_thematic"])
 
     # Top 10 holdings
     holdings_rows = ""
@@ -575,28 +725,47 @@ def render_html(ctx: dict) -> str:
             f"<td class='r'>{p['current_weight']:.2f}%</td></tr>"
         )
 
-    # Top 5 contributors / detractors
+    # Top 5 contributors / detractors — use MTD in retro mode, ITD otherwise
+    ck = ctx["contrib_key"]
     contrib_rows = ""
     for p in ctx["top5_contrib"]:
+        v = p[ck]
+        cls = "pos" if v >= 0 else "neg"
+        sign = "+" if v >= 0 else ""
         contrib_rows += (
             f"<tr><td><b>{p['ticker']}</b></td>"
             f"<td class='dim'>{p['name'][:18]}</td>"
             f"<td class='r dim'>{p['current_weight']:.1f}%</td>"
-            f"<td class='r pos'>+{p['contribution']:.2f}%</td></tr>"
+            f"<td class='r {cls}'>{sign}{v:.2f}%</td></tr>"
         )
     detract_rows = ""
     for p in ctx["bottom5_contrib"]:
-        cls = "neg" if p["contribution"] < 0 else "pos"
-        sign = "" if p["contribution"] < 0 else "+"
+        v = p[ck]
+        cls = "neg" if v < 0 else "pos"
+        sign = "" if v < 0 else "+"
         detract_rows += (
             f"<tr><td><b>{p['ticker']}</b></td>"
             f"<td class='dim'>{p['name'][:18]}</td>"
             f"<td class='r dim'>{p['current_weight']:.1f}%</td>"
-            f"<td class='r {cls}'>{sign}{p['contribution']:.2f}%</td></tr>"
+            f"<td class='r {cls}'>{sign}{v:.2f}%</td></tr>"
         )
 
-    market_lis = "".join(f"<li>{b}</li>" for b in cfg["market_comment"])
-    mgmt_lis   = "".join(f"<li>{b}</li>" for b in cfg["mgmt_comment"])
+    # Fill {alpha_mtd_pct}, {bench_mtd_pct}, {pf_mtd_pct}, {bench_pri_lbl} and
+    # {cash_pct} placeholders in commentary bullets if present.
+    fmt_kwargs = {
+        "alpha_mtd_pct":  f"{ctx['alpha_mtd_pct']:+.2f}" if ctx['alpha_mtd_pct'] is not None else "—",
+        "bench_mtd_pct":  f"{ctx['bench_mtd_pct']:+.2f}" if ctx['bench_mtd_pct'] is not None else "—",
+        "pf_mtd_pct":     f"{ctx['pf_mtd_pct']:+.2f}" if ctx['pf_mtd_pct'] is not None else "—",
+        "bench_pri_lbl":  ctx["bench_pri_lbl"],
+        "cash_pct":       f"{ctx['cash_pct']:.2f}",
+    }
+    def _safe_format(s):
+        try:
+            return s.format(**fmt_kwargs)
+        except (KeyError, IndexError):
+            return s
+    market_lis = "".join(f"<li>{_safe_format(b)}</li>" for b in cfg["market_comment"])
+    mgmt_lis   = "".join(f"<li>{_safe_format(b)}</li>" for b in cfg["mgmt_comment"])
     chart_img  = f"data:image/png;base64,{ctx['chart_b64']}"
 
     html = f"""<!DOCTYPE html>
@@ -627,10 +796,11 @@ def render_html(ctx: dict) -> str:
     </div>
     <div class='header-right'>
       <div class='risk-box'>
-        <div class='risk-label'><span>Lower risk</span><span>Higher risk</span></div>
-        <div class='risk-row'>{risk_cells_html}</div>
+        <div style='font-size:7.5px; color:{TEXT_DIM}; text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:5px;'>Key Figures</div>
         <table class='meta-table'>
-          <tr><td>Recommended horizon</td><td>{horizon}</td></tr>
+          <tr><td>NAV ({period_label.split()[0][:3]} {pd.Timestamp(cfg['report_date']).day})</td><td>{nav_eom_str}</td></tr>
+          <tr><td>MTD return</td><td>{mtd_str}</td></tr>
+          <tr><td>ITD return</td><td>{itd_str}</td></tr>
         </table>
       </div>
     </div>
@@ -653,6 +823,9 @@ def render_html(ctx: dict) -> str:
   <div class='section-label'>Performance — {pf['name']} vs Benchmarks</div>
   <div class='chart-block'>
     <img src='{chart_img}' alt='Performance chart'/>
+  </div>
+  <div style='font-size:7px; color:{TEXT_DIM}; text-align:right; margin-top:-2px; font-style:italic;'>
+    Both series indexed to 100 at the {pd.Timestamp(ctx['t1_anchor']).strftime('%B')} {pd.Timestamp(ctx['t1_anchor']).day} close — last trading day before the {pd.Timestamp(ctx['inception']).strftime('%B')} {pd.Timestamp(ctx['inception']).day} deployment.
   </div>
 
   <table class='perf-table monthly-matrix'>
@@ -691,6 +864,10 @@ def render_html(ctx: dict) -> str:
     <table class='alloc-table'>
       <caption>Geography</caption>
       <tbody>{alloc_geo}</tbody>
+    </table>
+    <table class='alloc-table'>
+      <caption>Theme</caption>
+      <tbody>{alloc_thematic}</tbody>
     </table>
   </div>
 
@@ -736,23 +913,30 @@ def render_html(ctx: dict) -> str:
       <div class='sub'>{ctx['top3_names']}</div>
     </div>
     <div class='metric-card'>
-      <div class='label'>Volatility (ann.)</div>
-      <div class='value'>—</div>
-      <div class='sub'>Available after 60 trading days</div>
+      <div class='label'>Realized Vol (MTD)</div>
+      <div class='value'>{f"{ctx['vol_mtd_ann_pct']:.1f}%" if ctx.get('vol_mtd_ann_pct') is not None else "—"}</div>
+      <div class='sub'>Annualized, this month</div>
     </div>
     <div class='metric-card'>
-      <div class='label'>Sharpe / Beta</div>
-      <div class='value'>—</div>
-      <div class='sub'>Available after 60 trading days</div>
+      <div class='label'>Beta vs {ctx.get('bench_pri_lbl') or 'benchmark'} (MTD)</div>
+      <div class='value'>{f"{ctx['beta_mtd']:.2f}" if ctx.get('beta_mtd') is not None else "—"}</div>
+      <div class='sub'>Daily returns, this month</div>
     </div>
   </div>
 
   <div class='footer'>
     <strong>Disclaimer:</strong> {pf['name']} is a paper portfolio for educational and demonstrative
     purposes only. It does not constitute financial advice, an investment recommendation, or a solicitation
-    to buy or sell any security or digital asset. Performance shown is simulated and net of zero fees
-    (paper portfolio). Past performance, simulated or real, is not indicative of future results. The author
-    is not a registered investment advisor. All readers should conduct their own due diligence.
+    to buy or sell any security or digital asset. Performance is paper-trading: no actual trades executed.
+    Past performance is not indicative of future results. The author is not a registered investment advisor
+    and may hold personal positions in securities mentioned. Readers should conduct their own due diligence.
+    <br/><br/>
+    <span style='color:{TEXT_DIM};'>
+    <strong>Methodology:</strong> Performance computed from fund-accounting NAV (sum of position market values
+    + cash) normalized base 100 at inception. Price data sourced from market data providers. MTD attribution
+    approximates intra-month share count changes by the period-end share count.
+    <div style='margin-top:5px;'><strong>Published:</strong> {ctx['publication_date']}</div>
+    </span>
   </div>
 
   <div class='page-num'>2 / 2</div>
@@ -771,9 +955,23 @@ def generate(portfolio_id: str):
     print(f"\n{'=' * 60}\nGenerating monthly report for: {portfolio_id}\n{'=' * 60}")
 
     portfolio = fetch_portfolio(portfolio_id)
-    positions = fetch_positions(portfolio_id)
     inception = str(portfolio["inception_date"])
+    # In retro mode: extend chart back to T-1 anchor so both portfolio and
+    # benchmark are base 100 at the same starting point ($1M cash, pre-deployment).
+    t1_anchor = fetch_t1_anchor(portfolio_id) or inception
+    history_start = t1_anchor  # used for yfinance
     end = str(pd.Timestamp(cfg["report_date"]) + pd.Timedelta(days=1))[:10]
+
+    # Retroactive vs live mode: if report_date is in the past, use the snapshot
+    # state at that date (positions active then, prices = close of that day).
+    today_iso = date.today().isoformat()
+    retro_mode = cfg["report_date"] < today_iso
+    if retro_mode:
+        print(f"  Mode:      RETROACTIVE (state as of {cfg['report_date']})")
+        positions = fetch_positions_as_of(portfolio_id, cfg["report_date"])
+    else:
+        print(f"  Mode:      LIVE (current state)")
+        positions = fetch_positions(portfolio_id)
 
     print(f"  Portfolio: {portfolio['name']}")
     print(f"  Positions: {len(positions)}")
@@ -786,32 +984,72 @@ def generate(portfolio_id: str):
     benchmarks_for_history = tuple(b for b in [bench_pri, bench_sec] if b)
 
     tickers = tuple(p["ticker"] for p in positions)
-    print("\n  Fetching live prices...")
-    prices = fetch_live_prices(tickers)
+    if retro_mode:
+        print("\n  Fetching as-of prices from daily_holdings...")
+        prices = fetch_prices_as_of(tickers, cfg["report_date"], portfolio_id)
+        missing = [t for t in tickers if t not in prices]
+        if missing:
+            print(f"  WARN: {len(missing)} ticker(s) missing in daily_holdings: {missing}")
+    else:
+        print("\n  Fetching live prices...")
+        prices = fetch_live_prices(tickers)
 
     print("  Fetching history...")
-    history = fetch_history(tickers, inception, end, benchmarks_for_history)
+    history = fetch_history(tickers, history_start, end, benchmarks_for_history)
     if history.empty:
         print("  ERROR: history empty")
         return
 
     print("  Computing metrics...")
     positions, cash_pct = compute_position_metrics(positions, prices)
-    port_index = build_index(history, positions)
+    if retro_mode:
+        nav_series = build_nav_series_from_holdings(portfolio_id, cfg["report_date"])
+        if nav_series.empty:
+            print("  ERROR: NAV series empty from daily_holdings")
+            return
+        # Use NAV series directly (T-1 anchor = base 100 = $1M cash pre-deployment).
+        # Reindex to history.index for clean chart alignment with benchmarks.
+        port_index = nav_series.reindex(history.index, method="ffill").dropna()
+        # If port_index doesn't start at 100, the T-1 anchor wasn't in history.
+        # Prepend it explicitly so the chart visually anchors at base 100.
+        if not port_index.empty and abs(port_index.iloc[0] - 100.0) > 0.5:
+            t1_ts = pd.Timestamp(t1_anchor)
+            if t1_ts not in port_index.index and t1_ts in nav_series.index:
+                port_index = pd.concat([
+                    pd.Series([nav_series.loc[t1_ts]], index=[t1_ts]),
+                    port_index,
+                ]).sort_index()
+        print(f"  NAV: base 100 at T-1 ({t1_anchor}) → {port_index.iloc[-1]:.2f} at {cfg['report_date']}")
+        # Override cash_pct with the real value from daily_holdings (the legacy
+        # formula `100 - sum(weights_DB)` is in inception-$ space, mis-states
+        # cash by a wide margin once NAV drifts away from initial capital).
+        nav_eom, cash_eom = fetch_nav_and_cash_at(portfolio_id, cfg["report_date"])
+        if nav_eom > 0:
+            cash_pct = round(cash_eom / nav_eom * 100, 2)
+            print(f"  Cash: ${cash_eom:,.0f} = {cash_pct:.2f}% of NAV ${nav_eom:,.0f}")
+        # MTD attribution using daily_holdings prices
+        compute_mtd_attribution(positions, portfolio_id, cfg["report_date"])
+    else:
+        port_index = build_index(history, positions)
+        nav_eom = None
     if port_index.empty:
         print("  ERROR: portfolio index empty")
         return
 
     positions_w = sorted(positions, key=lambda p: p["current_weight"] or 0, reverse=True)
     top10 = positions_w[:10]
-    valid_contrib = [p for p in positions if p.get("contribution") is not None]
-    sorted_contrib = sorted(valid_contrib, key=lambda p: p["contribution"], reverse=True)
+    # Monthly attribution preferred (MTD). Fall back to inception-to-date
+    # contribution if MTD wasn't computed (live mode or insufficient data).
+    contrib_key = "contribution_mtd" if retro_mode else "contribution"
+    valid_contrib = [p for p in positions if p.get(contrib_key) is not None]
+    sorted_contrib = sorted(valid_contrib, key=lambda p: p[contrib_key], reverse=True)
     top5_contrib = sorted_contrib[:5]
-    bottom5_contrib = sorted(valid_contrib, key=lambda p: p["contribution"])[:5]
+    bottom5_contrib = sorted(valid_contrib, key=lambda p: p[contrib_key])[:5]
 
-    alloc_layer  = aggregate_alloc(positions, "layer", cash_pct)
-    alloc_sector = aggregate_alloc(positions, "sector", cash_pct)
-    alloc_geo    = aggregate_alloc(positions, "geography", cash_pct)
+    alloc_layer    = aggregate_alloc(positions, "layer", cash_pct)
+    alloc_sector   = aggregate_alloc(positions, "sector", cash_pct)
+    alloc_geo      = aggregate_alloc(positions, "geography", cash_pct)
+    alloc_thematic = aggregate_alloc(positions, "thematic", 0.0)  # cash has no thematic; don't double-count it
 
     mdd = max_drawdown(port_index) or 0
     top3 = positions_w[:3]
@@ -834,11 +1072,51 @@ def generate(portfolio_id: str):
             monthly_returns.setdefault(ts.year, {m: None for m in range(1, 13)})
             monthly_returns[ts.year][ts.month] = ret
 
+    # Alpha vs primary benchmark (MTD). Computed in retro mode for the mgmt
+    # commentary; passed through context for {alpha_mtd_pct} / {bench_mtd_pct}
+    # template placeholders in the mgmt_comment bullets.
+    # Also: realized volatility (MTD, annualized) and beta vs primary benchmark.
+    pf_mtd_pct = None
+    bench_mtd_pct = None
+    alpha_mtd_pct = None
+    vol_mtd_ann_pct = None
+    beta_mtd = None
+    if retro_mode and bench_pri and bench_pri in history.columns:
+        month_start_ts = pd.Timestamp(cfg["report_date"]) - pd.offsets.MonthEnd(1)
+        try:
+            pf_start = port_index.asof(month_start_ts)
+            pf_end   = port_index.iloc[-1]
+            b_series = history[bench_pri].dropna()
+            b_start  = b_series.asof(month_start_ts)
+            b_end    = b_series.iloc[-1]
+            if pd.notna(pf_start) and pd.notna(b_start):
+                pf_mtd_pct    = round((pf_end / pf_start - 1) * 100, 2)
+                bench_mtd_pct = round((b_end / b_start - 1) * 100, 2)
+                alpha_mtd_pct = round(pf_mtd_pct - bench_mtd_pct, 2)
+                print(f"  Alpha MTD: portfolio {pf_mtd_pct:+.2f}% vs {bench_pri_lbl} {bench_mtd_pct:+.2f}% = {alpha_mtd_pct:+.2f}pp")
+
+            # Realized vol + beta on MTD daily returns
+            mtd_mask    = (port_index.index >= month_start_ts) & (port_index.index <= pd.Timestamp(cfg["report_date"]))
+            pf_mtd_ret  = port_index[mtd_mask].pct_change().dropna()
+            b_mtd_ret   = b_series[(b_series.index >= month_start_ts) & (b_series.index <= pd.Timestamp(cfg["report_date"]))].pct_change().dropna()
+            aligned     = pd.concat([pf_mtd_ret, b_mtd_ret], axis=1, join="inner").dropna()
+            if len(aligned) >= 3:
+                pf_returns = aligned.iloc[:, 0]
+                b_returns  = aligned.iloc[:, 1]
+                vol_mtd_ann_pct = round(float(pf_returns.std() * (252 ** 0.5) * 100), 2)
+                b_var = float(b_returns.var())
+                if b_var > 0:
+                    beta_mtd = round(float(pf_returns.cov(b_returns) / b_var), 2)
+                print(f"  Realized vol (MTD, ann.): {vol_mtd_ann_pct:.2f}%  ·  Beta MTD vs {bench_pri_lbl}: {beta_mtd}")
+        except Exception as e:
+            print(f"  WARN: alpha/vol/beta computation failed: {e}")
+
     print("  Generating chart...")
     accent = portfolio.get("color_primary") or "#A78BFA"
+    # Chart: portfolio + PRIMARY benchmark only (secondary removed to keep the
+    # comparison sharp — secondary was a regulator-style "anchor" not informative
+    # for the active-management story).
     benchmark_lines = []
-    if bench_sec and bench_sec in history.columns:
-        benchmark_lines.append((bench_sec, bench_sec_lbl, ":"))
     if bench_pri and bench_pri in history.columns:
         benchmark_lines.append((bench_pri, bench_pri_lbl, "--"))
     chart_b64 = generate_chart_b64(history, port_index, portfolio["name"], benchmark_lines, accent)
@@ -853,6 +1131,7 @@ def generate(portfolio_id: str):
         "alloc_layer":       alloc_layer,
         "alloc_sector":      alloc_sector,
         "alloc_geo":         alloc_geo,
+        "alloc_thematic":    alloc_thematic,
         "top10":             top10,
         "top5_contrib":      top5_contrib,
         "bottom5_contrib":   bottom5_contrib,
@@ -861,6 +1140,19 @@ def generate(portfolio_id: str):
         "top3_names":        top3_names,
         "chart_b64":         chart_b64,
         "monthly_returns":   monthly_returns,
+        "retro_mode":        retro_mode,
+        "contrib_key":       contrib_key,
+        "pf_mtd_pct":        pf_mtd_pct,
+        "bench_mtd_pct":     bench_mtd_pct,
+        "alpha_mtd_pct":     alpha_mtd_pct,
+        "bench_pri_lbl":     bench_pri_lbl,
+        "publication_date":  date.today().isoformat(),
+        "nav_eom":           (nav_eom if retro_mode else None),
+        "port_index_last":   float(port_index.iloc[-1]) if not port_index.empty else None,
+        "t1_anchor":         t1_anchor,
+        "inception":         inception,
+        "vol_mtd_ann_pct":   vol_mtd_ann_pct,
+        "beta_mtd":          beta_mtd,
     }
 
     print("  Rendering HTML...")
