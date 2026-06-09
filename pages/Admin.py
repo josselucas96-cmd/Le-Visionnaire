@@ -1465,6 +1465,32 @@ with tab_moves:
     draft_key   = f"moves_draft_{_pid}"
     ver_key     = f"moves_ver_{_pid}"
     confirm_key = f"moves_confirm_{_pid}"
+    status_key  = f"moves_status_{_pid}"  # persists across reruns until dismissed
+
+    # ── Persistent status banner ──────────────────────────────────────────────
+    # st.error/st.success rendered inside the commit handler get wiped by the
+    # subsequent st.rerun(). We store the result in session_state so it remains
+    # visible (with full traceback for failures) until the user dismisses it.
+    _status = st.session_state.get(status_key)
+    if _status:
+        sc1, sc2 = st.columns([20, 1])
+        with sc1:
+            kind = _status.get("kind", "info")
+            msg  = _status.get("msg", "")
+            tb   = _status.get("traceback")
+            if kind == "error":
+                st.error(msg)
+                if tb:
+                    with st.expander("Show full traceback (for debugging)"):
+                        st.code(tb, language="python")
+            elif kind == "success":
+                st.success(msg)
+            else:
+                st.info(msg)
+        with sc2:
+            if st.button("✕", key=f"dismiss_status_{_pid}", help="Dismiss"):
+                st.session_state.pop(status_key, None)
+                st.rerun()
 
     if ver_key not in st.session_state:
         st.session_state[ver_key] = 0
@@ -1856,7 +1882,33 @@ with tab_moves:
                 )
                 st.markdown(full_table, unsafe_allow_html=True)
 
-            st.caption("⚠️ Prices will be re-fetched at commit (final entry/exit price = live at commit time).")
+            # ── Execution price (per move) + time (batch), both editable ──
+            # Pre-filled with the live price shown above. Edit a price to match
+            # EXACTLY what you communicate (e.g. your LinkedIn entry price).
+            # NAV-safe: the $ deployed is driven by the target weight, not the
+            # price — editing the price only changes how many shares that $ buys
+            # (cash flow unchanged). See _pru_compute_rebalance / add_position.
+            from datetime import datetime as _dt_exec
+            st.markdown("**Prix d'exécution & heure** — ajuste le prix pour qu'il colle exactement à ce que tu communiques.")
+            _tcol, _ = st.columns([1, 3])
+            with _tcol:
+                exec_time = st.time_input(
+                    "Heure d'exécution",
+                    value=_dt_exec.now().time().replace(microsecond=0),
+                    key=f"moves_time_{_pid}",
+                )
+            exec_prices = {}
+            _pxcols = st.columns(min(max(len(moves), 1), 4))
+            for _i, m in enumerate(moves):
+                _live = (preview_prices.get(m["ticker"]) or {}).get("price") or 0.0
+                with _pxcols[_i % len(_pxcols)]:
+                    _val = st.number_input(
+                        f"{m['ticker']} · {m['action']}",
+                        min_value=0.0, value=float(_live), step=0.01, format="%.2f",
+                        key=f"moves_px_{_pid}_{m['ticker']}",
+                    )
+                exec_prices[m["ticker"]] = {"price": _val}
+            st.caption("✓ Le prix ci-dessus est celui qui sera enregistré (entrée/sortie). Plus de re-fetch surprise au commit.")
 
             reason = st.text_input(
                 "Reason (optional, recorded in History)",
@@ -1870,25 +1922,34 @@ with tab_moves:
                     st.rerun()
             with cbc2:
                 if st.button("Confirm & execute moves", type="primary", key="moves_commit"):
-                    fresh_prices = get_prices_live(move_tickers)
-                    # PRU model: recompute auto-conversion at commit time with fresh prices.
-                    # Pass the true current NAV factor so targets convert exactly
-                    # (NAV is conserved by the reshuffle — see _pru_compute_rebalance).
+                    # Use the prices confirmed above (editable, pre-filled with live).
+                    # No surprise re-fetch — what you see/edit is exactly what gets
+                    # committed (entry/exit price). Pass the true current NAV factor
+                    # so targets convert exactly (NAV conserved by the reshuffle).
                     _ic = _read_initial_capital(_pid)
                     _nav_factor = (globals().get("nav_total") or _ic) / _ic * 100.0
                     commit_rebalance = _pru_compute_rebalance(
-                        positions, st.session_state[draft_key], fresh_prices,
+                        positions, st.session_state[draft_key], exec_prices,
                         nav_factor=_nav_factor,
                     )
                     if commit_rebalance is None:
                         st.error("Targets unsolvable at commit. Aborted.")
                         st.stop()
-                    errors   = []
-                    executed = 0
+                    # Execution timestamp = today + the chosen time (records WHEN
+                    # the move happened, e.g. to match a communicated post time).
+                    _executed_at = _dt_exec.combine(date.today(), exec_time).isoformat()
+                    import traceback as _tb_mod
+                    errors    = []   # one entry per failed move (with full traceback)
+                    executed  = 0
                     for m in commit_rebalance["moves"]:
-                        px = (fresh_prices.get(m["ticker"]) or {}).get("price") or m.get("current_price")
+                        px = (exec_prices.get(m["ticker"]) or {}).get("price") or m.get("current_price")
                         if not px:
-                            errors.append(f"{m['ticker']}: no live price")
+                            errors.append({
+                                "ticker": m["ticker"],
+                                "action": m.get("action", "?"),
+                                "error":  "no price entered",
+                                "trace":  None,
+                            })
                             continue
                         try:
                             action = m["action"]
@@ -1896,11 +1957,13 @@ with tab_moves:
                                 continue
                             elif action == "CLOSE":
                                 close_position(m["id"], px, today_str,
-                                               reason or "Move from cockpit")
+                                               reason or "Move from cockpit",
+                                               executed_at=_executed_at)
                             elif action == "REDUCE":
                                 # PRU semantics: entry_price preserved, trim DB by delta
                                 trim_position(m["id"], abs(m["delta_db"]), px, today_str,
-                                              reason or "Move from cockpit")
+                                              reason or "Move from cockpit",
+                                              executed_at=_executed_at)
                             elif action == "REINFORCE":
                                 # PRU averaging via add_position with the DB-weight delta
                                 add_position({
@@ -1914,7 +1977,7 @@ with tab_moves:
                                     "thematic":     m["thematic"],
                                     "thesis_short": "",
                                     "is_active":    True,
-                                }, portfolio_id=_pid)
+                                }, portfolio_id=_pid, executed_at=_executed_at)
                             elif action == "BUY":
                                 add_position({
                                     "ticker":       m["ticker"], "name": m["name"], "isin": None,
@@ -1927,15 +1990,37 @@ with tab_moves:
                                     "thematic":     m["thematic"],
                                     "thesis_short": "",
                                     "is_active":    True,
-                                }, portfolio_id=_pid)
+                                }, portfolio_id=_pid, executed_at=_executed_at)
                             executed += 1
                         except Exception as e:
-                            errors.append(f"{m['ticker']}: {e}")
+                            errors.append({
+                                "ticker": m["ticker"],
+                                "action": m.get("action", "?"),
+                                "error":  f"{type(e).__name__}: {e}",
+                                "trace":  _tb_mod.format_exc(),
+                            })
 
+                    # Persist result across rerun so the user actually sees what happened
+                    # (st.error rendered here would be wiped by the immediate st.rerun()).
                     if errors:
-                        st.error(f"{executed} executed, {len(errors)} failed: {'; '.join(errors)}")
+                        summary = "  •  ".join(
+                            f"{err['ticker']} ({err['action']}): {err['error']}" for err in errors
+                        )
+                        full_trace = "\n\n".join(
+                            f"--- {err['ticker']} ({err['action']}) ---\n{err['trace']}"
+                            for err in errors if err.get("trace")
+                        )
+                        st.session_state[status_key] = {
+                            "kind":      "error",
+                            "msg":       f"⚠️ {executed} executed, {len(errors)} failed:  {summary}",
+                            "traceback": full_trace or None,
+                        }
                     else:
-                        st.success(f"✓ {executed} move(s) executed.")
+                        st.session_state[status_key] = {
+                            "kind":      "success",
+                            "msg":       f"✓ {executed} move(s) executed.",
+                            "traceback": None,
+                        }
 
                     st.session_state.pop(confirm_key, None)
                     st.session_state.pop(draft_key, None)

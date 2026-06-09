@@ -279,7 +279,7 @@ def upsert_setting(key, value):
 
 
 # ── Position write operations ─────────────────────────────────────────────────
-def add_position(data: dict, portfolio_id: str = "visionnaire"):
+def add_position(data: dict, portfolio_id: str = "visionnaire", executed_at: str | None = None):
     sb = get_client()
     data = {**data, "portfolio_id": portfolio_id}
     initial_capital = _get_initial_capital(sb, portfolio_id)
@@ -329,7 +329,7 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
             "price_in":     new_p,
             "weight_in":    new_w,
             "reason":       f"Reinforced {new_w}% (new PRU: {new_pru:.4f})",
-            "executed_at":  _now_utc_iso(),
+            "executed_at":  executed_at or _now_utc_iso(),
         }).execute()
     else:
         # NEW POSITION
@@ -343,7 +343,7 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
             "price_in":     new_p,
             "weight_in":    new_w,
             "reason":       "New position",
-            "executed_at":  _now_utc_iso(),
+            "executed_at":  executed_at or _now_utc_iso(),
         }).execute()
 
     # Cash is derived on read from daily_holdings + today's transactions
@@ -354,7 +354,7 @@ def add_position(data: dict, portfolio_id: str = "visionnaire"):
 
 
 def trim_position(position_id: int, weight_sold: float, exit_price: float,
-                  exit_date: str, reason: str):
+                  exit_date: str, reason: str, executed_at: str | None = None):
     sb = get_client()
     pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
     portfolio_id = pos.get("portfolio_id", "visionnaire")
@@ -391,7 +391,7 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float,
         "weight_out":      weight_sold,
         "perf_pct":        perf,
         "reason":          reason,
-        "executed_at":     _now_utc_iso(),
+        "executed_at":     executed_at or _now_utc_iso(),
     }).execute()
 
     # Cash derived on read (see `get_cash_amount`).
@@ -399,7 +399,7 @@ def trim_position(position_id: int, weight_sold: float, exit_price: float,
     _snapshot_positions(sb, portfolio_id)
 
 
-def close_position(position_id: int, exit_price: float, exit_date: str, reason: str):
+def close_position(position_id: int, exit_price: float, exit_date: str, reason: str, executed_at: str | None = None):
     sb = get_client()
     pos = sb.table("positions").select("*").eq("id", position_id).execute().data[0]
     portfolio_id = pos.get("portfolio_id", "visionnaire")
@@ -422,7 +422,7 @@ def close_position(position_id: int, exit_price: float, exit_date: str, reason: 
         "weight_out":      old_w,
         "perf_pct":        perf,
         "reason":          reason,
-        "executed_at":     _now_utc_iso(),
+        "executed_at":     executed_at or _now_utc_iso(),
     }).execute()
     sb.table("positions").update({
         "is_active":  False,
