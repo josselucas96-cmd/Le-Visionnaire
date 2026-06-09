@@ -1186,7 +1186,20 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
 
 st.divider()
 
-LAYERS     = ["Core", "Conviction", "Moonshot", "Cash/Equivalent"]
+# Layers are portfolio-specific (each IPS defines its own architecture). The
+# cockpit must show the dropdown that matches the active portfolio, not a
+# Visionnaire-only list (cockpit bug pre-2026-06-09: Batisseur/Nakamoto rows
+# inherited Visionnaire layers, requiring manual fix at commit time).
+LAYERS_BY_PORTFOLIO = {
+    "visionnaire": ["Core", "Conviction", "Moonshot", "Cash/Equivalent"],
+    "batisseur":   ["Quality Compounders", "Tactical", "Cash/Equivalent"],
+    "nakamoto":    ["Anchor", "Exploratory", "Income", "Cash/Equivalent"],
+}
+LAYERS_DEFAULT = LAYERS_BY_PORTFOLIO["visionnaire"]
+
+def _layers_for(pid: str) -> list[str]:
+    return LAYERS_BY_PORTFOLIO.get(pid, LAYERS_DEFAULT)
+
 SECTORS    = ["Tech", "Healthcare", "Consumer", "Finance", "Communication",
               "Industrials", "Energy", "Materials", "Real Estate", "Utilities"]
 GEOS       = ["USA", "Europe", "Japan", "Asia ex-Japan", "Emerging Markets", "LatAm", "Global", "Other"]
@@ -1505,7 +1518,7 @@ with tab_moves:
                 "id":             p["id"],
                 "ticker":         p["ticker"],
                 "name":           p["name"],
-                "layer":          p.get("layer") or LAYERS[0],
+                "layer":          p.get("layer") or _layers_for(_pid)[0],
                 "sector":         p.get("sector") or SECTORS[0],
                 "geography":      p.get("geography") or GEOS[0],
                 "thematic":       p.get("thematic") or THEMATICS[0],
@@ -1543,7 +1556,7 @@ with tab_moves:
             "ticker":         st.column_config.TextColumn("Ticker", width="small"),
             "name":           st.column_config.TextColumn("Name"),
             "layer":          st.column_config.SelectboxColumn(
-                                  "Layer", options=LAYERS, width="small"),
+                                  "Layer", options=_layers_for(_pid), width="small"),
             "sector":         st.column_config.SelectboxColumn(
                                   "Sector", options=SECTORS, width="small"),
             "geography":      st.column_config.SelectboxColumn(
@@ -1609,7 +1622,7 @@ with tab_moves:
                 "id":             None,
                 "ticker":         tkr,
                 "name":           "",
-                "layer":          LAYERS[0],
+                "layer":          _layers_for(_pid)[0],
                 "sector":         SECTORS[0],
                 "geography":      GEOS[0],
                 "thematic":       THEMATICS[0],
