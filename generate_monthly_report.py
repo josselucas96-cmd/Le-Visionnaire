@@ -205,6 +205,9 @@ def build_nav_series_from_holdings(portfolio_id: str, end_date: str) -> pd.Serie
             .select("date, value")
             .eq("portfolio_id", portfolio_id)
             .lte("date", end_date)
+            # Stable total sort so page boundaries don't double-count rows
+            # (unordered pagination duplicates boundary rows past 1000 → NAV spike).
+            .order("date").order("ticker")
             .range(offset, offset + PAGE - 1)
             .execute().data
         )

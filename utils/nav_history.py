@@ -67,6 +67,13 @@ def get_nav_from_holdings(portfolio_id: str) -> pd.Series:
     # has ~3700 rows (138 days × 27 tickers). Without pagination, we'd get
     # only the first 1000 rows with the LAST date partial (some tickers cut
     # off by the limit), creating a fake "NAV drop" on the chart.
+    #
+    # CRITICAL #2: the pagination MUST have a stable, total sort order, else
+    # PostgREST's implicit ordering can differ between page requests and rows
+    # near the 1000-row boundary get returned on BOTH pages → double-counted →
+    # a phantom NAV *spike* on the boundary dates (once a portfolio grows past
+    # 1000 rows). (portfolio_id, date, ticker) is the unique upsert key, so
+    # ordering by (date, ticker) is a stable total order within a portfolio.
     rows = []
     offset = 0
     PAGE = 1000
@@ -75,6 +82,7 @@ def get_nav_from_holdings(portfolio_id: str) -> pd.Series:
             sb.table("daily_holdings")
             .select("date, value")
             .eq("portfolio_id", portfolio_id)
+            .order("date").order("ticker")
             .range(offset, offset + PAGE - 1)
             .execute()
             .data
