@@ -234,8 +234,17 @@ with st.expander("Performance", expanded=False):
                 _primary_perf = round(float(_pi.iloc[-1] - 100), 2)
         _alpha = round(_port_perf - (_primary_perf or 0), 2)
         _today_valid = [p for p in _positions_perf if p.get("change_today") is not None]
-        _total_w = sum(p["weight"] for p in _today_valid) or 1
-        _today = sum(p["weight"] * p["change_today"] for p in _today_valid) / _total_w if _today_valid else None
+        # Weight by the drifted allocation (cost weight × price/PRU), not the
+        # cost-basis weight — same convention as the public page's "Today".
+        def _drifted_w(p):
+            try:
+                px = _prices_perf.get(p["ticker"], {}).get("price")
+                pru = float(p.get("entry_price") or 0)
+                return float(p["weight"]) * (float(px) / pru if px and pru > 0 else 1.0)
+            except (TypeError, ValueError):
+                return float(p["weight"])
+        _total_w = sum(_drifted_w(p) for p in _today_valid) or 1
+        _today = sum(_drifted_w(p) * p["change_today"] for p in _today_valid) / _total_w if _today_valid else None
 
         pc1, pc2, pc3, pc4 = st.columns(4)
         with pc1:
@@ -1266,7 +1275,12 @@ def resolve_ticker(raw, suffix):
             return t, info
     return raw, {}
 
-SECTOR_MAP = {
+# yfinance sector → the taxonomy each portfolio actually uses. Le Visionnaire
+# and Le Nakamoto use short labels; Le Bâtisseur (and its `test` clone) use
+# GICS names. Until 2026-09-19 a single Visionnaire map was applied to every
+# book, so the June Bâtisseur adds landed as "Tech"/"Finance" next to
+# "Information Technology"/"Financials" and split the sector donut.
+_SECTOR_MAP_SHORT = {
     "Technology": "Tech", "Consumer Cyclical": "Consumer",
     "Consumer Defensive": "Consumer", "Healthcare": "Healthcare",
     "Financial Services": "Finance", "Communication Services": "Communication",
@@ -1274,7 +1288,23 @@ SECTOR_MAP = {
     "Basic Materials": "Materials", "Real Estate": "Real Estate",
     "Utilities": "Utilities",
 }
-GEO_MAP = {
+_SECTOR_MAP_GICS = {
+    "Technology": "Information Technology", "Consumer Cyclical": "Consumer Discretionary",
+    "Consumer Defensive": "Consumer Staples", "Healthcare": "Healthcare",
+    "Financial Services": "Financials", "Communication Services": "Communication Services",
+    "Industrials": "Industrials", "Energy": "Energy",
+    "Basic Materials": "Materials", "Real Estate": "Real Estate",
+    "Utilities": "Utilities",
+}
+SECTOR_MAP_BY_PORTFOLIO = {
+    "visionnaire": _SECTOR_MAP_SHORT,
+    "nakamoto":    _SECTOR_MAP_SHORT,
+    "batisseur":   _SECTOR_MAP_GICS,
+    "test":        _SECTOR_MAP_GICS,
+}
+SECTOR_MAP = _SECTOR_MAP_SHORT  # default / backwards compat
+
+_GEO_MAP_BASE = {
     "United States": "USA", "Japan": "Japan",
     "United Kingdom": "Europe", "France": "Europe", "Germany": "Europe",
     "Netherlands": "Europe", "Sweden": "Europe", "Switzerland": "Europe",
@@ -1284,6 +1314,20 @@ GEO_MAP = {
     "India": "Asia ex-Japan", "Singapore": "Asia ex-Japan",
     "Brazil": "LatAm", "Mexico": "LatAm", "Argentina": "LatAm",
 }
+# Le Visionnaire labels Chinese names "China" (XPEV, NIO); the others fold
+# them into "Asia ex-Japan" (BABA on the Bâtisseur).
+GEO_MAP_BY_PORTFOLIO = {
+    "visionnaire": {**_GEO_MAP_BASE, "China": "China", "Hong Kong": "China"},
+}
+GEO_MAP = _GEO_MAP_BASE  # default / backwards compat
+
+
+def _sector_map_for(pid: str) -> dict:
+    return SECTOR_MAP_BY_PORTFOLIO.get(pid, SECTOR_MAP)
+
+
+def _geo_map_for(pid: str) -> dict:
+    return GEO_MAP_BY_PORTFOLIO.get(pid, GEO_MAP)
 
 
 def _moves_action_label(current: float, new: float) -> str:
@@ -1674,8 +1718,8 @@ with tab_moves:
                 if _valid_info(info):
                     d["ticker"]    = resolved
                     d["name"]      = info.get("longName") or info.get("shortName") or resolved
-                    d["sector"]    = SECTOR_MAP.get(info.get("sector", ""), d["sector"]) or d["sector"]
-                    d["geography"] = GEO_MAP.get(info.get("country", ""), d["geography"]) or d["geography"]
+                    d["sector"]    = _sector_map_for(_pid).get(info.get("sector", ""), d["sector"]) or d["sector"]
+                    d["geography"] = _geo_map_for(_pid).get(info.get("country", ""), d["geography"]) or d["geography"]
                     autofilled = True
                     st.session_state[lookup_key][resolved] = {
                         "ok": True, "input": raw, "resolved": resolved,

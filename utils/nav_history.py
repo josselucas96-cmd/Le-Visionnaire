@@ -1,5 +1,12 @@
 """NAV snapshot persistence — daily portfolio value frozen in DB.
 
+WRITES happen in the nightly cron only (daily_refresh.py → daily_holdings).
+This module is read-side for the app. The visitor-triggered writers
+(lazy_write_holdings / lazy_write_nav) were removed on 2026-09-19: they could
+never fire (yf.download `end` is exclusive, so "today" was never in the
+history index) and a working version would have frozen intraday quotes into
+immutable rows. See memory project_pipeline_hardening.
+
 Once a row is written for (portfolio_id, date), it is never recomputed.
 Future moves (which mutate weight / PRU) only affect days from the move
 forward — historical NAV is immutable. This is what makes the chart
@@ -19,8 +26,6 @@ import pandas as pd
 import streamlit as st
 
 from utils.data import get_client
-from utils.metrics import build_portfolio_index
-from utils.market import get_fx_to_usd, usd_factor
 
 
 @st.cache_data(ttl=120)
@@ -109,137 +114,3 @@ def get_nav_from_holdings(portfolio_id: str) -> pd.Series:
     return nav_per_day / base * 100
 
 
-def lazy_write_holdings(portfolio_id: str, positions: list, cash_amount: float,
-                        history: pd.DataFrame) -> int:
-    """[NEW MODEL] Upsert ONLY today's row in daily_holdings (per ticker + CASH).
-
-    Reads `positions.shares` (current state, post-any-moves) and receives the
-    derived `cash_amount` from the caller (see `utils.data.get_cash_amount`).
-    Multiplies by today's yfinance close (when available), and upserts one row
-    per active ticker plus one CASH row.
-
-    Past days are NEVER touched. If today's close not yet available in yfinance,
-    no-op.
-
-    Returns the number of rows upserted (~N+1 if today written, else 0).
-    """
-    if history.empty or not positions:
-        return 0
-    from datetime import date as _date
-    today = _date.today()
-    today_ts = pd.Timestamp(today)
-    if today_ts not in history.index:
-        return 0
-
-    sb = get_client()
-
-    # FX: positions/NAV are USD-denominated. Convert each foreign ticker's native
-    # close to USD so value = shares × price holds in USD. Currencies come from
-    # current_prices (written by the cron); usd_factor handles pence etc. We store
-    # the USD price so daily_holdings stays internally consistent (value=shares×price).
-    _tickers = [p.get("ticker") for p in positions if p.get("ticker")]
-    _ccy_map = {}
-    if _tickers:
-        try:
-            for r in (sb.table("current_prices").select("ticker, currency")
-                      .in_("ticker", _tickers).execute().data):
-                _ccy_map[r["ticker"]] = r.get("currency") or "USD"
-        except Exception:
-            pass
-    # Fallback for brand-new tickers not yet in current_prices (added since the
-    # last cron): fetch the listing currency live so a foreign newcomer isn't
-    # written without FX (which would inflate it by the FX factor).
-    _missing = [tk for tk in _tickers if tk not in _ccy_map]
-    if _missing:
-        import yfinance as yf
-        for tk in _missing:
-            try:
-                _ccy_map[tk] = getattr(yf.Ticker(tk).fast_info, "currency", None) or "USD"
-            except Exception:
-                _ccy_map[tk] = "USD"
-    _fx = get_fx_to_usd(tuple({c for c in _ccy_map.values() if c}))
-
-    rows = []
-    for p in positions:
-        ticker = p.get("ticker")
-        shares = float(p.get("shares") or 0)
-        if shares <= 0.0001 or not ticker:
-            continue
-        if ticker not in history.columns:
-            continue
-        price = history.loc[today_ts, ticker]
-        if pd.isna(price):
-            continue
-        f = usd_factor(_ccy_map.get(ticker, "USD"), _fx) or 1.0
-        price_usd = float(price) * f
-        rows.append({
-            "portfolio_id": portfolio_id,
-            "date":         today.isoformat(),
-            "ticker":       ticker,
-            "shares":       round(shares, 8),
-            "price":        round(price_usd, 4),
-            "value":        round(shares * price_usd, 2),
-        })
-    rows.append({
-        "portfolio_id": portfolio_id,
-        "date":         today.isoformat(),
-        "ticker":       "CASH",
-        "shares":       round(float(cash_amount or 0), 2),
-        "price":        1.0,
-        "value":        round(float(cash_amount or 0), 2),
-    })
-
-    if rows:
-        sb.table("daily_holdings").upsert(
-            rows, on_conflict="portfolio_id,date,ticker"
-        ).execute()
-        get_nav_from_holdings.clear()
-    return len(rows)
-
-
-def lazy_write_nav(portfolio_id: str, positions: list, cash_units: float,
-                   history: pd.DataFrame) -> int:
-    """Upsert ONLY today's row in nav_history. Past days are NEVER touched.
-
-    Critical invariant (see [[feedback_nav_history_immutable]]):
-    nav_history for any `date < today` is IMMUTABLE. Past missing rows must
-    be backfilled by an explicit one-shot script using historical state
-    (position_snapshots or CSV mirrors) — never by lazy_write, which only
-    has access to the CURRENT positions table and would otherwise rewrite
-    history with post-move state.
-
-    `cash_units` is accepted for signature compatibility but unused — the
-    legacy index ignores cash and starts at base 100 by construction.
-
-    Returns 1 if today's row was written, 0 otherwise.
-    """
-    if history.empty or not positions:
-        return 0
-
-    chart_series = build_portfolio_index(history, positions)
-    if chart_series.empty:
-        return 0
-
-    from datetime import date as _date
-    today = _date.today()
-    today_ts = pd.Timestamp(today)
-
-    # Only write today's row if yfinance has data for today.
-    # Otherwise, no-op (don't touch yesterday's or any past day's row).
-    if today_ts not in chart_series.index:
-        return 0
-    nav = chart_series.loc[today_ts]
-    if pd.isna(nav):
-        return 0
-
-    sb = get_client()
-    sb.table("nav_history").upsert(
-        {
-            "portfolio_id": portfolio_id,
-            "date":         today.isoformat(),
-            "nav_value":    round(float(nav), 6),
-        },
-        on_conflict="portfolio_id,date",
-    ).execute()
-    get_nav_series.clear()
-    return 1

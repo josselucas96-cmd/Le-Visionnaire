@@ -300,6 +300,21 @@ def add_position(data: dict, portfolio_id: str = "visionnaire", executed_at: str
     dollar_cost = new_w * initial_capital / 100.0
     new_shares_added = dollar_cost / new_p if new_p > 0 else 0.0
 
+    # A paper book cannot go overdrawn. Weight-based sizing (x% of initial
+    # capital) is blind to the cash actually left, which is how the Bâtisseur
+    # ended at -$18.54 on 2026-06-12 (NOW reinforcement 0.80% > cash). Refuse
+    # here — the single write path for buys — so the cockpit banner shows why.
+    # $1 tolerance absorbs rounding; anything beyond is a real overdraft.
+    cash_available = get_cash_amount(portfolio_id)
+    if dollar_cost > cash_available + 1.0:
+        max_w = max(cash_available, 0.0) / initial_capital * 100.0
+        raise ValueError(
+            f"Insufficient cash for {data['ticker']}: this buy costs "
+            f"${dollar_cost:,.2f} ({new_w:.2f}% of initial capital) but only "
+            f"${cash_available:,.2f} is available (max {max_w:.2f}%). "
+            f"Reduce the weight or free cash first."
+        )
+
     if existing:
         # REINFORCE — shares-weighted PRU averaging
         ex = existing[0]

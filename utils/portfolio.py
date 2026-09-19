@@ -22,7 +22,7 @@ from utils.metrics import (
     annualized_volatility, var_95, correlation_matrix, avg_pairwise_correlation,
     monthly_returns_table,
 )
-from utils.nav_history import lazy_write_holdings, get_nav_from_holdings
+from utils.nav_history import get_nav_from_holdings
 from utils.research import get_research
 from utils.nav import render_nav
 from utils.theme import (
@@ -636,10 +636,11 @@ Always conduct your own due diligence before making any investment decision.
     secondary_perf = None
     secondary_index = None
     if not history.empty:
-        # NEW MODEL — fund accounting (Phase D cutover).
-        # Refreshes today's daily_holdings row with current shares & prices.
-        # Past days are immutable (frozen at write time).
-        lazy_write_holdings(portfolio_id, positions, cash_amount, history)
+        # daily_holdings is written ONLY by the nightly cron (daily_refresh.py).
+        # The former visitor-triggered lazy_write_holdings never fired (history
+        # ends yesterday: yf.download's `end` is exclusive) and, had it fired,
+        # would have frozen intraday quotes into an immutable row whenever the
+        # cron failed afterwards. Removed 2026-09-19.
         if bench_pri and bench_pri in history.columns:
             raw = history[bench_pri].dropna()
             if not raw.empty:
@@ -660,11 +661,9 @@ Always conduct your own due diligence before making any investment decision.
     # and primary_index/secondary_index are normalized to raw.iloc[0] = close[T-1].
     port_index = get_nav_from_holdings(portfolio_id)
 
-    # Align port_index end date with benchmarks' last available date. Without
-    # this, today's port_index row (written via lazy_write_holdings using
-    # intraday yfinance quotes) can appear even when yfinance hasn't yet
-    # delivered today's close for the index (^NDX, ^GSPC, BTC-USD...), making
-    # the portfolio line visually 1 day longer than the benchmark line.
+    # Align port_index end date with benchmarks' last available date, so the
+    # portfolio line can never be longer than the benchmark line (e.g. a
+    # weekend row written by the 7/7 cron before yfinance has the index).
     _bench_end_dates = []
     if primary_index is not None and not primary_index.empty:
         _bench_end_dates.append(primary_index.index[-1])
