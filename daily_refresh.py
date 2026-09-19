@@ -679,6 +679,14 @@ def refresh_fundamentals(sb, portfolio_ids: list[str]) -> dict:
             failed.append(tk)
 
     if payload:
+        # tk.info can hand back NaN/inf (e.g. forwardPE on a loss-maker); JSON
+        # can't carry them and the whole upsert used to fail ("Out of range
+        # float values are not JSON compliant"), leaving fundamentals stale.
+        import math
+        for row in payload:
+            for k, v in row.items():
+                if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    row[k] = None
         sb.table("fundamentals").upsert(payload, on_conflict="ticker").execute()
         print(f"[fundamentals] upserted {len(payload)} rows.", flush=True)
     if failed:
