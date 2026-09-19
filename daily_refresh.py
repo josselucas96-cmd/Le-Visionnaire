@@ -60,16 +60,46 @@ INITIAL_CAPITAL_FALLBACK = 1_000_000.0
 _MINOR_UNIT = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ZAX": "ZAR", "ILA": "ILS"}
 
 
-def _fx_to_usd(currencies) -> dict:
+def _fx_to_usd(currencies, as_of: str | None = None) -> dict:
+    """{currency: USD rate}. With `as_of` (YYYY-MM-DD) use the FX close ≤ that
+    date so a backfilled row is valued at that day's rate, not today's (the
+    live rate was applied to every date before 2026-09-19, which left ~0.1-1%
+    noise on CSU.TO / EUR names in past rows). Falls back to the live quote."""
     rates = {"USD": 1.0}
     for ccy in set(c for c in currencies if c):
         if ccy == "USD" or ccy in rates:
             continue
         major = _MINOR_UNIT.get(ccy, ccy)
-        try:
-            rates[ccy] = float(yf.Ticker(f"{major}USD=X").fast_info.last_price)
-        except Exception:
-            rates[ccy] = None
+        pair = f"{major}USD=X"
+        rate = None
+        if as_of:
+            try:
+                from datetime import datetime, timedelta
+                import pandas as pd
+                t = datetime.strptime(as_of, "%Y-%m-%d")
+                df = yf.download(pair, start=(t - timedelta(days=10)).strftime("%Y-%m-%d"),
+                                 end=(t + timedelta(days=1)).strftime("%Y-%m-%d"),
+                                 progress=False, auto_adjust=False)
+                if not df.empty and "Close" in df.columns:
+                    s = df["Close"]
+                    if isinstance(s, pd.DataFrame):
+                        s = s.iloc[:, 0]
+                    # yfinance FX series carry occasional NaN rows (e.g. EURUSD=X
+                    # on 2026-09-17): skip them, otherwise the NaN propagates into
+                    # price_usd and the upsert fails ("not JSON compliant").
+                    s = s[s.index <= pd.Timestamp(as_of)].dropna()
+                    if not s.empty:
+                        rate = float(s.iloc[-1])
+            except Exception:
+                rate = None
+        if rate is None or rate != rate:  # None or NaN
+            try:
+                rate = float(yf.Ticker(pair).fast_info.last_price)
+                if rate != rate:
+                    rate = None
+            except Exception:
+                rate = None
+        rates[ccy] = rate
     return rates
 
 
@@ -150,15 +180,21 @@ def fetch_close_price(ticker: str, target_date_str: str, retries: int = 3) -> tu
             if df.empty or "Close" not in df.columns:
                 raise ValueError("empty frame")
 
-            # Keep only rows with date ≤ target_date_str
-            df = df[df.index <= pd.Timestamp(target_date_str)]
-            if df.empty:
+            # Keep only rows with date ≤ target_date_str and a REAL close. Yahoo
+            # sometimes returns a row for a date with an empty (NaN) Close on
+            # European/Brazilian listings (seen 2026-09-17 on EL.PA, IBE.MC,
+            # RMS.PA, ALCPB.PA, CASH3.SA): treat it like a non-trading day for
+            # that ticker and carry the last valid close forward (reported as
+            # "propagated") instead of writing NaN or dropping the position.
+            close_col = df["Close"]
+            if isinstance(close_col, pd.DataFrame):
+                close_col = close_col.iloc[:, 0]
+            close_col = close_col[close_col.index <= pd.Timestamp(target_date_str)].dropna()
+            if close_col.empty:
                 return None, None  # genuinely no data ≤ target (e.g. pre-listing)
 
-            last_idx = df.index[-1]
-            close = df.loc[last_idx, "Close"]
-            price = float(close.iloc[0]) if hasattr(close, "iloc") else float(close)
-            return price, last_idx.strftime("%Y-%m-%d")
+            last_idx = close_col.index[-1]
+            return float(close_col.iloc[-1]), last_idx.strftime("%Y-%m-%d")
         except Exception as e:
             if attempt < retries:
                 time.sleep(2 * attempt)  # 2s, 4s backoff — let rate-limit cool off
@@ -233,8 +269,87 @@ def derive_cash_at_date(sb, portfolio_id: str, target_date_str: str,
     return baseline + delta
 
 
+class BookChangedAfterDate(Exception):
+    """Raised when asked to write a PAST date for a portfolio that had a move
+    (transaction) after that date. `positions` only holds the CURRENT book, so
+    such a row would mix post-move shares with pre-move cash — exactly what
+    corrupted the Bâtisseur 2026-06-03 row (+3.5% phantom NAV). Those dates
+    need an explicit as-of reconstruction, never an automatic backfill."""
+
+
+class SuspiciousValueJump(Exception):
+    """Raised when a position's value would jump by more than JUMP_RATIO vs its
+    last stored value. A stock split / reverse split that was not applied to
+    `positions.shares` shows up exactly like this (yfinance restates history,
+    shares don't): e.g. ALCPB.PA 1:10 on 2026-09-08 would have written a
+    +$770K phantom on the Nakamoto. Run utils.data.apply_split first, or pass
+    --allow-jumps if the move is genuine."""
+
+
+ALLOW_JUMPS = False       # set by --allow-jumps
+JUMP_RATIO = 2.5          # value_new / value_prev outside [1/2.5, 2.5] → suspicious
+JUMP_MIN_USD = 5_000.0    # ignore tiny positions where ratios are noisy
+
+
+def _has_moves_after(sb, portfolio_id: str, target_date_str: str) -> list[str]:
+    """Tickers with a transaction dated strictly after target_date (cash-neutral
+    SPLIT/DRIP rows excluded, they don't change the $ book)."""
+    rows = (
+        sb.table("transactions")
+        .select("date, action, ticker_in, ticker_out")
+        .eq("portfolio_id", portfolio_id)
+        .gt("date", target_date_str)
+        .execute()
+        .data
+    )
+    out = []
+    for t in rows:
+        if (t.get("action") or "").upper() in ("SPLIT", "DRIP"):
+            continue
+        out.append(t.get("ticker_in") or t.get("ticker_out") or "?")
+    return sorted(set(out))
+
+
+def _previous_values(sb, portfolio_id: str, target_date_str: str) -> dict:
+    """{ticker: value} of the latest stored row strictly before target_date."""
+    last = (
+        sb.table("daily_holdings")
+        .select("date")
+        .eq("portfolio_id", portfolio_id)
+        .lt("date", target_date_str)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not last:
+        return {}
+    rows = (
+        sb.table("daily_holdings")
+        .select("ticker, value")
+        .eq("portfolio_id", portfolio_id)
+        .eq("date", last[0]["date"])
+        .execute()
+        .data
+    )
+    return {r["ticker"]: float(r["value"] or 0) for r in rows}
+
+
 def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
-    """Write daily_holdings rows for one portfolio. Returns summary dict."""
+    """Write daily_holdings rows for one portfolio. Returns summary dict.
+
+    Raises BookChangedAfterDate when target_date is in the past and the book
+    moved since (see class docstring) and SuspiciousValueJump on a >JUMP_RATIO
+    change in any position's value (unapplied split) unless ALLOW_JUMPS.
+    """
+    if target_date_str < _date.today().isoformat():
+        moved = _has_moves_after(sb, portfolio_id, target_date_str)
+        if moved:
+            raise BookChangedAfterDate(
+                f"{portfolio_id} had moves after {target_date_str} ({', '.join(moved)}); "
+                f"refusing automatic backfill -- reconstruct the as-of book explicitly."
+            )
+
     initial_capital = get_initial_capital(sb, portfolio_id)
     positions = (
         sb.table("positions")
@@ -247,9 +362,11 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     cash_amount = derive_cash_at_date(sb, portfolio_id, target_date_str, initial_capital)
 
     # FX: convert each foreign ticker's native close to USD (value = shares ×
-    # price_usd). Currency per ticker from current_prices; usd_factor handles pence.
+    # price_usd). Currency per ticker from current_prices; usd_factor handles
+    # pence. FX is taken at target_date so backfilled rows use that day's rate.
     ccy_map = _currency_map(sb, [p["ticker"] for p in positions if p.get("ticker")])
-    fx = _fx_to_usd(ccy_map.values())
+    fx = _fx_to_usd(ccy_map.values(), as_of=target_date_str)
+    prev_values = _previous_values(sb, portfolio_id, target_date_str)
 
     rows = [{
         "portfolio_id": portfolio_id,
@@ -285,6 +402,26 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
             "price":        round(price_usd, 4),
             "value":        round(value, 2),
         })
+
+    # Sanity: a position whose $ value jumps >JUMP_RATIO vs its last stored row
+    # is almost always an unapplied split (or a wrong currency), not a real move.
+    # Refuse the whole portfolio write rather than freeze a phantom NAV.
+    if not ALLOW_JUMPS and prev_values:
+        jumps = []
+        for r in rows:
+            if r["ticker"] == "CASH":
+                continue
+            prev = prev_values.get(r["ticker"])
+            if not prev or prev < JUMP_MIN_USD:
+                continue
+            ratio = r["value"] / prev
+            if ratio > JUMP_RATIO or ratio < 1.0 / JUMP_RATIO:
+                jumps.append(f"{r['ticker']} ${prev:,.0f} -> ${r['value']:,.0f} (x{ratio:.2f})")
+        if jumps:
+            raise SuspiciousValueJump(
+                f"{portfolio_id} {target_date_str}: {'; '.join(jumps)} -- "
+                f"unapplied split? run apply_split, or re-run with --allow-jumps."
+            )
 
     # Upsert all rows
     sb.table("daily_holdings").upsert(
@@ -344,6 +481,10 @@ def backfill_recent_gaps(sb, portfolio_ids: list[str], target_date_str: str,
                 healed.append({"portfolio": pid, "date": d, "rows": r["rows_written"]})
                 print(f"  [backfill] {pid} {d}: wrote {r['rows_written']} rows, "
                       f"NAV=${r['nav']:,.0f}", flush=True)
+            except BookChangedAfterDate as e:
+                # Not an error to retry: this date can only be rebuilt by hand
+                # from the transactions log (as-of book). Leave the hole visible.
+                print(f"  [backfill] {pid} {d}: SKIPPED -- {e}", flush=True)
             except Exception as e:
                 print(f"  [backfill] {pid} {d}: ERROR {e}", flush=True)
     return healed
@@ -621,7 +762,14 @@ def main():
         "--dry-run", action="store_true",
         help="Print what would be written; don't touch DB.",
     )
+    parser.add_argument(
+        "--allow-jumps", action="store_true",
+        help="Bypass the >2.5x position-value jump guard (only after checking it is a genuine move, not an unapplied split).",
+    )
     args = parser.parse_args()
+
+    global ALLOW_JUMPS
+    ALLOW_JUMPS = bool(args.allow_jumps)
 
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_KEY")
@@ -630,7 +778,25 @@ def main():
         sys.exit(2)
 
     sb = create_client(url, key)
-    target = args.date or _date.today().isoformat()
+
+    # Target date. The cron is scheduled 22:07 UTC (after the US close), but
+    # GitHub can delay scheduled runs by hours — end of Aug 2026 it fired at
+    # 00:12–06:04 UTC, i.e. on the NEXT calendar day before that day's session.
+    # `today` then had no close yet and "latest close ≤ today" silently wrote
+    # yesterday's prices under today's date (Visionnaire 27/08→01/09 shifted by
+    # one day). Rule: without --date, if it's before 21:30 UTC the US session of
+    # `today` cannot be closed, so the row we owe is yesterday's.
+    if args.date:
+        target = args.date
+    else:
+        from datetime import datetime, timedelta, timezone
+        now_utc = datetime.now(timezone.utc)
+        if (now_utc.hour, now_utc.minute) < (21, 30):
+            target = (now_utc.date() - timedelta(days=1)).isoformat()
+            print(f"[daily_refresh] started {now_utc:%H:%M} UTC, before today's US close "
+                  f"-> targeting yesterday {target}", flush=True)
+        else:
+            target = now_utc.date().isoformat()
     print(f"[daily_refresh] target date: {target}", flush=True)
 
     # Probe: can we find any close ≤ target for SPY? (sanity check for very

@@ -175,6 +175,35 @@ def _donut_chart(df, col, title):
     return fig
 
 
+def align_to_equity_calendar(port_index, primary_index=None, secondary_index=None):
+    """Return `port_index` restricted to the days the equity market actually traded.
+
+    daily_holdings carries a row for EVERY calendar day (7/7 cron: Friday's
+    close propagated through weekends AND market holidays). Those flat days
+    are fine in the DB but must not feed anything computed on daily returns:
+    they dangle past the benchmark on the chart, and they dilute volatility,
+    VaR and Sharpe (2/7 zero-return days annualised with sqrt(252) understated
+    vol by ~15% until 2026-09-19). The trading calendar is taken from the
+    equity benchmark(s) — handles weekends and holidays automatically. A 24/7
+    benchmark (Bitcoin: its index contains weekend dates) is NOT used as the
+    calendar. Without any equity benchmark, fall back to weekdays only.
+    """
+    if port_index is None or port_index.empty:
+        return port_index
+
+    def _is_24_7(idx):
+        return len(idx) > 0 and bool((idx.weekday >= 5).any())
+
+    equity_dates = None
+    for _b in (primary_index, secondary_index):
+        if _b is not None and not _b.empty and not _is_24_7(_b.index):
+            equity_dates = _b.index if equity_dates is None else equity_dates.union(_b.index)
+
+    if equity_dates is not None and len(equity_dates) > 0:
+        return port_index[port_index.index.isin(equity_dates)]
+    return port_index[port_index.index.weekday < 5]
+
+
 def render_performance_chart_section(
     portfolio_name: str,
     accent_color: str,
@@ -203,29 +232,7 @@ def render_performance_chart_section(
         st.info("No performance data yet.")
         return
 
-    # ── Align to the real equity trading calendar ─────────────────────────────
-    # The portfolio line is read from daily_holdings, which carries a row for
-    # EVERY calendar day since the 7/7 cron (Friday's close propagated through
-    # weekends AND market holidays like Memorial Day). Equity markets don't trade
-    # those days, so such points show as flat segments that dangle past the
-    # benchmark. Fix: show the portfolio only on the days the equity market
-    # actually traded — i.e. the dates present in the equity benchmark (handles
-    # weekends AND holidays automatically). A 24/7 benchmark (Bitcoin, whose index
-    # contains weekend dates) is NOT used as the calendar and is left intact so
-    # its real weekend moves still show (e.g. Le Nakamoto's BTC line).
-    def _is_24_7(idx):
-        return len(idx) > 0 and bool((idx.weekday >= 5).any())
-
-    equity_dates = None
-    for _b in (primary_index, secondary_index):
-        if _b is not None and not _b.empty and not _is_24_7(_b.index):
-            equity_dates = _b.index if equity_dates is None else equity_dates.union(_b.index)
-
-    if equity_dates is not None and len(equity_dates) > 0:
-        port_index = port_index[port_index.index.isin(equity_dates)]
-    else:
-        # No equity benchmark available → fall back to weekday-only.
-        port_index = port_index[port_index.index.weekday < 5]
+    port_index = align_to_equity_calendar(port_index, primary_index, secondary_index)
     if port_index.empty:
         st.info("No performance data yet.")
         return
@@ -343,11 +350,11 @@ def render_performance_chart_section(
                 else "" for v in col
             ]
         fmt = {m: (lambda v: f"{v:+.1f}" if pd.notna(v) else "") for m in mrt.columns}
-        styled_mrt = mrt.style.format(fmt).apply(_color_monthly)
+        styled_mrt = mrt.style.format(fmt, na_rep="").apply(_color_monthly)
         if inc_year in mrt.index and inc_col in mrt.columns:
             styled_mrt = styled_mrt.format(
                 lambda v: f"{v:+.1f}*" if pd.notna(v) else "",
-                subset=pd.IndexSlice[[inc_year], [inc_col]],
+                subset=pd.IndexSlice[[inc_year], [inc_col]], na_rep="",
             )
         st.dataframe(styled_mrt, use_container_width=True,
                      height=38 + min(len(mrt), 10) * 35)
@@ -671,6 +678,24 @@ Always conduct your own due diligence before making any investment decision.
     if port_index is not None and not port_index.empty:
         portfolio_perf = round(float(port_index.iloc[-1] - 100), 2)
 
+        # Benchmark headline + alpha must be read at the SAME date as the
+        # portfolio's last row. yfinance history runs to yesterday whatever the
+        # state of daily_holdings; when the pipeline stalled (Sep 2026) the site
+        # compared a 1-Sep portfolio with an 18-Sep Nasdaq (alpha +2.73% shown
+        # vs +4.99% same-date). Same for "Last updated": it is the date of the
+        # portfolio data, not the date yfinance answered.
+        _port_last = port_index.index[-1]
+
+        def _perf_at(idx):
+            if idx is None or idx.empty:
+                return None
+            s = idx[idx.index <= _port_last]
+            return round(float(s.iloc[-1] - 100), 2) if not s.empty else None
+
+        primary_perf   = _perf_at(primary_index)
+        secondary_perf = _perf_at(secondary_index)
+        last_updated   = _port_last.strftime("%b %d, %Y")
+
     alpha = round(portfolio_perf - (primary_perf or 0), 2)
 
     _n_returns = len(port_index.pct_change().dropna()) if (port_index is not None and not port_index.empty) else 0
@@ -721,7 +746,11 @@ Always conduct your own due diligence before making any investment decision.
     with metric_cols[3]:
         today_valid = [p for p in positions if p["change_today"] is not None]
         if today_valid:
-            avg_today = sum(p["weight"] * p["change_today"] for p in today_valid) / total_w
+            # Weight today's moves by the CURRENT allocation (what the Positions
+            # table shows), not the cost-basis weight: on drifted books (e.g.
+            # Nakamoto ASST 15% at cost vs 24% today) the two differ materially.
+            _w_today = sum(p.get("current_weight") or 0 for p in today_valid) or 1
+            avg_today = sum((p.get("current_weight") or 0) * p["change_today"] for p in today_valid) / _w_today
             s = "+" if avg_today >= 0 else ""
             st.metric("Today", f"{s}{avg_today:.2f}%")
         else:
@@ -795,13 +824,15 @@ Always conduct your own due diligence before making any investment decision.
         cash_row_table = pd.DataFrame([_cash_row])
         display_full = pd.concat([display, empty_row, cash_row_table], ignore_index=True)
 
+        # na_rep: pandas skips the formatter on None/NaN cells, so without it the
+        # spacer row and the CASH row rendered a literal "None" on the public page.
         styled = display_full.style.format({
             "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
             "PRU":          lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
             "Price":        lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
             "Return %": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
             "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
-        }).apply(color_signed, subset=["Return %", "Today %"])
+        }, na_rep="—").apply(color_signed, subset=["Return %", "Today %"])
 
         table_height = 38 + (len(display) + 3) * 35
         st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
@@ -905,7 +936,12 @@ Always conduct your own due diligence before making any investment decision.
         st.divider()
         with st.expander("Risk Analysis", expanded=True):
             if port_index is not None and not port_index.empty:
-                port_ret = daily_returns(port_index)
+                # Same trading-day series as the Performance section, so that
+                # volatility / VaR here and Sharpe / beta above are computed on
+                # ONE series (they diverged until 2026-09-19: 7/7 calendar rows
+                # here understated vol by ~15% next to a Sharpe on trading days).
+                _port_index_td = align_to_equity_calendar(port_index, primary_index, secondary_index)
+                port_ret = daily_returns(_port_index_td)
                 secondary_ret = daily_returns(secondary_index) if secondary_index is not None else pd.Series()
 
                 ra1, ra2, ra3, ra4 = st.columns(4)

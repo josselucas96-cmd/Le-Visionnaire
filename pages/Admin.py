@@ -225,6 +225,13 @@ with st.expander("Performance", expanded=False):
         # Metrics row (4 cols) — Admin-specific layout, kept inline since
         # the public page renders these outside the expander differently.
         _port_perf = round(float(_port_index.iloc[-1] - 100), 2) if (_port_index is not None and not _port_index.empty) else 0.0
+        # Benchmark read at the portfolio's last data date (same fix as the
+        # public page): otherwise alpha compares two different dates whenever
+        # daily_holdings lags yfinance.
+        if _primary_index is not None and not _primary_index.empty and _port_index is not None and not _port_index.empty:
+            _pi = _primary_index[_primary_index.index <= _port_index.index[-1]]
+            if not _pi.empty:
+                _primary_perf = round(float(_pi.iloc[-1] - 100), 2)
         _alpha = round(_port_perf - (_primary_perf or 0), 2)
         _today_valid = [p for p in _positions_perf if p.get("change_today") is not None]
         _total_w = sum(p["weight"] for p in _today_valid) or 1
@@ -1479,6 +1486,7 @@ with tab_moves:
     ver_key     = f"moves_ver_{_pid}"
     confirm_key = f"moves_confirm_{_pid}"
     status_key  = f"moves_status_{_pid}"  # persists across reruns until dismissed
+    lookup_key  = f"moves_lookup_{_pid}"  # last yfinance auto-fill outcome per new ticker
 
     # ── Persistent status banner ──────────────────────────────────────────────
     # st.error/st.success rendered inside the commit handler get wiped by the
@@ -1507,6 +1515,7 @@ with tab_moves:
 
     if ver_key not in st.session_state:
         st.session_state[ver_key] = 0
+    st.session_state.setdefault(lookup_key, {})
 
     # Seed draft from current positions on first render (or after Reset).
     # "current_weight" displays the drifted (dynamic) allocation, not the entry
@@ -1649,24 +1658,33 @@ with tab_moves:
         if orig["id"] is not None and orig["id"] not in edited_ids:
             new_draft.append({**orig, "new_weight": 0.0})
 
-    # Auto-fill missing name/sector/geo for new rows (one yfinance attempt per ticker)
+    # Auto-fill missing name/sector/geo for new rows (one yfinance attempt per ticker).
+    # Record the outcome per ticker so the user sees what was found/chosen (or that
+    # nothing valid came back) in a caption under the table.
     autofilled = False
     for d in new_draft:
         if (d.get("_is_new")
                 and d.get("ticker")
                 and not d.get("name")
                 and not d.get("_lookup_done")):
+            raw = d["ticker"]
             try:
-                with st.spinner(f"Looking up {d['ticker']}…"):
-                    resolved, info = resolve_ticker(d["ticker"], None)
+                with st.spinner(f"Looking up {raw}…"):
+                    resolved, info = resolve_ticker(raw, None)
                 if _valid_info(info):
                     d["ticker"]    = resolved
                     d["name"]      = info.get("longName") or info.get("shortName") or resolved
                     d["sector"]    = SECTOR_MAP.get(info.get("sector", ""), d["sector"]) or d["sector"]
                     d["geography"] = GEO_MAP.get(info.get("country", ""), d["geography"]) or d["geography"]
                     autofilled = True
+                    st.session_state[lookup_key][resolved] = {
+                        "ok": True, "input": raw, "resolved": resolved,
+                        "name": d["name"], "sector": d["sector"], "geography": d["geography"],
+                    }
+                else:
+                    st.session_state[lookup_key][raw] = {"ok": False, "input": raw}
             except Exception:
-                pass
+                st.session_state[lookup_key][raw] = {"ok": False, "input": raw}
             d["_lookup_done"] = True
 
     st.session_state[draft_key] = new_draft
@@ -1718,6 +1736,28 @@ with tab_moves:
     with vc2:
         st.metric("Pending moves", len(moves))
 
+    # ── New-ticker lookup feedback: tell the user what yfinance found / chose ──
+    _lookups = st.session_state.get(lookup_key, {})
+    for d in st.session_state[draft_key]:
+        if not d.get("_is_new"):
+            continue
+        res = _lookups.get(d["ticker"])
+        if not res:
+            continue
+        if res.get("ok"):
+            extra = (f" (saisi : {res['input']})"
+                     if res.get("resolved") and res["resolved"] != res.get("input") else "")
+            st.caption(
+                f"✓ **{res['resolved']}**{extra} trouvé : {res.get('name')} "
+                f"· {res.get('sector')} · {res.get('geography')}"
+            )
+        else:
+            st.caption(
+                f"⚠️ **{res['input']}** introuvable sur yfinance (pas de nom/prix valide). "
+                f"Renseigne Name / Layer / Sector / Geography à la main, mets le New %, "
+                f"puis vérifie le **Live Price** à l'étape Confirm avant de committer."
+            )
+
     if moves:
         st.markdown("**Pending changes**")
         preview_df = pd.DataFrame([
@@ -1745,6 +1785,7 @@ with tab_moves:
         if st.button("Reset edits", key="moves_reset"):
             st.session_state.pop(draft_key, None)
             st.session_state.pop(confirm_key, None)
+            st.session_state.pop(lookup_key, None)
             st.session_state[ver_key] += 1
             st.rerun()
     with bc3:

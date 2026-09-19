@@ -27,6 +27,9 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # contents: write is only for the monthly keepalive commit below.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -68,3 +71,19 @@ jobs:
 
       - name: Build audit workbook + upload to Supabase Storage
         run: python build_audit_workbook.py
+
+      # GitHub silently disables scheduled workflows after 60 days without a
+      # commit — that is what froze the site from 2026-09-01 (last commit
+      # 2026-07-02). An empty commit on the 1st of each month resets that
+      # clock. `if: always()` so a failing refresh step can't starve it.
+      - name: Monthly keepalive commit (resets GitHub's 60-day inactivity timer)
+        if: always() && github.event_name == 'schedule'
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            git config user.name  "specula-bot"
+            git config user.email "specula-bot@users.noreply.github.com"
+            git commit --allow-empty -m "chore: keepalive $(date -u +%Y-%m) (scheduled workflows auto-disable after 60 idle days)"
+            git push
+          else
+            echo "not the 1st of the month - skip"
+          fi
