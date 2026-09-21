@@ -236,15 +236,21 @@ def get_prices_from_db(tickers: tuple) -> dict:
 # Approximate BTC holdings per Nakamoto position. Estimates as of Q3 2025
 # disclosures — UPDATE FROM ACTUAL FILINGS as positions evolve. STRC is a
 # preferred share with no direct BTC exposure (holders earn USD coupons).
+# BTC held per Nakamoto constituent. Feeds the cockpit's EV/mNAV. NOT auto-
+# updated: refresh at each monthly checklist (issue) from the companies' own
+# disclosures. Values below verified on 2026-09-21 against press releases /
+# bitcointreasuries.net; the previous set (Q3 2025 estimates) was off by up
+# to 5x (e.g. Strive 5,816 vs 25,000).
+BTC_HOLDINGS_AS_OF = "2026-09-21"
 BTC_HOLDINGS_NAKAMOTO = {
-    "MSTR":     597325,  # Strategy (ex-MicroStrategy)
-    "MTPLF":     22610,  # Metaplanet (3350.T OTC US line)
-    "ASST":       5816,  # Strive Asset Management (post-Asset Entities)
-    "ALCPB.PA":   2089,  # Capital B (ex Blockchain Group)
-    "OBTC3.SA":    800,  # OranjeBTC (B3 Brazil) — estimate, verify
-    "GS9.F":       800,  # H100 Group (Frankfurt OTC) — estimate, verify
-    "CASH3.SA":    320,  # Méliuz (B3 Brazil)
-    "SWC.L":      2500,  # Smarter Web Company (LSE) — estimate, verify
+    "MSTR":     846000,  # Strategy — 21 Sep 2026 purchase disclosure (846,000 BTC)
+    "MTPLF":     43000,  # Metaplanet — 2 Jul 2026 (43,000 BTC), unchanged per 4 Sep coverage
+    "ASST":      25000,  # Strive — 11 Sep 2026 (25,000 BTC after 469 BTC buy)
+    "ALCPB.PA":   3525,  # Capital B — 14 Sep 2026 press release (3,525 BTC)
+    "OBTC3.SA":   3918,  # OranjeBTC — Sep 2026 (3,918 BTC)
+    "GS9.F":      3506,  # H100 Group — 3,506.4 BTC after NSD acquisition (10 Aug 2026)
+    "CASH3.SA":    600,  # Méliuz — 596-605 BTC (Apr 2026 data; buyback may have sold some — TO CONFIRM)
+    "SWC.L":      2747,  # Smarter Web Company — 2 Sep 2026 (2,747 BTC; later headlines up to 2,878 — TO CONFIRM)
     "STRC":          0,  # Preferred — no direct BTC exposure
 }
 
