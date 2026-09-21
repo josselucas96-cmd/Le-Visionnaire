@@ -1,0 +1,44 @@
+name: Tests
+
+# Unit tests on every push / PR to main: metric helpers, trading-calendar
+# alignment, the nightly writer's guards (target date, NaN closes, FX as-of,
+# BookChangedAfterDate, SuspiciousValueJump), the cockpit cash guard and the
+# monthly-report helpers. No network: yfinance and Supabase are faked.
+# Streamlit Cloud deploys on push regardless; a red run here is the signal
+# that what just shipped broke something we had pinned down.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'reports/**'
+      - '**.md'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet -r requirements.txt pytest matplotlib
+
+      - name: Byte-compile everything
+        run: python -m compileall -q app.py pages utils daily_refresh.py generate_monthly_report.py scripts
+
+      - name: Run tests
+        run: python -m pytest -q tests

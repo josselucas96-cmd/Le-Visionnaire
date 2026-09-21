@@ -760,6 +760,19 @@ def refresh_current_prices(sb, portfolio_ids: list[str]) -> dict:
     return {"ok": len(payload), "failed": failed}
 
 
+def resolve_target_date(now_utc, explicit: str | None = None) -> str:
+    """Which date does this run owe? An explicit --date wins. Otherwise: the US
+    session of `today` (UTC) cannot be closed before ~21:00 UTC, so a run that
+    starts before 21:30 UTC (GitHub delayed the 22:07 cron past midnight in
+    Aug 2026) must write YESTERDAY, not yesterday's close under today's date."""
+    from datetime import timedelta
+    if explicit:
+        return explicit
+    if (now_utc.hour, now_utc.minute) < (21, 30):
+        return (now_utc.date() - timedelta(days=1)).isoformat()
+    return now_utc.date().isoformat()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -794,17 +807,12 @@ def main():
     # yesterday's prices under today's date (Visionnaire 27/08→01/09 shifted by
     # one day). Rule: without --date, if it's before 21:30 UTC the US session of
     # `today` cannot be closed, so the row we owe is yesterday's.
-    if args.date:
-        target = args.date
-    else:
-        from datetime import datetime, timedelta, timezone
-        now_utc = datetime.now(timezone.utc)
-        if (now_utc.hour, now_utc.minute) < (21, 30):
-            target = (now_utc.date() - timedelta(days=1)).isoformat()
-            print(f"[daily_refresh] started {now_utc:%H:%M} UTC, before today's US close "
-                  f"-> targeting yesterday {target}", flush=True)
-        else:
-            target = now_utc.date().isoformat()
+    from datetime import datetime, timezone
+    now_utc = datetime.now(timezone.utc)
+    target = resolve_target_date(now_utc, args.date)
+    if not args.date and target != now_utc.date().isoformat():
+        print(f"[daily_refresh] started {now_utc:%H:%M} UTC, before today's US close "
+              f"-> targeting yesterday {target}", flush=True)
     print(f"[daily_refresh] target date: {target}", flush=True)
 
     # Probe: can we find any close ≤ target for SPY? (sanity check for very
