@@ -59,6 +59,7 @@ def render_nav(current: str):
     # at /HistoryAnalysis via direct URL for the admin).
     simple_pages = [
         ("Accueil",      "/",         "specula"),
+        ("Moves",        "/Moves",    "moves"),
         ("Stock Papers", "/Research", "research"),
         ("Articles",     "/Articles", "articles"),
         ("About",        "/About",    "about"),
