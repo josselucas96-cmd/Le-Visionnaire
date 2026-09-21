@@ -123,8 +123,8 @@ if _SECRETS.exists():
     with open(_SECRETS, "rb") as f:
         secrets = tomllib.load(f)
     sb = create_client(secrets["supabase_url"], secrets["supabase_key"])
-elif os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_KEY"):  # CI
-    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+elif os.environ.get("SUPABASE_URL") and (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")):  # CI
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ.get("SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_KEY"])
 else:  # importable without credentials (unit tests of pure helpers); data calls will fail loudly
     sb = None
 

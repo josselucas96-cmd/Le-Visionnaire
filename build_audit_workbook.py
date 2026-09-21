@@ -480,7 +480,7 @@ def build_readme(wb: Workbook, summaries: list[tuple[str, float, int, int]]):
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     secrets = toml.load(Path(__file__).parent / ".streamlit" / "secrets.toml")
-    sb = create_client(secrets["supabase_url"], secrets["supabase_key"])
+    sb = create_client(secrets["supabase_url"], secrets.get("supabase_service_key") or secrets["supabase_key"])
 
     wb = Workbook()
     wb.remove(wb.active)  # drop default empty sheet

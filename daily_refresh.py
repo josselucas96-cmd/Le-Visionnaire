@@ -922,9 +922,10 @@ def main():
     ALLOW_JUMPS = bool(args.allow_jumps)
 
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
+    # service_role (bypasses RLS) once the lock-down is applied; anon until then.
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
     if not url or not key:
-        print("ERROR: SUPABASE_URL and SUPABASE_KEY env vars are required.", file=sys.stderr)
+        print("ERROR: SUPABASE_URL and SUPABASE_KEY (or SUPABASE_SERVICE_KEY) env vars are required.", file=sys.stderr)
         sys.exit(2)
 
     sb = create_client(url, key)

@@ -49,6 +49,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
           python generate_monthly_report.py --all --month "${{ steps.m.outputs.month }}" --out reports/drafts | tee gen.log
 

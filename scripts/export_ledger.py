@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _client():
-    url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY")
+    url, key = os.environ.get("SUPABASE_URL"), (os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY"))
     if not (url and key):
         import tomllib
         with open(ROOT / ".streamlit" / "secrets.toml", "rb") as f:

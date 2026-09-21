@@ -42,6 +42,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python scripts/export_ledger.py --out ledger
 
       - name: Timestamp SHA256SUMS on Bitcoin (OpenTimestamps)

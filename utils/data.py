@@ -27,7 +27,13 @@ from supabase import create_client
 
 @st.cache_resource
 def get_client():
-    return create_client(st.secrets["supabase_url"], st.secrets["supabase_key"])
+    """Supabase client for the app. Prefers the service_role key when it is
+    configured in the (server-side) Streamlit secrets: once the RLS lock-down
+    (supabase/migrations/2026-09-21_rls_lockdown.sql) is applied, the anon key
+    can only read, and every write of the cockpit needs this key. The key never
+    reaches the browser — Streamlit renders server-side."""
+    key = st.secrets.get("supabase_service_key") or st.secrets["supabase_key"]
+    return create_client(st.secrets["supabase_url"], key)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
