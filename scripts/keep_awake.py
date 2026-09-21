@@ -26,7 +26,8 @@ APP_URL = os.environ.get("APP_URL", "https://specula-project.streamlit.app/")
 # "Ready" = the app's own content is on screen (the landing page always shows
 # the Specula title + THE PORTFOLIOS section). Streamlit's internal test-ids
 # vary across versions/custom layouts, so we look at rendered text instead.
-READY_JS = "() => /Specula/.test(document.body.innerText) && /PORTFOLIO/i.test(document.body.innerText)"
+# Landing page shows "THE PORTFOLIOS"; any other page shows the nav (Accueil/About) — either counts.
+READY_JS = "() => /Specula/.test(document.body.innerText) && /(PORTFOLIO|Accueil|Page not found)/i.test(document.body.innerText)"
 
 
 def wait_until_rendered(page, timeout_ms: int) -> bool:
@@ -71,7 +72,9 @@ def main() -> int:
                 raise TimeoutError("app content not found in any frame")
             page.wait_for_timeout(8_000)  # let the script run so the session counts as traffic
             title = page.title()
-            print(f"app rendered (title: {title!r}){' after wake-up' if woke else ''}", flush=True)
+            texts = " ".join((f.evaluate("() => document.body.innerText") or "") for f in page.frames)
+            nav = [w for w in ("Accueil", "Moves", "Stock Papers", "Articles", "About") if w in texts]
+            print(f"app rendered (title: {title!r}){' after wake-up' if woke else ''} | nav items seen: {nav} | page-not-found: {'Page not found' in texts}", flush=True)
             return 0
         except Exception as e:
             print(f"ERROR: app did not render: {e}", flush=True)

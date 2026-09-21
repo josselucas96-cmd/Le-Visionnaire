@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '17 */6 * * *'   # 00:17, 06:17, 12:17, 18:17 UTC
   workflow_dispatch:
+    inputs:
+      url:
+        description: 'Page to visit (default: landing page)'
+        required: false
+        type: string
 
 concurrency:
   group: keep-awake
@@ -33,7 +38,7 @@ jobs:
 
       - name: Visit the app (wake it if asleep)
         env:
-          APP_URL: https://specula-project.streamlit.app/
+          APP_URL: ${{ inputs.url || 'https://specula-project.streamlit.app/' }}
         run: python scripts/keep_awake.py
 
       - name: Upload failure screenshot
