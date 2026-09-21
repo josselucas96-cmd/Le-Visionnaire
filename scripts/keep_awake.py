@@ -74,7 +74,19 @@ def main() -> int:
             title = page.title()
             texts = " ".join((f.evaluate("() => document.body.innerText") or "") for f in page.frames)
             nav = [w for w in ("Accueil", "Moves", "Stock Papers", "Articles", "About") if w in texts]
-            print(f"app rendered (title: {title!r}){' after wake-up' if woke else ''} | nav items seen: {nav} | page-not-found: {'Page not found' in texts}", flush=True)
+            import re
+            m = re.search(r"build ([0-9a-f]{7,40})", texts)
+            build = m.group(1) if m else None
+            print(f"app rendered (title: {title!r}){' after wake-up' if woke else ''} | nav items seen: {nav} | "
+                  f"page-not-found: {'Page not found' in texts} | build: {build}", flush=True)
+            # Deploy drift: the build must be one of the recent commits of main
+            # (RECENT_SHAS is set by the workflow). A deploy lags a push by a few
+            # minutes, never by ten commits — unless Streamlit stopped pulling.
+            recent = os.environ.get("RECENT_SHAS", "").split()
+            if build and recent and not any(r.startswith(build) for r in recent):
+                print(f"DEPLOY DRIFT: site runs build {build}, not among the last {len(recent)} commits of main "
+                      f"-> Streamlit Cloud stopped following pushes. Fix: touch requirements.txt or Reboot app.", flush=True)
+                return 2
             return 0
         except Exception as e:
             print(f"ERROR: app did not render: {e}", flush=True)

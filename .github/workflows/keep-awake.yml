@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 12
 
       - uses: actions/setup-python@v5
         with:
@@ -36,10 +38,12 @@ jobs:
           pip install --quiet playwright
           python -m playwright install --with-deps chromium
 
-      - name: Visit the app (wake it if asleep)
+      - name: Visit the app (wake it if asleep) and check the deployed build
         env:
           APP_URL: ${{ inputs.url || 'https://specula-project.streamlit.app/' }}
-        run: python scripts/keep_awake.py
+        run: |
+          export RECENT_SHAS="$(git log -n 10 --format=%H | xargs)"
+          python scripts/keep_awake.py
 
       - name: Upload failure screenshot
         if: failure()

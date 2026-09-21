@@ -372,3 +372,11 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# Build stamp (commit deployed). Read by the keep-awake probe to detect a deploy
+# that silently stopped following main. Deliberately unobtrusive.
+from utils.build_info import get_build_sha  # noqa: E402
+_sha = get_build_sha()
+if _sha:
+    st.markdown(f'<div style="text-align:center; font-size:0.62rem; color:#2A2F38; margin-top:0.4rem;">build {_sha[:7]}</div>',
+                unsafe_allow_html=True)
