@@ -16,7 +16,7 @@ from utils.theme import (
 )
 
 st.set_page_config(
-    page_title="History Analysis | Le Visionnaire",
+    page_title="History Analysis | Specula",
     page_icon=SPECULA_ICON,
     layout="wide",
     initial_sidebar_state="collapsed",

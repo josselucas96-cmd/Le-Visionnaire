@@ -673,6 +673,7 @@ Always conduct your own due diligence before making any investment decision.
         _common_end = min(_bench_end_dates)
         port_index = port_index[port_index.index <= _common_end]
 
+    _data_age_days = None
     # Use chart's base-100 method for the headline metric (consistent with chart)
     if port_index is not None and not port_index.empty:
         portfolio_perf = round(float(port_index.iloc[-1] - 100), 2)
@@ -694,6 +695,7 @@ Always conduct your own due diligence before making any investment decision.
         primary_perf   = _perf_at(primary_index)
         secondary_perf = _perf_at(secondary_index)
         last_updated   = _port_last.strftime("%b %d, %Y")
+        _data_age_days = (date.today() - _port_last.date()).days
 
     alpha = round(portfolio_perf - (primary_perf or 0), 2)
 
@@ -729,6 +731,16 @@ Always conduct your own due diligence before making any investment decision.
             f"<span style='font-size:0.7rem; color:#555;'>Last updated</span><br>"
             f"<span style='font-size:0.82rem; color:#888;'>{last_updated}</span></div>",
             unsafe_allow_html=True,
+        )
+
+    # Never let the page look current when the pipeline is behind: a weekend
+    # plus Monday morning is 3 days, anything beyond means the nightly
+    # refresh has not written for at least one trading day.
+    if _data_age_days is not None and _data_age_days > 3:
+        st.warning(
+            f"Data as of {last_updated} — the nightly update is {_data_age_days} days behind. "
+            f"Figures below are correct for that date but not current.",
+            icon="⚠️",
         )
 
     metric_cols = st.columns(4)

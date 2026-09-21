@@ -1,4 +1,4 @@
-# ── Visual identity for Le Visionnaire ───────────────────────────────────────
+# ── Visual identity for Specula (legacy: Le Visionnaire) ───────────────────────────────────────
 # To revert to legacy theme, swap the values below with the LEGACY palette
 # stored in memory/project_visionnaire_theme.md
 

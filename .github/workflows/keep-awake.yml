@@ -1,0 +1,45 @@
+name: Keep app awake
+
+# Streamlit Community Cloud sleeps a public app after 12h without traffic and
+# then shows visitors a "get this app back up" page with a ~1 min cold start.
+# A real headless-browser visit every 6h keeps Specula awake (and wakes it if
+# it dozed off). See scripts/keep_awake.py. Public repo => Actions minutes free.
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'   # 00:17, 06:17, 12:17, 18:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: keep-awake
+  cancel-in-progress: true
+
+jobs:
+  visit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Playwright + Chromium
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Visit the app (wake it if asleep)
+        env:
+          APP_URL: https://specula-project.streamlit.app/
+        run: python scripts/keep_awake.py
+
+      - name: Upload failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keep-awake-failure
+          path: keep_awake_failure.png
+          if-no-files-found: ignore

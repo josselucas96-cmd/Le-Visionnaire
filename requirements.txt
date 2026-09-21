@@ -1,4 +1,4 @@
-streamlit>=1.32.0
+streamlit>=1.50,<2.0   # <2.0: 18 use_container_width calls still to migrate to width="stretch"
 supabase>=2.4.0
 yfinance>=0.2.40
 pandas>=2.0.0
