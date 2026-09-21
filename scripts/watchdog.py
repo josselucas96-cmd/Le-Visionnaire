@@ -136,6 +136,15 @@ def check_workflow():
             r = runs[0]
             line = f"last scheduled daily-refresh: {r['created_at'][:16]} -> {r['conclusion']}"
             (notes if r["conclusion"] == "success" else problems).append(line)
+        # keep-awake must have visited the app in the last 12h (Streamlit sleeps
+        # after 12h without traffic); GitHub sometimes delays or drops crons.
+        ka = _gh("actions/workflows/keep-awake.yml/runs?per_page=1&status=success").get("workflow_runs", [])
+        if ka:
+            ts = datetime.fromisoformat(ka[0]["created_at"].replace("Z", "+00:00"))
+            age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
+            (problems if age_h > 12 else notes).append(f"last successful keep-awake visit {age_h:.1f}h ago")
+        else:
+            problems.append("keep-awake: no successful run found")
     except Exception as e:
         problems.append(f"GitHub API check failed: {e}")
 
