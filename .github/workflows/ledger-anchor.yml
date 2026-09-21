@@ -1,0 +1,76 @@
+name: Ledger export + Bitcoin timestamp
+
+# After every nightly refresh: export the ledger to ledger/*.csv (independent
+# copy of the track record, git history = tamper-evident log), and anchor the
+# SHA256SUMS of that export in the Bitcoin blockchain with OpenTimestamps
+# (free calendar servers, no account). Proofs live in ledger/proofs/ and are
+# upgraded on later runs once the Bitcoin attestation exists.
+# Verification: see ledger/README.md.
+
+on:
+  workflow_run:
+    workflows: ["Daily holdings refresh"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ledger-anchor
+  cancel-in-progress: false
+
+jobs:
+  anchor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet supabase opentimestamps-client
+
+      - name: Export ledger
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/export_ledger.py --out ledger
+
+      - name: Timestamp SHA256SUMS on Bitcoin (OpenTimestamps)
+        continue-on-error: true
+        run: |
+          set -e
+          D=$(date -u +%F)
+          mkdir -p ledger/proofs
+          SNAP="ledger/proofs/SHA256SUMS-$D"
+          if [ -f "$SNAP.ots" ] && cmp -s ledger/SHA256SUMS "$SNAP"; then
+            echo "already stamped today with identical content"
+          else
+            cp ledger/SHA256SUMS "$SNAP"
+            rm -f "$SNAP.ots"
+            ots stamp "$SNAP"
+            echo "stamped $SNAP -> $SNAP.ots (pending Bitcoin attestation)"
+          fi
+          # Upgrade earlier pending proofs (fetches the Bitcoin attestation once mined)
+          for f in ledger/proofs/*.ots; do
+            [ "$f" = "$SNAP.ots" ] && continue
+            ots upgrade "$f" >/dev/null 2>&1 && echo "upgraded $f" || true
+          done
+          ots info "$SNAP.ots" | head -20 || true
+
+      - name: Commit ledger + proofs
+        run: |
+          git config user.name  "specula-bot"
+          git config user.email "specula-bot@users.noreply.github.com"
+          git add ledger
+          git diff --cached --quiet && { echo "ledger unchanged"; exit 0; }
+          git commit -m "ledger: $(date -u +%F) export + OTS proof"
+          git push
