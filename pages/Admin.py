@@ -1552,6 +1552,13 @@ with tab_moves:
                 st.success(msg)
             else:
                 st.info(msg)
+            _verif_rows = _status.get("verification") or []
+            if _verif_rows:
+                with st.expander("DB verification per move", expanded=(kind == "error")):
+                    st.dataframe(pd.DataFrame([{
+                        "Ticker": v["ticker"], "Action": v["action"],
+                        "In DB": "✓" if v["ok"] else "✗", "Detail": v["detail"],
+                    } for v in _verif_rows]), hide_index=True, width="stretch")
         with sc2:
             if st.button("✕", key=f"dismiss_status_{_pid}", help="Dismiss"):
                 st.session_state.pop(status_key, None)
@@ -2036,6 +2043,43 @@ with tab_moves:
                     # Execution timestamp = today + the chosen time (records WHEN
                     # the move happened, e.g. to match a communicated post time).
                     _executed_at = _dt_exec.combine(date.today(), exec_time).isoformat()
+                    def _verify_moves_in_db(pid, moves, today_iso):
+                        """Independent re-read of positions + today's transactions, move by
+                        move. The cockpit's own try/except is not proof: on 2026-06-04
+                        three BUYs vanished with no exception surfaced. Returns a list of
+                        {ticker, action, ok, detail}."""
+                        from utils.data import get_client as _gc
+                        _sb = _gc()
+                        act = {r["ticker"]: r for r in _sb.table("positions").select("ticker, weight, is_active")
+                               .eq("portfolio_id", pid).eq("is_active", True).execute().data}
+                        txns = _sb.table("transactions").select("action, ticker_in, ticker_out")                                   .eq("portfolio_id", pid).eq("date", today_iso).execute().data
+                        def _has_txn(a, tk):
+                            return any((t.get("action") or "").upper() == a and (t.get("ticker_in") == tk or t.get("ticker_out") == tk) for t in txns)
+                        out = []
+                        for mv in moves:
+                            a, tk = mv.get("action"), mv.get("ticker")
+                            if a in (None, "NOOP"):
+                                continue
+                            want_w = float(mv.get("new_db") or 0.0)
+                            if a == "BUY":
+                                ok = tk in act and _has_txn("IN", tk)
+                                det = f"position {'present' if tk in act else 'MISSING'}, IN txn {'present' if _has_txn('IN', tk) else 'MISSING'}"
+                            elif a == "REINFORCE":
+                                w = float(act.get(tk, {}).get("weight") or 0.0)
+                                ok = tk in act and abs(w - want_w) < 0.05 and _has_txn("IN", tk)
+                                det = f"weight {w:.2f} (expected {want_w:.2f}), IN txn {'present' if _has_txn('IN', tk) else 'MISSING'}"
+                            elif a == "REDUCE":
+                                w = float(act.get(tk, {}).get("weight") or 0.0)
+                                ok = tk in act and abs(w - want_w) < 0.05 and _has_txn("TRIM", tk)
+                                det = f"weight {w:.2f} (expected {want_w:.2f}), TRIM txn {'present' if _has_txn('TRIM', tk) else 'MISSING'}"
+                            elif a == "CLOSE":
+                                ok = tk not in act and _has_txn("OUT", tk)
+                                det = f"position {'still ACTIVE' if tk in act else 'closed'}, OUT txn {'present' if _has_txn('OUT', tk) else 'MISSING'}"
+                            else:
+                                ok, det = True, "not verified"
+                            out.append({"ticker": tk, "action": a, "ok": ok, "detail": det})
+                        return out
+
                     import traceback as _tb_mod
                     errors    = []   # one entry per failed move (with full traceback)
                     executed  = 0
@@ -2098,8 +2142,19 @@ with tab_moves:
                                 "trace":  _tb_mod.format_exc(),
                             })
 
+                    # Independent verification: what is ACTUALLY in the DB now?
+                    try:
+                        _verif = _verify_moves_in_db(_pid, commit_rebalance["moves"], today_str)
+                    except Exception as _ve:
+                        _verif = [{"ticker": "—", "action": "VERIFY", "ok": False, "detail": f"verification failed: {_ve}"}]
+                    _verif_ko = [v for v in _verif if not v["ok"]]
+
                     # Persist result across rerun so the user actually sees what happened
                     # (st.error rendered here would be wiped by the immediate st.rerun()).
+                    if _verif_ko and not errors:
+                        errors = [{"ticker": v["ticker"], "action": v["action"],
+                                   "error": f"NOT FOUND IN DB — {v['detail']}", "trace": None} for v in _verif_ko]
+                        executed -= len(_verif_ko)
                     if errors:
                         summary = "  •  ".join(
                             f"{err['ticker']} ({err['action']}): {err['error']}" for err in errors
@@ -2116,9 +2171,11 @@ with tab_moves:
                     else:
                         st.session_state[status_key] = {
                             "kind":      "success",
-                            "msg":       f"✓ {executed} move(s) executed.",
+                            "msg":       f"✓ {executed} move(s) executed and verified in DB "
+                                         f"({len(_verif)} checked: positions + today's transactions).",
                             "traceback": None,
                         }
+                    st.session_state[status_key]["verification"] = _verif
 
                     st.session_state.pop(confirm_key, None)
                     st.session_state.pop(draft_key, None)
