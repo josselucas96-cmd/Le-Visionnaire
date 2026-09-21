@@ -130,7 +130,19 @@ value ÷ NAV), not target weights.
 <b>Mergers, delistings, ticker changes</b><span>Handled manually at the terms of the transaction and logged as trades.</span>
 </div>
 
-<div class="section-title">7. Monthly reports</div>
+<div class="section-title">7. Public ledger &amp; Bitcoin timestamps</div>
+<p>
+The whole ledger is exported every night to the public GitHub repository
+(<a href="https://github.com/josselucas96-cmd/Specula/tree/main/ledger" target="_blank" style="color:#00D09C;">ledger/</a>):
+daily holdings, positions, the trade log. The git history is an independent, tamper-evident copy of the
+track record, and the SHA-256 of each day's export is anchored in the Bitcoin blockchain with
+<a href="https://opentimestamps.org" target="_blank" style="color:#00D09C;">OpenTimestamps</a>. Anyone can
+verify that a given day's figures existed by a given block and have not changed since — the README in
+that folder gives the three commands. What the timestamp proves is existence, not correctness: that is
+what the methodology above and the corrections log below are for.
+</p>
+
+<div class="section-title">8. Monthly reports</div>
 <p>
 Reports are generated from the ledger at each month-end close (the numbers can be re-derived at any time)
 and completed with a management commentary. A report without commentary is a draft and is not published.
@@ -140,7 +152,7 @@ and completed with a management commentary. A report without commentary is a dra
 """, unsafe_allow_html=True)
 
 # ── Corrections & mistake log ─────────────────────────────────────────────────
-st.markdown('<div class="about-body"><div class="section-title">8. Corrections &amp; mistake log</div>'
+st.markdown('<div class="about-body"><div class="section-title">9. Corrections &amp; mistake log</div>'
             '<p>Past rows are never silently edited. When an error is found, the fix and its effect on '
             'published figures are recorded here, newest first.</p></div>', unsafe_allow_html=True)
 
