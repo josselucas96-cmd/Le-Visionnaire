@@ -1,7 +1,7 @@
-streamlit>=1.50,<2.0   # <2.0: 18 use_container_width calls still to migrate to width="stretch"
-supabase>=2.4.0
-yfinance>=0.2.40
-pandas>=2.0.0
-plotly>=5.18.0
-numpy>=1.26.0
+streamlit>=1.50,<2.0
+supabase>=2.4.0,<3.0
+yfinance>=0.2.40,<1.0
+pandas>=2.0.0,<3.0
+plotly>=5.18.0,<7.0
+numpy>=1.26.0,<3.0
 streamlit-quill>=0.0.3

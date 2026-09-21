@@ -306,7 +306,7 @@ def render_performance_chart_section(
         port_index.index[0] - _pad,
         _right_end + _pad,
     ])
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ── Sharpe / Max Drawdown / Beta ──
     port_ret = daily_returns(port_index)
@@ -356,7 +356,7 @@ def render_performance_chart_section(
                 lambda v: f"{v:+.1f}*" if pd.notna(v) else "",
                 subset=pd.IndexSlice[[inc_year], [inc_col]], na_rep="",
             )
-        st.dataframe(styled_mrt, use_container_width=True,
+        st.dataframe(styled_mrt, width="stretch",
                      height=38 + min(len(mrt), 10) * 35)
         st.caption(f"\\* Partial month — return from inception ({inception_date}) to month-end.")
 
@@ -846,7 +846,7 @@ Always conduct your own due diligence before making any investment decision.
         }, na_rep="—").apply(color_signed, subset=["Return %", "Today %"])
 
         table_height = 38 + (len(display) + 3) * 35
-        st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
+        st.dataframe(styled, width="stretch", hide_index=True, height=table_height)
         st.caption(f"Cash / Equivalent — Current: {current_cash_pct:.1f}%")
 
         # Research teaser (optional)
@@ -934,12 +934,12 @@ Always conduct your own due diligence before making any investment decision.
                                               margin=dict(l=0, r=0, t=40, b=0),
                                               legend=dict(font=dict(size=11)), title_font_size=14)
                             with cols[i]:
-                                st.plotly_chart(fig, use_container_width=True)
+                                st.plotly_chart(fig, width="stretch")
                             i += 1
                 elif donut_type in display_alloc.columns:
                     with cols[i]:
                         st.plotly_chart(_donut_chart(display_alloc, donut_type, donut_type),
-                                        use_container_width=True)
+                                        width="stretch")
                     i += 1
 
     # ── Risk Analysis (optional) ──────────────────────────────────────────────
@@ -1048,7 +1048,7 @@ Always conduct your own due diligence before making any investment decision.
                         margin=dict(l=0, r=0, t=10, b=0),
                         xaxis=dict(side="bottom"),
                     )
-                    st.plotly_chart(fig_corr, use_container_width=True)
+                    st.plotly_chart(fig_corr, width="stretch")
 
     # ── Documents (portfolio-specific only) ───────────────────────────────────
     if show_documents_section:

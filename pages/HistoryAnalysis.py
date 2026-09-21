@@ -174,7 +174,7 @@ with st.expander("Performance & Moves", expanded=True):
             bgcolor="rgba(0,0,0,0)",
         )
         fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
     else:
         st.info("Not enough data to render the performance chart.")
 
@@ -256,7 +256,7 @@ with st.expander("Allocation Over Time", expanded=True):
         layout2 = chart_layout(height=380)
         layout2["yaxis"]["title"] = "NAV (base 100)"
         fig2.update_layout(**layout2)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
         st.caption("Weekly NAV breakdown. Total height = portfolio value (base 100 at inception). "
                    "Each surface grows or shrinks as the position appreciates or declines.")
     else:
@@ -341,7 +341,7 @@ with st.expander("Position Timeline", expanded=True):
     layout3["yaxis"]["autorange"] = "reversed"
     layout3["barmode"] = "overlay"
     fig3.update_layout(**layout3)
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, width="stretch")
     st.caption(
         "Green = active position · Red = closed at a loss · Blue = closed at a gain · "
         "Green dot = entry · Red dot = exit"

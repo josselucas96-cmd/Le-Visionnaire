@@ -2,6 +2,14 @@ import streamlit as st
 from utils.theme import NAV_ACTIVE_COLOR, NAV_ACTIVE_BG, BG, BORDER
 
 
+def _has_published_articles() -> bool:
+    try:
+        from utils.articles import list_articles
+        return bool(list_articles("published"))
+    except Exception:
+        return True  # on any error keep the link rather than hide content
+
+
 def render_nav(current: str):
     """
     Renders the top navigation bar.
@@ -55,6 +63,12 @@ def render_nav(current: str):
         ("Articles",     "/Articles", "articles"),
         ("About",        "/About",    "about"),
     ]
+    # Show "Articles" only once something is published: the page had shown
+    # "No articles published yet" to every visitor since 2026-05-18. The page
+    # itself stays reachable at /Articles; the link reappears automatically
+    # with the first published article (60s cache in list_articles).
+    if not _has_published_articles():
+        simple_pages = [p for p in simple_pages if p[2] != "articles"]
     accueil_label, accueil_href, accueil_key = simple_pages[0]
     accueil_active = "nav-active" if accueil_key == current else ""
     accueil_html = f'<a href="{accueil_href}" target="_self" class="nav-link {accueil_active}">{accueil_label}</a>'

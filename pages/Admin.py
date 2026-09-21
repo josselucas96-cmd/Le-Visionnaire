@@ -142,7 +142,7 @@ for _col, _pid_iter in zip(_card_cols, _pf_ids):
         )
         _btn_lbl = "Selected ▼" if _is_active else "Select"
         if st.button(_btn_lbl, key=f"adm_pf_btn_{_pid_iter}",
-                     use_container_width=True,
+                     width="stretch",
                      type="primary" if _is_active else "secondary"):
             st.session_state.admin_pf_id = _pid_iter
             st.rerun()
@@ -446,7 +446,7 @@ if positions:
     # Display ALL rows without vertical scroll (no min cap on rows).
     # Bâtisseur has 26 positions, test has up to 27, Visionnaire 16, Nakamoto 9.
     table_height = 38 + len(positions) * 35
-    st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
+    st.dataframe(styled, width="stretch", hide_index=True, height=table_height)
 
     cash_color = "#00D09C" if 2 < current_cash_pct < 8 else "#FFA500" if current_cash_pct <= 10 else "#FF4B4B"
     st.markdown(
@@ -551,7 +551,7 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             _inputs_df,
             key=_editor_key,
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             num_rows="fixed",
             column_config={
                 "Ticker":      st.column_config.TextColumn(disabled=True, width="small"),
@@ -774,7 +774,7 @@ with st.expander(f"📐 Valo Tracking — {_pf.get('name', _pid)}", expanded=Fal
             )
 
         st.markdown("**Computed ratios** (auto-update on each input edit)")
-        st.dataframe(styled, use_container_width=True, hide_index=True,
+        st.dataframe(styled, width="stretch", hide_index=True,
                      height=38 + min(len(positions), 30) * 35)
 
         st.caption(f"**Hierarchy** : {_hierarchy}   ·   {_legend}")
@@ -939,7 +939,7 @@ with st.expander(f"🩺 Health Tracker — {_pf.get('name', _pid)}", expanded=Tr
                 return [""] * len(row)
 
             styled = df.style.format({"%": "{:.2f}%"}).apply(_row_style, axis=1)
-            st.dataframe(styled, use_container_width=True, hide_index=True,
+            st.dataframe(styled, width="stretch", hide_index=True,
                          height=38 + min(len(df), 12) * 35)
 
         # Display in 3 columns for compact view, or stacked. 3 cols on wide screens.
@@ -1136,7 +1136,7 @@ with st.expander("📅 Earnings & Events Calendar", expanded=False):
                 "Rev Est.": _fmt_revenue,
             })
             h_e = 38 + min(len(all_events), 25) * 35
-            st.dataframe(styled_e, use_container_width=True, hide_index=True, height=h_e)
+            st.dataframe(styled_e, width="stretch", hide_index=True, height=h_e)
 
             within_7  = sum(1 for e in all_events if e["Days"] <= 7)
             within_30 = sum(1 for e in all_events if e["Days"] <= 30)
@@ -1632,7 +1632,7 @@ with tab_moves:
         num_rows="dynamic",
         height=table_height,
         key=editor_key,
-        use_container_width=True,
+        width="stretch",
     )
 
     # ── Sync edited rows back to draft (handle adds, edits, deletes, autofill) ──
@@ -1820,7 +1820,7 @@ with tab_moves:
                 "Current %": "{:.2f}",
                 "New %":     "{:.2f}",
             }),
-            hide_index=True, use_container_width=False,
+            hide_index=True, width="content",
         )
 
     # ── Action buttons ──
@@ -2164,7 +2164,7 @@ with tab_history:
         if "Perf %" in df_display.columns:
             styled_txn = styled_txn.apply(color_perf, subset=["Perf %"])
         h = 38 + min(len(df_display), 20) * 35
-        st.dataframe(styled_txn, use_container_width=True, hide_index=True, height=h)
+        st.dataframe(styled_txn, width="stretch", hide_index=True, height=h)
     else:
         st.info("No transactions yet.")
 
