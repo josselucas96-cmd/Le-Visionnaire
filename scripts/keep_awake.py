@@ -23,7 +23,10 @@ import sys
 from playwright.sync_api import sync_playwright
 
 APP_URL = os.environ.get("APP_URL", "https://specula-project.streamlit.app/")
-APP_READY_SELECTOR = '[data-testid="stAppViewContainer"]'
+# "Ready" = the app's own content is on screen (the landing page always shows
+# the Specula title + THE PORTFOLIOS section). Streamlit's internal test-ids
+# vary across versions/custom layouts, so we look at rendered text instead.
+READY_JS = "() => /Specula/.test(document.body.innerText) && /PORTFOLIO/i.test(document.body.innerText)"
 
 
 def wake_if_asleep(page) -> bool:
@@ -48,7 +51,7 @@ def main() -> int:
             page.goto(APP_URL, timeout=120_000, wait_until="domcontentloaded")
             woke = wake_if_asleep(page)
             # A cold start after waking can take ~1-2 min; be patient.
-            page.wait_for_selector(APP_READY_SELECTOR, timeout=180_000 if woke else 90_000)
+            page.wait_for_function(READY_JS, timeout=180_000 if woke else 90_000)
             page.wait_for_timeout(8_000)  # let the script run so the session counts as traffic
             title = page.title()
             print(f"app rendered (title: {title!r}){' after wake-up' if woke else ''}", flush=True)
