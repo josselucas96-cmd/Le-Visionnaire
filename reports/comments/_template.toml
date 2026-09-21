@@ -1,0 +1,15 @@
+# Copy to reports/comments/<portfolio_id>/<YYYY-MM>.toml and fill in.
+# 3 bullets each is the format used since May 2026. HTML <strong> allowed.
+# Placeholders {pf_mtd_pct} {bench_mtd_pct} {alpha_mtd_pct} {cash_pct} {bench_pri_lbl} are filled at render time.
+
+market_comment = [
+  "",
+  "",
+  "",
+]
+
+mgmt_comment = [
+  "The book closes the month at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>.",
+  "<strong>Moves.</strong> ",
+  "<strong>Positioning.</strong> ",
+]

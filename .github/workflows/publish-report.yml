@@ -1,0 +1,67 @@
+name: Publish monthly report
+
+# Manual: once reports/comments/<portfolio>/<YYYY-MM>.toml is written, this
+# renders the final report, prints it to PDF with headless Chromium, uploads it
+# to the research-docs bucket and upserts the `research` row shown in the site's
+# Documents section. Refuses drafts (no commentary file).
+
+on:
+  workflow_dispatch:
+    inputs:
+      portfolio:
+        description: 'Portfolio'
+        required: true
+        type: choice
+        options: [visionnaire, batisseur, nakamoto]
+      month:
+        description: 'Month YYYY-MM'
+        required: true
+        type: string
+      dry_run:
+        description: 'Render only, no upload'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet supabase yfinance pandas numpy matplotlib playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Publish
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python scripts/publish_report.py "${{ inputs.portfolio }}" --month "${{ inputs.month }}" ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Keep the published PDF as a run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-${{ inputs.portfolio }}-${{ inputs.month }}
+          path: reports/published/${{ inputs.portfolio }}/*.pdf
+          if-no-files-found: warn
+
+      - name: Commit the published HTML (audit trail)
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name  "specula-bot"
+          git config user.email "specula-bot@users.noreply.github.com"
+          git add reports/published/*/*.html
+          git diff --cached --quiet || git commit -m "reports: publish ${{ inputs.portfolio }} ${{ inputs.month }}"
+          git push

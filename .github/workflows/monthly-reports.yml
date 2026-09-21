@@ -1,0 +1,101 @@
+name: Monthly reports (drafts + checklist)
+
+# The 2nd of each month: regenerate the previous month's report drafts for every
+# active portfolio (numbers only — commentary comes from reports/comments/), render
+# PDFs for reading, commit the HTML drafts, and open a "Checklist mensuelle" issue
+# that stays open until the month's recurring duties are done. Background: from
+# June to September 2026 no report was produced because nothing asked for it.
+
+on:
+  schedule:
+    - cron: '0 7 2 * *'
+  workflow_dispatch:
+    inputs:
+      month:
+        description: 'Month to (re)generate, YYYY-MM. Default: previous month.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  drafts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet supabase yfinance pandas numpy matplotlib playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Resolve month
+        id: m
+        run: |
+          if [ -n "${{ inputs.month }}" ]; then M="${{ inputs.month }}";
+          else M=$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m); fi
+          echo "month=$M" >> "$GITHUB_OUTPUT"
+          echo "Month: $M"
+
+      - name: Generate drafts (all active portfolios)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python generate_monthly_report.py --all --month "${{ steps.m.outputs.month }}" --out reports/drafts | tee gen.log
+
+      - name: Render PDFs of the drafts
+        run: python scripts/render_pdf.py reports/drafts
+
+      - name: Upload draft PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-drafts-${{ steps.m.outputs.month }}
+          path: reports/drafts/**/*_${{ steps.m.outputs.month }}-*.pdf
+          if-no-files-found: warn
+
+      - name: Commit HTML drafts
+        run: |
+          git config user.name  "specula-bot"
+          git config user.email "specula-bot@users.noreply.github.com"
+          git add reports/drafts/*/*.html
+          git diff --cached --quiet || git commit -m "reports: drafts ${{ steps.m.outputs.month }} (auto)"
+          git push
+
+      - name: Open the monthly checklist issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          M: ${{ steps.m.outputs.month }}
+        run: |
+          gh label create monthly --color 5319E7 --description "Routine mensuelle" 2>/dev/null || true
+          if gh issue list --label monthly --state open --search "Checklist mensuelle — $M" --json number --jq '.[0].number' | grep -q .; then
+            echo "issue already open for $M"; exit 0; fi
+          KEY=$(grep -E "Generating monthly report for|NAV: base|Alpha MTD|Cash:" gen.log | sed 's/^ *//' || true)
+          cat > body.md <<EOF
+          Rapports **$M** générés en brouillon (bandeau DRAFT) — voir \`reports/drafts/<portefeuille>/\` et les PDF en artefact du run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          \`\`\`
+          $KEY
+          \`\`\`
+
+          ### À faire ce mois
+          - [ ] Commentaire de gestion **Visionnaire** → \`reports/comments/visionnaire/$M.toml\` (gabarit : \`reports/comments/_template.toml\`)
+          - [ ] Commentaire de gestion **Bâtisseur** → \`reports/comments/batisseur/$M.toml\`
+          - [ ] Commentaire de gestion **Nakamoto** → \`reports/comments/nakamoto/$M.toml\`
+          - [ ] Publier les 3 rapports : action **Publish monthly report** (portefeuille + \`$M\`) → PDF dans le bucket + section *Documents* du site
+          - [ ] Post LinkedIn du mois (perf, moves, lien rapport)
+          - [ ] Revue de gestion : Nakamoto (mNAV / cycle), Visionnaire (concentration, plan Metaplanet), Bâtisseur (cash)
+          - [ ] Engagements publics en cours : statut (papier ZETA, articles…)
+          - [ ] Vérifier que *Watchdog* et *Daily holdings refresh* ont été verts tout le mois (onglet Actions)
+
+          _Issue ouverte automatiquement par \`monthly-reports.yml\`. La fermer quand tout est coché._
+          EOF
+          gh issue create --title "Checklist mensuelle — $M" --label monthly --body-file body.md

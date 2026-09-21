@@ -5,3 +5,6 @@ __pycache__/
 *.xlsx
 backups/
 logs---*.txt
+
+# monthly report PDFs are build artifacts (Storage / Actions artifacts), HTML drafts are tracked
+reports/**/*.pdf

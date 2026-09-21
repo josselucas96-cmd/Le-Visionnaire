@@ -1,9 +1,17 @@
 """Generate Le Visionnaire / Le Nakamoto Monthly Report (HTML).
 
 Usage:
-    python generate_monthly_report.py            # defaults to Visionnaire
-    python generate_monthly_report.py visionnaire
-    python generate_monthly_report.py nakamoto
+    python generate_monthly_report.py visionnaire --month 2026-06
+    python generate_monthly_report.py --all --month 2026-08 --out reports/drafts
+    python generate_monthly_report.py nakamoto --date 2026-05-31
+
+Commentary lives OUTSIDE the script, one TOML per portfolio and month:
+    reports/comments/<portfolio_id>/<YYYY-MM>.toml
+        market_comment = ["...", "..."]
+        mgmt_comment   = ["...", "..."]   # {pf_mtd_pct} {bench_mtd_pct} {alpha_mtd_pct} {cash_pct} {bench_pri_lbl} are filled in
+When the file is missing the report is rendered as a DRAFT (visible banner)
+so a draft can never be mistaken for a published report. Secrets come from
+.streamlit/secrets.toml locally or SUPABASE_URL / SUPABASE_KEY in CI.
 
 The HTML uses the portfolio's accent color from the `portfolios` table.
 Output goes to: 01_THE PORTFOLIO PROJECT/Les portefeuilles/<Portfolio Name>/reports/.
@@ -109,9 +117,40 @@ CONFIGS = {
 PROJECT_ROOT = Path(r"C:\Users\USER\Desktop\Projet Claude\Claude Racine\01_THE PORTFOLIO PROJECT\Les portefeuilles")
 
 # ── Data layer ────────────────────────────────────────────────────────────────
-with open(".streamlit/secrets.toml", "rb") as f:
-    secrets = tomllib.load(f)
-sb = create_client(secrets["supabase_url"], secrets["supabase_key"])
+import os
+_SECRETS = Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
+if _SECRETS.exists():
+    with open(_SECRETS, "rb") as f:
+        secrets = tomllib.load(f)
+    sb = create_client(secrets["supabase_url"], secrets["supabase_key"])
+else:  # CI: GitHub Actions secrets
+    sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
+
+REPO_ROOT = Path(__file__).resolve().parent
+COMMENTS_DIR = REPO_ROOT / "reports" / "comments"
+DRAFT_MARKET = ["DRAFT — market commentary pending."]
+DRAFT_MGMT = [
+    "DRAFT — management commentary pending. Month-to-date performance: <strong>{pf_mtd_pct}%</strong> "
+    "vs <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} (alpha <strong>{alpha_mtd_pct}pp</strong>). "
+    "Cash at month-end: <strong>{cash_pct}%</strong>.",
+]
+
+
+def month_end(month: str) -> str:
+    """'2026-06' -> '2026-06-30'."""
+    return str(pd.Timestamp(month + "-01") + pd.offsets.MonthEnd(0))[:10]
+
+
+def load_comments(portfolio_id: str, report_date: str) -> tuple[list, list, bool]:
+    """(market_comment, mgmt_comment, is_draft) for that portfolio/month."""
+    path = COMMENTS_DIR / portfolio_id / f"{report_date[:7]}.toml"
+    if path.exists():
+        with open(path, "rb") as f:
+            c = tomllib.load(f)
+        market, mgmt = list(c.get("market_comment") or []), list(c.get("mgmt_comment") or [])
+        if market and mgmt:
+            return market, mgmt, False
+    return DRAFT_MARKET, DRAFT_MGMT, True
 
 
 def fetch_portfolio(portfolio_id):
@@ -418,6 +457,7 @@ def render_html(ctx: dict) -> str:
     eyebrow_text = {
         "visionnaire": "HIGH CONVICTION EQUITY  ·  PAPER PORTFOLIO",
         "nakamoto":    "DIGITAL ASSET TREASURIES  ·  PAPER PORTFOLIO",
+        "batisseur":   "QUALITY COMPOUNDERS  ·  PAPER PORTFOLIO",
     }.get(ctx["portfolio_id"], "PAPER PORTFOLIO")
 
     period_label = pd.Timestamp(cfg["report_date"]).strftime("%B %Y")
@@ -782,6 +822,7 @@ def render_html(ctx: dict) -> str:
 <body>
 
 <div class='page'>
+  {"<div style='background:#B45309;color:#FFF7ED;text-align:center;font-weight:700;letter-spacing:2px;padding:6px 0;font-size:11px;'>DRAFT — MANAGEMENT COMMENTARY PENDING — NOT FOR DISTRIBUTION</div>" if cfg.get("is_draft") else ""}
   <div class='top-band'>
     <span><b>{pf['name'].upper()}</b> &nbsp;|&nbsp; Monthly Report</span>
     <span>Paper portfolio. Not financial advice. Personal views only.</span>
@@ -951,11 +992,17 @@ def render_html(ctx: dict) -> str:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-def generate(portfolio_id: str):
+def generate(portfolio_id: str, report_date: str | None = None, out_dir: str | Path | None = None) -> Path:
     if portfolio_id not in CONFIGS:
         raise ValueError(f"Unknown portfolio: {portfolio_id}. Use one of: {list(CONFIGS.keys())}")
-    cfg = CONFIGS[portfolio_id]
-    print(f"\n{'=' * 60}\nGenerating monthly report for: {portfolio_id}\n{'=' * 60}")
+    cfg = dict(CONFIGS[portfolio_id])
+    if report_date:
+        cfg["report_date"] = report_date
+    # Commentary from reports/comments/<pid>/<YYYY-MM>.toml; DRAFT otherwise.
+    # (The inline CONFIGS text only ever described May 2026 — kept as history.)
+    cfg["market_comment"], cfg["mgmt_comment"], cfg["is_draft"] = load_comments(portfolio_id, cfg["report_date"])
+    print(f"\n{'=' * 60}\nGenerating monthly report for: {portfolio_id}  ({cfg['report_date']}, "
+          f"{'DRAFT' if cfg['is_draft'] else 'final'})\n{'=' * 60}")
 
     portfolio = fetch_portfolio(portfolio_id)
     inception = str(portfolio["inception_date"])
@@ -1161,17 +1208,39 @@ def generate(portfolio_id: str):
     print("  Rendering HTML...")
     html = render_html(ctx)
 
-    output_dir = PROJECT_ROOT / cfg["subfolder"] / "reports"
+    if out_dir is not None:
+        output_dir = Path(out_dir) / portfolio_id
+    elif PROJECT_ROOT.exists():
+        output_dir = PROJECT_ROOT / cfg["subfolder"] / "reports"
+    else:
+        output_dir = REPO_ROOT / "reports" / "drafts" / portfolio_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"{cfg['subfolder'].replace(' ', '')}_Monthly_{cfg['report_date']}.html"
+    import unicodedata
+    _base = unicodedata.normalize("NFKD", cfg["subfolder"].replace(" ", "")).encode("ascii", "ignore").decode()
+    out_path = output_dir / f"{_base}_Monthly_{cfg['report_date']}.html"
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"\n[OK] Saved: {out_path.absolute()}")
+    return out_path
 
 
 def main():
-    portfolio_id = sys.argv[1] if len(sys.argv) > 1 else "visionnaire"
-    generate(portfolio_id)
+    import argparse
+    ap = argparse.ArgumentParser(description="Generate Specula monthly reports (HTML).")
+    ap.add_argument("portfolio", nargs="?", default=None, help="visionnaire | batisseur | nakamoto")
+    ap.add_argument("--all", action="store_true", help="every active public portfolio")
+    ap.add_argument("--month", help="YYYY-MM -> report at that month-end")
+    ap.add_argument("--date", help="explicit report date YYYY-MM-DD (overrides --month)")
+    ap.add_argument("--out", help="output directory (default: local Portfolio Project folder, else reports/drafts)")
+    args = ap.parse_args()
+
+    report_date = args.date or (month_end(args.month) if args.month else None)
+    if args.all:
+        pids = [r["id"] for r in sb.table("portfolios").select("id").eq("is_active", True).order("display_order").execute().data]
+    else:
+        pids = [args.portfolio or "visionnaire"]
+    for pid in pids:
+        generate(pid, report_date=report_date, out_dir=args.out)
 
 
 if __name__ == "__main__":
