@@ -1,0 +1,85 @@
+# Public corrections & mistake log — rendered on /Methodology.
+# One [[entry]] per correction, newest first. Never delete an entry.
+# Fields: date, scope, title, what (what was wrong), fix (what was done),
+#         impact (what changed in published figures), status.
+
+[[entry]]
+date   = "2026-09-19"
+scope  = "All portfolios"
+title  = "Site frozen for 18 days while announcing itself up to date"
+what   = "GitHub disables scheduled jobs after 60 days without a commit. The nightly ledger writer stopped on 2026-09-01; the pages kept showing 'Last updated <today>' because that label reflected the price feed, not the ledger. Figures shown 1–19 Sept were correct for 30/31 Aug, not for the day of the visit."
+fix    = "Ledger back-filled 31 Aug → 18 Sept from end-of-day closes; 'Last updated' now shows the ledger date; a visible warning appears when data is more than 3 days old; a monthly keep-alive commit and a daily independent watchdog (e-mail on failure) were added."
+impact = "No historical figure changed. Live figures were stale for 18 days."
+status = "closed"
+
+[[entry]]
+date   = "2026-09-19"
+scope  = "Le Visionnaire"
+title  = "Four ledger rows shifted by one day (27, 28, 31 Aug, 1 Sept)"
+what   = "The nightly job, delayed by the scheduler past midnight UTC, wrote the previous day's closes under the current date."
+fix    = "The four rows were rewritten with the correct closes. The job now targets the previous day whenever it starts before the US close."
+impact = "Headline +20.92% shown on 1 Sept was the 31 Aug NAV. August monthly return +10.7% → +11.2%. Chart corrected on those four dates."
+status = "closed"
+
+[[entry]]
+date   = "2026-09-19"
+scope  = "Le Bâtisseur"
+title  = "3 June row rebuilt with the post-rebalance book"
+what   = "The 3 June row was missing (feed failure) and was back-filled on 4 June using the positions of 4 June (after Rebalance #1) but the cash of 3 June: +3.5% phantom NAV on 3 June, −3.5% on 4 June."
+fix    = "Row rebuilt with the 3 June book (RACE held, AVGO/MA/NOW not yet bought). Back-filling a date that precedes a later trade is now refused unless the book is reconstructed as of that date."
+impact = "Max drawdown −9.44% → −7.62%; realised volatility 17.6% → 15.2%; Sharpe 0.60 → 0.67. Inception-to-date return unchanged."
+status = "closed"
+
+[[entry]]
+date   = "2026-09-19"
+scope  = "All portfolios"
+title  = "Alpha compared the portfolio and its benchmark on different dates"
+what   = "The benchmark return was read at the latest price-feed date while the portfolio return was read at its latest ledger date. Harmless when both are current; misleading when the ledger lags (on 1 Sept: Visionnaire alpha shown +2.73%, same-date alpha +4.99%; Nakamoto shown −7.94%, same-date −3.91%)."
+fix    = "Benchmark return and alpha are now read at the portfolio's latest ledger date."
+impact = "Alpha figures changed on every page. Portfolio returns unchanged."
+status = "closed"
+
+[[entry]]
+date   = "2026-09-19"
+scope  = "All portfolios"
+title  = "Volatility and VaR computed on a 7-day calendar"
+what   = "The ledger holds a row for every calendar day (weekends carry Friday's close). Volatility and VaR were computed on that series (2/7 zero-return days) and annualised with √252, understating both by ~15%, while Sharpe on the same page used trading days only."
+fix    = "All risk statistics use the equity trading calendar of the benchmark."
+impact = "Visionnaire volatility 29.1% → 33.8%, VaR −2.82% → −3.26%; Bâtisseur 14.7% → 17.6% (15.2% after the 3 June fix); Nakamoto 52.5% → 63.4%."
+status = "closed"
+
+[[entry]]
+date   = "2026-09-19"
+scope  = "Le Nakamoto"
+title  = "Capital B (ALCPB.PA) 1-for-10 reverse split applied late"
+what   = "The reverse split of 8 Sept was not applied to the position while the price feed restated history ×10. Caught before any row was written with the wrong share count."
+fix    = "Share count ÷10, cost basis ×10 (value-neutral). The nightly job now refuses any position whose value would jump more than 2.5× overnight, the signature of an unapplied split."
+impact = "None on published figures."
+status = "closed"
+
+[[entry]]
+date   = "2026-06-04"
+scope  = "Le Bâtisseur"
+title  = "Three purchases of Rebalance #1 not recorded by the trade tool"
+what   = "The RACE sale was recorded; the AVGO, MA and NOW purchases silently failed. Detected the same day by checking the database."
+fix    = "Purchases recorded at the intended prices and time the same day. Since 2026-09-21 every trade is re-read from the database after execution and any missing one is flagged."
+impact = "None on published figures (fixed intraday)."
+status = "closed"
+
+[[entry]]
+date   = "2026-05-28"
+scope  = "Le Bâtisseur, Le Nakamoto"
+title  = "Foreign listings valued without currency conversion"
+what   = "Positions quoted in EUR, CAD, BRL and pence were valued in their local currency as if USD from inception until 28 May."
+fix    = "Ledger and positions restated in USD with the historical rate of each day; conversion applied on every write since."
+impact = "Bâtisseur inception-to-date −0.16 pp, Nakamoto −0.55 pp at the time of the fix."
+status = "closed"
+
+[[entry]]
+date   = "2026-05-14"
+scope  = "Le Visionnaire"
+title  = "Performance history rewritten during a migration"
+what   = "While moving to fund accounting (shares × close + cash), the NAV history was regenerated several times from the current book instead of the book of each day, briefly showing +13.23% instead of +20.45%."
+fix    = "History rebuilt from dated snapshots; past rows have been immutable since. The same-day switch to fund accounting changed the published inception return from +20.45% to +20.05% (previous method mixed cost basis and market value)."
+impact = "Inception return −0.40 pp at the time (method change, disclosed on LinkedIn)."
+status = "closed"
