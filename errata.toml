@@ -4,6 +4,15 @@
 #         impact (what changed in published figures), status.
 
 [[entry]]
+date   = "2026-09-21"
+scope  = "Le Bâtisseur"
+title  = "Two more rows rebuilt with a later book (9 and 11 June)"
+what   = "A full reconciliation of every ledger day against the trade log (new as-of reconstruction) found two rows written by a late backfill with the book of the following day: 9 June held CoStar instead of VICI (switch of 10 June), 11 June held the post-reinforcement NOW position (trade of 12 June)."
+fix    = "Both rows rewritten with the book of their own day at that day's closes. Backfills now reconstruct the book as of the target date from the trade log and are authoritative for the day (stale positions removed)."
+impact = "9 June NAV +0.03%; 11 June NAV −0.84%. No change to month-end returns, inception-to-date return or max drawdown."
+status = "closed"
+
+[[entry]]
 date   = "2026-09-19"
 scope  = "All portfolios"
 title  = "Site frozen for 18 days while announcing itself up to date"

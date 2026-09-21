@@ -93,6 +93,7 @@ def test_unapplied_split_is_refused(fake_sb, monkeypatch):
     ], "transactions": []})
     _wire_nakamoto(monkeypatch, sb, price_alcpb=5.96)                     # restated x10 price, old share count
     monkeypatch.setattr(dr, "ALLOW_JUMPS", False)
+    monkeypatch.setattr(dr, "detect_split", lambda *a, **k: None)         # no network; no split known -> must block
     with pytest.raises(dr.SuspiciousValueJump) as e:
         dr.refresh_portfolio(sb, "nakamoto", "2026-09-10")
     assert "ALCPB.PA" in str(e.value)
@@ -110,3 +111,103 @@ def test_normal_day_writes_rows(fake_sb, monkeypatch):
     assert r["rows_written"] == 3                                          # 2 tickers + CASH
     written = [w for w in sb.writes if w[1] == "daily_holdings"]
     assert written and all(row["date"] == "2026-09-10" for row in written[0][2])
+
+
+# ── as-of book reconstruction ────────────────────────────────────────────────
+def _bat_sb(fake_sb):
+    """Bâtisseur around Rebalance #1 (4 June): current book holds AVGO, not RACE."""
+    return fake_sb({
+        "positions": [
+            {"portfolio_id": "batisseur", "ticker": "NVDA", "shares": 407.12468193, "is_active": True},
+            {"portfolio_id": "batisseur", "ticker": "AVGO", "shares": 71.73876084, "is_active": True},
+        ],
+        "transactions": [
+            {"portfolio_id": "batisseur", "date": "2026-06-04", "executed_at": "2026-06-04T13:35:00+00:00", "action": "IN",
+             "ticker_in": "AVGO", "ticker_out": None, "weight_in": 2.9537, "weight_out": None, "price_in": 411.73, "entry_price_out": None, "reason": None},
+            {"portfolio_id": "batisseur", "date": "2026-06-04", "executed_at": "2026-06-04T13:38:41+00:00", "action": "OUT",
+             "ticker_in": None, "ticker_out": "RACE", "weight_in": None, "weight_out": 2.0, "price_in": None, "entry_price_out": 325.44, "reason": None},
+            {"portfolio_id": "nakamoto", "date": "2026-09-08", "action": "SPLIT", "ticker_in": "ALCPB.PA", "ticker_out": None, "reason": "0.1-for-1 split"},
+        ],
+    })
+
+
+def test_book_as_of_reverses_a_buy_and_a_close(fake_sb):
+    sb = _bat_sb(fake_sb)
+    book, n = dr.book_as_of(sb, "batisseur", "2026-06-03", 1_000_000.0)
+    assert n == 2
+    assert "AVGO" not in book                                   # bought the day after
+    assert book["RACE"] == pytest.approx(2.0 * 1_000_000 / 100 / 325.44, rel=1e-6)   # closed the day after
+    assert book["NVDA"] == pytest.approx(407.12468193)
+
+
+def test_book_as_of_is_identity_when_no_later_trade(fake_sb):
+    sb = _bat_sb(fake_sb)
+    book, n = dr.book_as_of(sb, "batisseur", "2026-06-05", 1_000_000.0)
+    assert n == 0 and set(book) == {"NVDA", "AVGO"}
+
+
+def test_split_is_not_reversed_because_feed_restates_history(fake_sb):
+    sb = fake_sb({"positions": [{"portfolio_id": "nakamoto", "ticker": "ALCPB.PA", "shares": 13_068.29, "is_active": True}],
+                  "transactions": [{"portfolio_id": "nakamoto", "date": "2026-09-08", "action": "SPLIT", "ticker_in": "ALCPB.PA",
+                                    "ticker_out": None, "reason": "0.1-for-1 split"}]})
+    book, _ = dr.book_as_of(sb, "nakamoto", "2026-09-07", 1_000_000.0)
+    assert book["ALCPB.PA"] == pytest.approx(13_068.29)        # post-split basis kept
+
+
+def test_late_backfill_uses_as_of_book_and_removes_stale_rows(fake_sb, monkeypatch):
+    sb = _bat_sb(fake_sb)
+    sb.tables["daily_holdings"] = [                                      # the corrupted row: AVGO present on 3 June
+        {"portfolio_id": "batisseur", "date": "2026-06-03", "ticker": "AVGO", "value": 30_000.0},
+        {"portfolio_id": "batisseur", "date": "2026-06-03", "ticker": "NVDA", "value": 80_000.0},
+        {"portfolio_id": "batisseur", "date": "2026-06-03", "ticker": "CASH", "value": 55_000.0},
+    ]
+    monkeypatch.setattr(dr, "fetch_close_price", lambda tk, d, retries=3: (100.0, d))
+    monkeypatch.setattr(dr, "_currency_map", lambda sb_, tks: {t: "USD" for t in tks})
+    monkeypatch.setattr(dr, "_fx_to_usd", lambda ccys, as_of=None: {"USD": 1.0})
+    monkeypatch.setattr(dr, "derive_cash_at_date", lambda *a, **k: 55_000.0)
+    monkeypatch.setattr(dr, "get_initial_capital", lambda *a, **k: 1_000_000.0)
+    monkeypatch.setattr(dr, "_previous_values", lambda *a, **k: {})
+    r = dr.refresh_portfolio(sb, "batisseur", "2026-06-03")
+    tickers = {row["ticker"] for row in sb.tables["daily_holdings"] if row["date"] == "2026-06-03"}
+    assert tickers == {"NVDA", "RACE", "CASH"}                          # AVGO removed, RACE restored
+    assert ("delete", "daily_holdings", [{"portfolio_id": "batisseur", "date": "2026-06-03", "ticker": "AVGO", "value": 30_000.0}]) in sb.writes
+
+
+# ── automatic split application ──────────────────────────────────────────────
+def _nak_presplit_sb(fake_sb):
+    return fake_sb({"positions": [
+        {"id": 1, "portfolio_id": "nakamoto", "ticker": "ALCPB.PA", "shares": 130_682.8665, "units": 130_682.8665, "entry_price": 0.7652, "is_active": True},
+        {"id": 2, "portfolio_id": "nakamoto", "ticker": "MSTR", "shares": 1_439.31, "units": None, "entry_price": 187.59, "is_active": True},
+    ], "transactions": []})
+
+
+def test_detected_split_is_applied_instead_of_blocking(fake_sb, monkeypatch):
+    sb = _nak_presplit_sb(fake_sb)
+    _wire_nakamoto(monkeypatch, sb, price_alcpb=5.96)                    # restated price, old share count -> x9 jump
+    monkeypatch.setattr(dr, "ALLOW_JUMPS", False)
+    monkeypatch.setattr(dr, "detect_split", lambda tk, d, window_days=14: (0.1, "2026-09-08") if tk == "ALCPB.PA" else None)
+    r = dr.refresh_portfolio(sb, "nakamoto", "2026-09-10")
+    pos = next(p for p in sb.tables["positions"] if p["ticker"] == "ALCPB.PA")
+    assert pos["shares"] == pytest.approx(13_068.28665) and pos["entry_price"] == pytest.approx(7.652)
+    splits = [t for t in sb.tables["transactions"] if t["action"] == "SPLIT"]
+    assert len(splits) == 1 and splits[0]["date"] == "2026-09-08" and "0.1-for-1" in splits[0]["reason"]
+    row = next(x for w in sb.writes if w[1] == "daily_holdings" for x in w[2] if x["ticker"] == "ALCPB.PA")
+    assert row["shares"] == pytest.approx(13_068.28665) and row["value"] == pytest.approx(13_068.28665 * 5.96, rel=1e-6)
+    assert r["rows_written"] == 3
+
+
+def test_jump_without_matching_split_still_blocks(fake_sb, monkeypatch):
+    sb = _nak_presplit_sb(fake_sb)
+    _wire_nakamoto(monkeypatch, sb, price_alcpb=5.96)
+    monkeypatch.setattr(dr, "ALLOW_JUMPS", False)
+    monkeypatch.setattr(dr, "detect_split", lambda *a, **k: None)
+    with pytest.raises(dr.SuspiciousValueJump):
+        dr.refresh_portfolio(sb, "nakamoto", "2026-09-10")
+    assert not [t for t in sb.tables["transactions"] if t["action"] == "SPLIT"]
+
+
+def test_apply_split_db_is_idempotent(fake_sb):
+    sb = _nak_presplit_sb(fake_sb)
+    assert dr.apply_split_db(sb, "nakamoto", "ALCPB.PA", 0.1, "2026-09-08") is True
+    assert dr.apply_split_db(sb, "nakamoto", "ALCPB.PA", 0.1, "2026-09-08") is False   # second call: no-op
+    assert next(p for p in sb.tables["positions"] if p["ticker"] == "ALCPB.PA")["shares"] == pytest.approx(13_068.28665)

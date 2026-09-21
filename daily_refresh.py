@@ -310,6 +310,107 @@ def _has_moves_after(sb, portfolio_id: str, target_date_str: str) -> list[str]:
     return sorted(set(out))
 
 
+
+def _split_ratio_from_reason(reason: str | None) -> float | None:
+    """SPLIT transactions carry the ratio in their reason: '0.1-for-1 split …'."""
+    import re
+    m = re.search(r"(\d*\.?\d+)-for-1", reason or "")
+    return float(m.group(1)) if m else None
+
+
+def book_as_of(sb, portfolio_id: str, target_date_str: str, initial_capital: float) -> tuple[dict, int]:
+    """Reconstruct {ticker: shares} as it stood at the END of target_date by
+    reversing, newest first, every transaction dated after it onto the current
+    book. Uses the same share arithmetic as the trade functions
+    (IN: weight×capital/price_in; TRIM/OUT: weight×capital/PRU; splits are
+    kept on the post-split basis because the price feed restates history).
+    Returns (book, number_of_transactions_reversed). This is what makes a
+    late backfill safe: on 2026-06-04 the missing 3 June row was rebuilt
+    with the post-rebalance positions and produced a +3.5% phantom NAV."""
+    book = {}
+    for p in (sb.table("positions").select("ticker, shares").eq("portfolio_id", portfolio_id)
+              .eq("is_active", True).execute().data):
+        if p.get("ticker") and float(p.get("shares") or 0) > 0:
+            book[p["ticker"]] = float(p["shares"])
+    txns = (sb.table("transactions")
+            .select("date, executed_at, action, ticker_in, ticker_out, weight_in, weight_out, price_in, entry_price_out, reason")
+            .eq("portfolio_id", portfolio_id).gt("date", target_date_str).execute().data)
+    txns.sort(key=lambda t: (t.get("date") or "", t.get("executed_at") or ""), reverse=True)
+    cap = float(initial_capital)
+    for t in txns:
+        a = (t.get("action") or "").upper()
+        if a in ("IN", "SWITCH") and t.get("ticker_in"):
+            price = float(t.get("price_in") or 0)
+            if price > 0:
+                tk = t["ticker_in"]
+                book[tk] = book.get(tk, 0.0) - float(t.get("weight_in") or 0) * cap / 100.0 / price
+                if book[tk] <= 1e-6:
+                    book.pop(tk, None)
+        if a in ("TRIM", "OUT", "SWITCH") and t.get("ticker_out"):
+            pru = float(t.get("entry_price_out") or 0)
+            if pru > 0:
+                tk = t["ticker_out"]
+                book[tk] = book.get(tk, 0.0) + float(t.get("weight_out") or 0) * cap / 100.0 / pru
+        # SPLIT: deliberately NOT reversed. The price feed restates the whole
+        # history on the post-split basis, so a pre-split date must be valued
+        # with post-split shares x restated close (value-identical). Reversing
+        # the split here would overvalue that day by 1/ratio (ALCPB.PA: x10).
+        # DRIP: cash-neutral and tiny; ignored in the reconstruction.
+    return {k: round(v, 8) for k, v in book.items()}, len(txns)
+
+
+
+def detect_split(ticker: str, around_date_str: str, window_days: int = 14):
+    """(ratio, split_date) of the most recent split in the `window_days` before
+    around_date (inclusive), from Yahoo's corporate-actions feed, else None.
+    Ratio as Yahoo reports it: 0.1 for a 1-for-10 reverse split, 2.0 for 2-for-1."""
+    from datetime import datetime, timedelta
+    import pandas as pd
+    try:
+        t = datetime.strptime(around_date_str, "%Y-%m-%d")
+        df = yf.download(ticker, start=(t - timedelta(days=window_days)).strftime("%Y-%m-%d"),
+                         end=(t + timedelta(days=1)).strftime("%Y-%m-%d"),
+                         actions=True, auto_adjust=False, progress=False)
+        if df.empty or "Stock Splits" not in df.columns:
+            return None
+        col = df["Stock Splits"]
+        if isinstance(col, pd.DataFrame):
+            col = col.iloc[:, 0]
+        ev = col[col.fillna(0) != 0]
+        if ev.empty:
+            return None
+        return float(ev.iloc[-1]), ev.index[-1].strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def apply_split_db(sb, portfolio_id: str, ticker: str, ratio: float, split_date: str, note: str = "") -> bool:
+    """shares x ratio, units x ratio, PRU / ratio (value-neutral) + a SPLIT
+    transaction dated split_date. Idempotent per (portfolio, ticker, date)."""
+    already = (sb.table("transactions").select("id").eq("portfolio_id", portfolio_id)
+               .eq("action", "SPLIT").eq("ticker_in", ticker).eq("date", split_date).execute().data)
+    if already:
+        return False
+    pos = (sb.table("positions").select("id, shares, units, entry_price").eq("portfolio_id", portfolio_id)
+           .eq("ticker", ticker).eq("is_active", True).execute().data)
+    if not pos:
+        return False
+    p = pos[0]
+    upd = {"shares": round(float(p.get("shares") or 0) * ratio, 8),
+           "entry_price": round(float(p.get("entry_price") or 0) / ratio, 6)}
+    if p.get("units") is not None:
+        upd["units"] = round(float(p["units"]) * ratio, 8)
+    sb.table("positions").update(upd).eq("id", p["id"]).execute()
+    from datetime import datetime, timezone
+    sb.table("transactions").insert({
+        "portfolio_id": portfolio_id, "date": split_date, "action": "SPLIT", "ticker_in": ticker,
+        "price_in": upd["entry_price"],
+        "reason": f"{ratio}-for-1 split (auto-detected by daily_refresh{(' ' + note) if note else ''}): shares x {ratio}, PRU / {ratio}",
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return True
+
+
 def _previous_values(sb, portfolio_id: str, target_date_str: str) -> dict:
     """{ticker: value} of the latest stored row strictly before target_date."""
     last = (
@@ -342,23 +443,28 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     moved since (see class docstring) and SuspiciousValueJump on a >JUMP_RATIO
     change in any position's value (unapplied split) unless ALLOW_JUMPS.
     """
-    if target_date_str < _date.today().isoformat():
-        moved = _has_moves_after(sb, portfolio_id, target_date_str)
-        if moved:
-            raise BookChangedAfterDate(
-                f"{portfolio_id} had moves after {target_date_str} ({', '.join(moved)}); "
-                f"refusing automatic backfill -- reconstruct the as-of book explicitly."
-            )
-
     initial_capital = get_initial_capital(sb, portfolio_id)
-    positions = (
-        sb.table("positions")
-        .select("ticker, shares")
-        .eq("portfolio_id", portfolio_id)
-        .eq("is_active", True)
-        .execute()
-        .data
-    )
+    as_of_note = ""
+    if target_date_str < _date.today().isoformat() and _has_moves_after(sb, portfolio_id, target_date_str):
+        # The current book is NOT the book of that day: rebuild it from the trade log.
+        book, n_rev = book_as_of(sb, portfolio_id, target_date_str, initial_capital)
+        if not book or any(v <= 0 for v in book.values()):
+            raise BookChangedAfterDate(
+                f"{portfolio_id}: could not reconstruct the book as of {target_date_str} "
+                f"({n_rev} later transactions) -- refusing to write."
+            )
+        positions = [{"ticker": tk, "shares": sh} for tk, sh in book.items()]
+        as_of_note = f" (as-of book: {n_rev} later transaction(s) reversed)"
+        print(f"  {portfolio_id} {target_date_str}: book reconstructed as of that date{as_of_note}", flush=True)
+    else:
+        positions = (
+            sb.table("positions")
+            .select("ticker, shares")
+            .eq("portfolio_id", portfolio_id)
+            .eq("is_active", True)
+            .execute()
+            .data
+        )
     cash_amount = derive_cash_at_date(sb, portfolio_id, target_date_str, initial_capital)
 
     # FX: convert each foreign ticker's native close to USD (value = shares ×
@@ -416,6 +522,18 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
                 continue
             ratio = r["value"] / prev
             if ratio > JUMP_RATIO or ratio < 1.0 / JUMP_RATIO:
+                # Is it a split the book does not know about yet? Yahoo restates
+                # prices on the split date, so value_new/value_prev ~= 1/split_ratio.
+                sp = detect_split(r["ticker"], target_date_str)
+                if sp and abs(ratio * sp[0] - 1.0) < 0.25:
+                    sp_ratio, sp_date = sp
+                    if apply_split_db(sb, portfolio_id, r["ticker"], sp_ratio, sp_date, note=f"on {target_date_str}"):
+                        print(f"  {portfolio_id}: SPLIT {sp_ratio}-for-1 on {sp_date} detected for {r['ticker']} "
+                              f"-> applied (shares x {sp_ratio}, PRU / {sp_ratio})", flush=True)
+                    r["shares"] = round(r["shares"] * sp_ratio, 8)
+                    r["value"] = round(r["shares"] * r["price"], 2)
+                    nav += r["value"] - prev * ratio  # nav was accumulated with the pre-split value
+                    continue
                 jumps.append(f"{r['ticker']} ${prev:,.0f} -> ${r['value']:,.0f} (x{ratio:.2f})")
         if jumps:
             raise SuspiciousValueJump(
@@ -423,10 +541,21 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
                 f"unapplied split? run apply_split, or re-run with --allow-jumps."
             )
 
-    # Upsert all rows
+    # Upsert all rows, then make this write authoritative for the day: any row
+    # of that (portfolio, date) for a ticker NOT in the book is stale (e.g. a
+    # position that was not yet bought that day but had been written by an
+    # earlier backfill with the wrong book) and must go, otherwise it is
+    # double-counted in the NAV.
     sb.table("daily_holdings").upsert(
         rows, on_conflict="portfolio_id,date,ticker"
     ).execute()
+    written = {r["ticker"] for r in rows}
+    stale = [r["ticker"] for r in sb.table("daily_holdings").select("ticker")
+             .eq("portfolio_id", portfolio_id).eq("date", target_date_str).execute().data
+             if r["ticker"] not in written]
+    if stale:
+        sb.table("daily_holdings").delete().eq("portfolio_id", portfolio_id)           .eq("date", target_date_str).in_("ticker", stale).execute()
+        print(f"  {portfolio_id} {target_date_str}: removed stale row(s) {stale}", flush=True)
 
     return {
         "portfolio": portfolio_id,
