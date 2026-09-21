@@ -25,7 +25,12 @@ from supabase import create_client
 
 APP_URL = os.environ.get("APP_URL", "https://specula-project.streamlit.app/")
 REPO = os.environ.get("GITHUB_REPOSITORY", "josselucas96-cmd/Specula")
-problems, notes = [], []
+problems, notes, alerts = [], [], []
+
+# Management alerts (not pipeline failures): thresholds per portfolio, in %.
+# A breach opens a GitHub issue (owner gets the notification) instead of
+# failing the run, which is reserved for "the pipeline is broken".
+DRAWDOWN_THRESHOLDS = {"default": (-5.0, -15.0), "nakamoto": (-10.0, -30.0)}   # (1-day move, drawdown from peak)
 
 
 def check_holdings(sb):
@@ -48,6 +53,66 @@ def check_prices(sb):
     ts = datetime.fromisoformat(r[0]["fetched_at"].replace("Z", "+00:00"))
     age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600
     (problems if age_h > 36 else notes).append(f"current_prices: last refresh {age_h:.0f}h ago")
+
+
+def check_drawdowns(sb):
+    """1-day move and drawdown from the running peak, per active portfolio."""
+    pids = [r["id"] for r in sb.table("portfolios").select("id").eq("is_active", True).execute().data]
+    for pid in pids:
+        rows, off = [], 0
+        while True:
+            r = (sb.table("daily_holdings").select("date,value").eq("portfolio_id", pid)
+                 .order("date").order("ticker").range(off, off + 999).execute().data)
+            rows += r
+            if len(r) < 1000:
+                break
+            off += 1000
+        nav = {}
+        for r in rows:
+            nav[r["date"]] = nav.get(r["date"], 0.0) + float(r["value"] or 0)
+        dates = sorted(nav)
+        if len(dates) < 3:
+            continue
+        last, prev = nav[dates[-1]], nav[dates[-2]]
+        peak = max(nav.values())
+        day = (last / prev - 1) * 100 if prev else 0.0
+        dd = (last / peak - 1) * 100 if peak else 0.0
+        t_day, t_dd = DRAWDOWN_THRESHOLDS.get(pid, DRAWDOWN_THRESHOLDS["default"])
+        line = f"{pid}: {dates[-1]} NAV ${last:,.0f}, 1-day {day:+.2f}%, drawdown from peak {dd:+.2f}%"
+        if day <= t_day or dd <= t_dd:
+            alerts.append(line + f"  (thresholds {t_day:+.0f}% / {t_dd:+.0f}%)")
+        else:
+            notes.append(line)
+
+
+def _gh_post(path, payload):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{REPO}/{path}", data=data, method="POST",
+        headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json", "User-Agent": "specula-watchdog"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.load(resp)
+
+
+def raise_drawdown_issue():
+    """One issue per day at most; skipped without a token (local runs)."""
+    if not alerts or not os.environ.get("GITHUB_TOKEN"):
+        return
+    today = date.today().isoformat()
+    title = f"Alerte drawdown — {today}"
+    try:
+        existing = _gh(f"issues?state=open&labels=alerte&per_page=20")
+        if any(i.get("title") == title for i in existing):
+            notes.append("drawdown issue already open today"); return
+        body = ("Le watchdog a relevé un mouvement ou un drawdown au-delà des seuils :\n\n"
+                + "\n".join(f"- {a}" for a in alerts)
+                + "\n\nCe n'est pas une panne du pipeline. À toi de juger : revue de la position, du sizing, ou rien. "
+                  "Fermer l'issue une fois vue. Seuils dans `scripts/watchdog.py` (`DRAWDOWN_THRESHOLDS`).")
+        _gh_post("issues", {"title": title, "body": body, "labels": ["alerte"]})
+        notes.append(f"drawdown issue opened: {title}")
+    except Exception as e:
+        problems.append(f"could not open drawdown issue: {e}")
 
 
 def _gh(path):
@@ -99,9 +164,13 @@ def main() -> int:
     check_prices(sb)
     check_workflow()
     check_app()
+    check_drawdowns(sb)
+    raise_drawdown_issue()
     print(f"[watchdog] {date.today()} UTC")
     for n in notes:
         print("  ok   ", n)
+    for a in alerts:
+        print("  ALERT", a)
     for p in problems:
         print("  FAIL ", p)
     if problems:
