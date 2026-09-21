@@ -7,3 +7,4 @@ numpy>=1.26.0,<3.0
 streamlit-quill>=0.0.3
 # touch 2026-09-21: any change here forces Streamlit Cloud to rebuild and restart the process
 # (a plain code push is pulled but already-imported utils/ modules stay cached).
+# build stamp: 2026-09-21 forced full rebuild (Streamlit Cloud stopped pulling after 13:35 UTC)
