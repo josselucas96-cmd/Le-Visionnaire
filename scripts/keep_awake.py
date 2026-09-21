@@ -29,6 +29,22 @@ APP_URL = os.environ.get("APP_URL", "https://specula-project.streamlit.app/")
 READY_JS = "() => /Specula/.test(document.body.innerText) && /PORTFOLIO/i.test(document.body.innerText)"
 
 
+def wait_until_rendered(page, timeout_ms: int) -> bool:
+    """On *.streamlit.app the app runs inside an iframe of a wrapper page, so
+    the top document never contains the app's text: poll EVERY frame."""
+    import time
+    deadline = time.time() + timeout_ms / 1000
+    while time.time() < deadline:
+        for frame in page.frames:
+            try:
+                if frame.evaluate(READY_JS):
+                    return True
+            except Exception:
+                pass
+        page.wait_for_timeout(2_000)
+    return False
+
+
 def wake_if_asleep(page) -> bool:
     for label in ("Yes, get this app back up!", "get this app back up"):
         try:
@@ -51,7 +67,8 @@ def main() -> int:
             page.goto(APP_URL, timeout=120_000, wait_until="domcontentloaded")
             woke = wake_if_asleep(page)
             # A cold start after waking can take ~1-2 min; be patient.
-            page.wait_for_function(READY_JS, timeout=180_000 if woke else 90_000)
+            if not wait_until_rendered(page, 180_000 if woke else 90_000):
+                raise TimeoutError("app content not found in any frame")
             page.wait_for_timeout(8_000)  # let the script run so the session counts as traffic
             title = page.title()
             print(f"app rendered (title: {title!r}){' after wake-up' if woke else ''}", flush=True)
