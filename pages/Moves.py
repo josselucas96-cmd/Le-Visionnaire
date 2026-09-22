@@ -5,6 +5,7 @@ portfolio"). Built on the fund-accounting model: NAV from daily_holdings,
 benchmark from the portfolio's own configuration, trades from `transactions`.
 Select a portfolio with the buttons or ?pf=<id>.
 """
+import re
 from datetime import date
 
 import pandas as pd
@@ -15,6 +16,7 @@ from utils import SPECULA_ICON
 from utils.data import get_portfolios, get_positions, get_transactions
 from utils.market import get_history
 from utils.nav import render_nav
+from utils.moves import batch_numbers, count_trades, group_moves_by_date
 from utils.nav_history import get_nav_from_holdings
 from utils.portfolio import align_to_equity_calendar
 from utils.theme import BG, TEXT_MID, BENCHMARK_LINE, action_colors, chart_layout
@@ -41,6 +43,16 @@ st.write("")
 
 ACTION_LABELS = {"IN": "Buy / reinforce", "TRIM": "Trim", "OUT": "Close", "SWITCH": "Switch", "SPLIT": "Split", "DRIP": "Dividend"}
 ACTION_COLORS = action_colors()
+
+
+def _clean_reason(reason: str | None) -> str:
+    """Cockpit rationales are written for the operator, not for a reader:
+    "Move from cockpit" is noise, and reinforcement percentages carried 15
+    decimals before 2026-09-22."""
+    r = (reason or "").strip()
+    if r.lower() in ("move from cockpit", "moved from cockpit"):
+        return ""
+    return re.sub(r"(\d+\.\d{3,})%", lambda m: f"{float(m.group(1)):.2f}%", r)
 
 # ── Portfolio selection (?pf=… or buttons) ───────────────────────────────────
 portfolios = get_portfolios(active_only=True)
@@ -69,16 +81,27 @@ inception = str(pf.get("inception_date") or "")
 # Inception buys are a block of IN rows on the inception date — shown once, not as 16 markers.
 moves = [t for t in txns if str(t.get("date")) != inception]
 inception_lines = [t for t in txns if str(t.get("date")) == inception]
+# Le Bâtisseur / Le Nakamoto were seeded without inception transaction rows:
+# count the positions opened that day instead, so the page never claims "0".
+n_initial = len(inception_lines) or sum(
+    1 for p in positions_all if str(p.get("entry_date") or "") == inception)
 
 st.markdown(f'<div class="mv-eyebrow">Moves · {pf["name"]}</div>', unsafe_allow_html=True)
-_n_trades = sum(1 for t in moves if (t.get("action") or "").upper() != "SPLIT")
-_n_ca = len(moves) - _n_trades
+_n_trades, _n_ca = count_trades(moves)
 _title = f"{_n_trades} trade{'s' if _n_trades != 1 else ''} since inception"
 if _n_ca:
     _title += f" · {_n_ca} corporate action{'s' if _n_ca != 1 else ''}"
 st.markdown(f'<div class="mv-title">{_title}</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="mv-sub">Inception {inception} with {len(inception_lines)} initial positions · '
-            f'every trade is timestamped in the ledger and mirrored in a public post.</div>', unsafe_allow_html=True)
+_n_dates = len({str(t.get("date")) for t in moves if (t.get("action") or "").upper() != "SPLIT"})
+_head = f'Inception {inception} with {n_initial} initial position{"s" if n_initial != 1 else ""}'
+if _n_trades == 0:
+    _body = ' · no trade since inception.'
+else:
+    _body = (f' · {_n_trades} trade{"s" if _n_trades != 1 else ""} grouped in '
+             f'{_n_dates} rebalance{"s" if _n_dates != 1 else ""} — one marker per rebalance below, '
+             f'hover it for the detail.')
+_body += ' Every trade is timestamped in the ledger and mirrored in a public post.'
+st.markdown(f'<div class="mv-sub">{_head}{_body}</div>', unsafe_allow_html=True)
 
 # ── NAV curve with trade markers ─────────────────────────────────────────────
 port_index = get_nav_from_holdings(pid)
@@ -108,27 +131,55 @@ else:
     fig.add_trace(go.Scatter(x=port_index.index, y=port_index.values, name=pf["name"],
                              line=dict(color=accent, width=3, shape="spline", smoothing=0.8),
                              hovertemplate="%{x|%b %d, %Y}<br>NAV: %{y:.1f}<extra></extra>"))
-    # one marker per trade, placed on the NAV curve at (or just after) the trade date
-    by_action: dict[str, list] = {}
-    for t in moves:
-        ts = pd.Timestamp(str(t["date"]))
+    # ONE MARKER PER TRADE DATE, not per trade: a rebalance groups several trades
+    # on the same day, which land on the same point of the curve and hide each
+    # other (Le Visionnaire: 13 trades on 4 dates). The marker carries the whole
+    # batch — "xN" printed above it, every trade of the day in the tooltip, and a
+    # size that grows with the count.
+    inception_ts = pd.Timestamp(inception) if inception else None
+    if inception_ts is not None and n_initial:
+        _after = port_index[port_index.index >= inception_ts]
+        if not _after.empty:
+            fig.add_trace(go.Scatter(
+                x=[_after.index[0]], y=[float(_after.iloc[0])], mode="markers", name="Inception",
+                marker=dict(color="#94A3B8", size=12, symbol="diamond", line=dict(color=BG, width=2)),
+                hovertext=[f"<b>{inception_ts:%b %d, %Y}</b> — inception<br>"
+                           f"{n_initial} initial position{'s' if n_initial != 1 else ''} bought at the open"],
+                hovertemplate="%{hovertext}<extra></extra>",
+            ))
+
+    CAT_LABELS = {**ACTION_LABELS, "MIXED": "Rebalance (mixed)"}
+    CAT_COLORS = {**ACTION_COLORS, "MIXED": "#CBD5E1"}
+    by_cat: dict[str, list] = {}
+    for g in group_moves_by_date(moves):
+        batch, cat, n = g["trades"], g["category"], g["n"]
+        ts = pd.Timestamp(g["date"])
         on_or_after = port_index[port_index.index >= ts]
         if on_or_after.empty:
             continue
         x, y = on_or_after.index[0], float(on_or_after.iloc[0])
-        a = (t.get("action") or "").upper()
-        tk = t.get("ticker_in") or t.get("ticker_out") or ""
-        w = t.get("weight_in") if a in ("IN", "SWITCH") else t.get("weight_out")
-        px = t.get("price_in") if a in ("IN", "SWITCH") else t.get("price_out")
-        label = f"{ts:%b %d, %Y} · {ACTION_LABELS.get(a, a)} <b>{tk}</b>"
-        if w:  label += f" · {float(w):.2f}% of capital"
-        if px: label += f" @ ${float(px):,.2f}"
-        by_action.setdefault(a, []).append((x, y, label))
-    for a, pts in by_action.items():
+        lines = [f"<b>{ts:%b %d, %Y}</b> — {n} trade{'s' if n > 1 else ''}"]
+        for t in sorted(batch, key=lambda t: ((t.get("action") or ""), (t.get("ticker_in") or t.get("ticker_out") or ""))):
+            a = (t.get("action") or "").upper()
+            tk = t.get("ticker_in") or t.get("ticker_out") or ""
+            w = t.get("weight_in") if a in ("IN", "SWITCH") else t.get("weight_out")
+            px = t.get("price_in") if a in ("IN", "SWITCH") else t.get("price_out")
+            seg = f"• {ACTION_LABELS.get(a, a)} <b>{tk}</b>"
+            if w:  seg += f" · {float(w):.2f}% of capital"
+            if px: seg += f" @ ${float(px):,.2f}"
+            lines.append(seg)
+        by_cat.setdefault(cat, []).append((x, y, "<br>".join(lines), n))
+
+    for cat, pts in by_cat.items():
+        color = CAT_COLORS.get(cat, "#94A3B8")
         fig.add_trace(go.Scatter(
-            x=[p[0] for p in pts], y=[p[1] for p in pts], mode="markers", name=ACTION_LABELS.get(a, a),
-            marker=dict(color=ACTION_COLORS.get(a, "#94A3B8"), size=11, symbol="circle", line=dict(color=BG, width=2)),
-            text=[p[2] for p in pts], hovertemplate="%{text}<extra></extra>",
+            x=[p[0] for p in pts], y=[p[1] for p in pts],
+            mode="markers+text", name=CAT_LABELS.get(cat, cat),
+            marker=dict(color=color, size=[min(11 + 2 * (p[3] - 1), 20) for p in pts],
+                        symbol="circle", line=dict(color=BG, width=2)),
+            text=[f"×{p[3]}" if p[3] > 1 else "" for p in pts],
+            textposition="top center", textfont=dict(size=11, color=color),
+            hovertext=[p[2] for p in pts], hovertemplate="%{hovertext}<extra></extra>",
         ))
     layout = chart_layout()
     layout["height"] = 420
@@ -143,19 +194,25 @@ st.markdown("#### Trade log")
 if not moves:
     st.caption("No trade since inception.")
 else:
+    # Rebalance number per date, so a batch reads as one decision in the log.
+    _batch_no = batch_numbers(moves)
     rows = []
     for t in sorted(moves, key=lambda t: (str(t.get("date")), str(t.get("executed_at") or "")), reverse=True):
         a = (t.get("action") or "").upper()
         is_in = a in ("IN", "SWITCH")
         ts = t.get("executed_at")
-        when = pd.Timestamp(ts).strftime("%Y-%m-%d %H:%M UTC") if ts else str(t.get("date"))
+        # A SPLIT's executed_at is when it was applied to the book, not when it
+        # happened: show its effective date instead.
+        when = (pd.Timestamp(ts).strftime("%Y-%m-%d %H:%M UTC")
+                if ts and a != "SPLIT" else str(t.get("date")))
         rows.append({
+            "Batch": f"#{_batch_no[str(t.get('date'))]}",
             "When": when,
             "Action": ACTION_LABELS.get(a, a),
             "Ticker": t.get("ticker_in") or t.get("ticker_out") or "",
             "Size (% capital)": float(t.get("weight_in") if is_in else (t.get("weight_out") or 0) or 0),
             "Price": float(t.get("price_in") if is_in else (t.get("price_out") or 0) or 0),
-            "Rationale": t.get("reason") or "",
+            "Rationale": _clean_reason(t.get("reason")),
         })
     df = pd.DataFrame(rows)
     st.dataframe(

@@ -349,7 +349,7 @@ def add_position(data: dict, portfolio_id: str = "visionnaire", executed_at: str
             "ticker_in":    data["ticker"],
             "price_in":     new_p,
             "weight_in":    new_w,
-            "reason":       f"Reinforced {new_w}% (new PRU: {new_pru:.4f})",
+            "reason":       f"Reinforced to {float(new_w):.2f}% (new PRU: {new_pru:.4f})",
             "executed_at":  executed_at or _now_utc_iso(),
         }).execute()
     else:
