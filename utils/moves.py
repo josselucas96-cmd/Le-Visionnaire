@@ -3,38 +3,48 @@
 Trades come in batches: a rebalance is several trades executed the same day.
 Drawn one by one they land on the same point of the NAV curve and hide each
 other — Le Visionnaire's 13 trades happen on 4 dates, so the chart showed 4
-dots and looked wrong. These helpers turn the flat transaction list into one
-entry per date, which the page renders as a single marker carrying the whole
-batch. Pure functions, no Streamlit, so they are unit-tested.
+dots and looked wrong.
+
+The page therefore draws, per date, at most two markers: one for the buy side
+and one for the sell side, offset below and above the curve so a rebalance
+that both sells and buys stays readable. Corporate actions (splits) are not
+trades and never appear as markers. Pure functions, no Streamlit, unit-tested.
 """
 
-MIXED = "MIXED"
+BUY = "BUY"
+SELL = "SELL"
+
+# A SWITCH row carries both legs; its cash-out leg is the position being sold,
+# but the row is recorded from the buy side, so it counts as a buy here.
+_SIDE = {"IN": BUY, "SWITCH": BUY, "TRIM": SELL, "OUT": SELL}
+
+SIDE_LABELS = {BUY: "Buy / reinforce", SELL: "Sell / reduce"}
 
 
-def _action(t) -> str:
+def action_of(t) -> str:
     return (t.get("action") or "").upper()
 
 
-def group_moves_by_date(moves) -> list[dict]:
-    """[{date, trades, category, n}] sorted by date ascending.
+def side_of(t) -> str | None:
+    """BUY, SELL, or None for anything that is not a trade (SPLIT, DRIP)."""
+    return _SIDE.get(action_of(t))
 
-    `category` is the batch's single action (IN / TRIM / OUT / SWITCH / SPLIT)
-    or MIXED when the day mixes several — which is what a real rebalance looks
-    like (sell one name, buy another).
+
+def group_moves_by_date_and_side(moves) -> list[dict]:
+    """[{date, side, trades, n}] sorted by date then side (buys first).
+
+    One entry = one marker on the chart. Non-trades are dropped.
     """
-    batches: dict[str, list] = {}
+    batches: dict[tuple[str, str], list] = {}
     for t in moves:
-        batches.setdefault(str(t.get("date")), []).append(t)
+        side = side_of(t)
+        if side is None:
+            continue
+        batches.setdefault((str(t.get("date")), side), []).append(t)
     out = []
-    for d in sorted(batches):
-        trades = batches[d]
-        actions = {_action(t) for t in trades}
-        out.append({
-            "date": d,
-            "trades": trades,
-            "category": next(iter(actions)) if len(actions) == 1 else MIXED,
-            "n": len(trades),
-        })
+    for (d, side) in sorted(batches, key=lambda k: (k[0], k[1] != BUY)):
+        trades = batches[(d, side)]
+        out.append({"date": d, "side": side, "trades": trades, "n": len(trades)})
     return out
 
 
@@ -46,5 +56,5 @@ def batch_numbers(moves) -> dict[str, int]:
 
 def count_trades(moves) -> tuple[int, int]:
     """(real trades, corporate actions). A split is not a decision."""
-    ca = sum(1 for t in moves if _action(t) == "SPLIT")
+    ca = sum(1 for t in moves if side_of(t) is None)
     return len(moves) - ca, ca

@@ -16,7 +16,7 @@ from utils import SPECULA_ICON
 from utils.data import get_portfolios, get_positions, get_transactions
 from utils.market import get_history
 from utils.nav import render_nav
-from utils.moves import batch_numbers, count_trades, group_moves_by_date
+from utils.moves import BUY, SIDE_LABELS, batch_numbers, count_trades, group_moves_by_date_and_side
 from utils.nav_history import get_nav_from_holdings
 from utils.portfolio import align_to_equity_calendar
 from utils.theme import BG, TEXT_MID, BENCHMARK_LINE, action_colors, chart_layout
@@ -131,35 +131,30 @@ else:
     fig.add_trace(go.Scatter(x=port_index.index, y=port_index.values, name=pf["name"],
                              line=dict(color=accent, width=3, shape="spline", smoothing=0.8),
                              hovertemplate="%{x|%b %d, %Y}<br>NAV: %{y:.1f}<extra></extra>"))
-    # ONE MARKER PER TRADE DATE, not per trade: a rebalance groups several trades
-    # on the same day, which land on the same point of the curve and hide each
-    # other (Le Visionnaire: 13 trades on 4 dates). The marker carries the whole
-    # batch — "xN" printed above it, every trade of the day in the tooltip, and a
-    # size that grows with the count.
-    inception_ts = pd.Timestamp(inception) if inception else None
-    if inception_ts is not None and n_initial:
-        _after = port_index[port_index.index >= inception_ts]
-        if not _after.empty:
-            fig.add_trace(go.Scatter(
-                x=[_after.index[0]], y=[float(_after.iloc[0])], mode="markers", name="Inception",
-                marker=dict(color="#94A3B8", size=12, symbol="diamond", line=dict(color=BG, width=2)),
-                hovertext=[f"<b>{inception_ts:%b %d, %Y}</b> — inception<br>"
-                           f"{n_initial} initial position{'s' if n_initial != 1 else ''} bought at the open"],
-                hovertemplate="%{hovertext}<extra></extra>",
-            ))
-
-    CAT_LABELS = {**ACTION_LABELS, "MIXED": "Rebalance (mixed)"}
-    CAT_COLORS = {**ACTION_COLORS, "MIXED": "#CBD5E1"}
-    by_cat: dict[str, list] = {}
-    for g in group_moves_by_date(moves):
-        batch, cat, n = g["trades"], g["category"], g["n"]
+    # Two marker families only: the buy side and the sell side. A rebalance
+    # bundles several trades on one day, which would land on the same point of
+    # the curve and hide each other (13 trades of Le Visionnaire sit on 4
+    # dates), so each family gets ONE marker per date carrying the whole batch:
+    # "xN" next to it, every trade of that side in the tooltip. Buys sit just
+    # below the curve (triangle up), sells just above (triangle down) — the
+    # usual trading-chart convention, and a day that sells and buys stays
+    # readable. Corporate actions are not trades and are not plotted.
+    _span = float(port_index.max() - port_index.min()) or 1.0
+    _offset = _span * 0.03
+    SIDE_STYLE = {
+        BUY:  {"color": ACTION_COLORS.get("IN", "#00D09C"),  "symbol": "triangle-up",   "dy": -_offset, "pos": "bottom center"},
+        "SELL": {"color": ACTION_COLORS.get("OUT", "#FF4B4B"), "symbol": "triangle-down", "dy": _offset,  "pos": "top center"},
+    }
+    by_side: dict[str, list] = {}
+    for g in group_moves_by_date_and_side(moves):
+        batch, side, n = g["trades"], g["side"], g["n"]
         ts = pd.Timestamp(g["date"])
         on_or_after = port_index[port_index.index >= ts]
         if on_or_after.empty:
             continue
         x, y = on_or_after.index[0], float(on_or_after.iloc[0])
-        lines = [f"<b>{ts:%b %d, %Y}</b> — {n} trade{'s' if n > 1 else ''}"]
-        for t in sorted(batch, key=lambda t: ((t.get("action") or ""), (t.get("ticker_in") or t.get("ticker_out") or ""))):
+        lines = [f"<b>{ts:%b %d, %Y}</b> — {SIDE_LABELS[side]} · {n} trade{'s' if n > 1 else ''}"]
+        for t in sorted(batch, key=lambda t: (t.get("ticker_in") or t.get("ticker_out") or "")):
             a = (t.get("action") or "").upper()
             tk = t.get("ticker_in") or t.get("ticker_out") or ""
             w = t.get("weight_in") if a in ("IN", "SWITCH") else t.get("weight_out")
@@ -168,17 +163,20 @@ else:
             if w:  seg += f" · {float(w):.2f}% of capital"
             if px: seg += f" @ ${float(px):,.2f}"
             lines.append(seg)
-        by_cat.setdefault(cat, []).append((x, y, "<br>".join(lines), n))
+        by_side.setdefault(side, []).append((x, y + SIDE_STYLE[side]["dy"], "<br>".join(lines), n))
 
-    for cat, pts in by_cat.items():
-        color = CAT_COLORS.get(cat, "#94A3B8")
+    for side in (BUY, "SELL"):
+        pts = by_side.get(side)
+        if not pts:
+            continue
+        style = SIDE_STYLE[side]
         fig.add_trace(go.Scatter(
             x=[p[0] for p in pts], y=[p[1] for p in pts],
-            mode="markers+text", name=CAT_LABELS.get(cat, cat),
-            marker=dict(color=color, size=[min(11 + 2 * (p[3] - 1), 20) for p in pts],
-                        symbol="circle", line=dict(color=BG, width=2)),
+            mode="markers+text", name=SIDE_LABELS[side],
+            marker=dict(color=style["color"], size=[min(12 + 2 * (p[3] - 1), 22) for p in pts],
+                        symbol=style["symbol"], line=dict(color=BG, width=1.5)),
             text=[f"×{p[3]}" if p[3] > 1 else "" for p in pts],
-            textposition="top center", textfont=dict(size=11, color=color),
+            textposition=style["pos"], textfont=dict(size=11, color=style["color"]),
             hovertext=[p[2] for p in pts], hovertemplate="%{hovertext}<extra></extra>",
         ))
     layout = chart_layout()
