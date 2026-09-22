@@ -16,7 +16,7 @@ from utils import SPECULA_ICON
 from utils.data import get_portfolios, get_positions, get_transactions
 from utils.market import get_history
 from utils.nav import render_nav
-from utils.moves import BUY, SIDE_LABELS, batch_numbers, count_trades, group_moves_by_date_and_side
+from utils.moves import BOTH, BUY, SELL, batch_numbers, count_trades, group_moves_by_date
 from utils.nav_history import get_nav_from_holdings
 from utils.portfolio import align_to_equity_calendar
 from utils.theme import BG, TEXT_MID, BENCHMARK_LINE, action_colors, chart_layout
@@ -60,17 +60,26 @@ if not portfolios:
     st.info("No portfolio yet.")
     st.stop()
 ids = [p["id"] for p in portfolios]
-qp = st.query_params.get("pf")
-default = qp if qp in ids else ids[0]
+_qp = st.query_params.get("pf")
+if "moves_pf" not in st.session_state:
+    st.session_state["moves_pf"] = _qp if _qp in ids else ids[0]
+
+
+def _select_portfolio(portfolio_id: str) -> None:
+    """on_click callback. Streamlit runs callbacks BEFORE re-running the script,
+    so the buttons are drawn with the new selection. Setting the state inside
+    the `if st.button(...)` branch left the highlight one click behind: the
+    page showed Le Bâtisseur while the Visionnaire button stayed lit."""
+    st.session_state["moves_pf"] = portfolio_id
+    st.query_params["pf"] = portfolio_id
+
+
+chosen = st.session_state["moves_pf"]
 cols = st.columns(len(ids) + 3)
-chosen = st.session_state.get("moves_pf", default)
 for i, p in enumerate(portfolios):
-    with cols[i]:
-        if st.button(p["name"], key=f"moves_pf_{p['id']}", width="stretch",
-                     type="primary" if p["id"] == chosen else "secondary"):
-            chosen = p["id"]
-            st.session_state["moves_pf"] = chosen
-            st.query_params["pf"] = chosen
+    cols[i].button(p["name"], key=f"moves_pf_{p['id']}", width="stretch",
+                   type="primary" if p["id"] == chosen else "secondary",
+                   on_click=_select_portfolio, args=(p["id"],))
 pf = next(p for p in portfolios if p["id"] == chosen)
 pid, accent = pf["id"], pf.get("color_primary") or "#A78BFA"
 
@@ -131,61 +140,109 @@ else:
     fig.add_trace(go.Scatter(x=port_index.index, y=port_index.values, name=pf["name"],
                              line=dict(color=accent, width=3, shape="spline", smoothing=0.8),
                              hovertemplate="%{x|%b %d, %Y}<br>NAV: %{y:.1f}<extra></extra>"))
-    # Two marker families only: the buy side and the sell side. A rebalance
-    # bundles several trades on one day, which would land on the same point of
-    # the curve and hide each other (13 trades of Le Visionnaire sit on 4
-    # dates), so each family gets ONE marker per date carrying the whole batch:
-    # "xN" next to it, every trade of that side in the tooltip. Buys sit just
-    # below the curve (triangle up), sells just above (triangle down) — the
-    # usual trading-chart convention, and a day that sells and buys stays
-    # readable. Corporate actions are not trades and are not plotted.
-    _span = float(port_index.max() - port_index.min()) or 1.0
-    _offset = _span * 0.03
-    SIDE_STYLE = {
-        BUY:  {"color": ACTION_COLORS.get("IN", "#00D09C"),  "symbol": "triangle-up",   "dy": -_offset, "pos": "bottom center"},
-        "SELL": {"color": ACTION_COLORS.get("OUT", "#FF4B4B"), "symbol": "triangle-down", "dy": _offset,  "pos": "top center"},
-    }
-    by_side: dict[str, list] = {}
-    for g in group_moves_by_date_and_side(moves):
-        batch, side, n = g["trades"], g["side"], g["n"]
-        ts = pd.Timestamp(g["date"])
-        on_or_after = port_index[port_index.index >= ts]
-        if on_or_after.empty:
-            continue
-        x, y = on_or_after.index[0], float(on_or_after.iloc[0])
-        lines = [f"<b>{ts:%b %d, %Y}</b> — {SIDE_LABELS[side]} · {n} trade{'s' if n > 1 else ''}"]
-        for t in sorted(batch, key=lambda t: (t.get("ticker_in") or t.get("ticker_out") or "")):
+    # ONE MARKER PER TRADE DATE. A rebalance bundles several trades on one day;
+    # drawn individually they land on the same point of the curve and hide each
+    # other (Le Visionnaire: 13 trades on 4 dates). The glyph says what the day
+    # was: a green disc (bought only), a red disc (sold only), or a disc split
+    # red-over-green when the day did both. Corporate actions are not trades and
+    # are not plotted. Markers are deliberately large — they are the subject of
+    # this page, not a decoration.
+    BUY_COLOR = ACTION_COLORS.get("IN", "#00D09C")
+    SELL_COLOR = ACTION_COLORS.get("OUT", "#FF4B4B")
+
+    # Marker size in pixels: visible from the first trade, bigger for a big
+    # rebalance. The two-tone glyph is a font character whose disc measures
+    # about 0.66 of its font size, hence the ratio below.
+    GLYPH_RATIO = 0.66
+    UPPER_HALF, LOWER_HALF = "\u25d3", "\u25d2"   # ◓ upper half filled, ◒ lower half filled
+
+    def _diameter(n: int) -> float:
+        return min(22.0 + 2.0 * (n - 1), 34.0)
+
+    def _side_lines(trades, color, heading):
+        out = ["<span style='color:%s'><b>%s</b></span>" % (color, heading)]
+        for t in trades:
             a = (t.get("action") or "").upper()
             tk = t.get("ticker_in") or t.get("ticker_out") or ""
             w = t.get("weight_in") if a in ("IN", "SWITCH") else t.get("weight_out")
             px = t.get("price_in") if a in ("IN", "SWITCH") else t.get("price_out")
-            seg = f"• {ACTION_LABELS.get(a, a)} <b>{tk}</b>"
-            if w:  seg += f" · {float(w):.2f}% of capital"
-            if px: seg += f" @ ${float(px):,.2f}"
-            lines.append(seg)
-        by_side.setdefault(side, []).append((x, y + SIDE_STYLE[side]["dy"], "<br>".join(lines), n))
+            bits = [f"<b>{tk}</b>"]
+            if w:  bits.append(f"{float(w):.2f}% of capital")
+            if px: bits.append(f"${float(px):,.2f}")
+            out.append("&nbsp;&nbsp;&nbsp;" + " · ".join(bits))
+        return out
 
-    for side in (BUY, "SELL"):
-        pts = by_side.get(side)
+    def _tooltip(g) -> str:
+        ts = pd.Timestamp(g["date"])
+        counts = []
+        if g["sells"]:
+            counts.append(f"{len(g['sells'])} sell" + ("s" if len(g["sells"]) > 1 else ""))
+        if g["buys"]:
+            counts.append(f"{len(g['buys'])} buy" + ("s" if len(g["buys"]) > 1 else ""))
+        lines = [f"<b>{ts:%d %B %Y}</b>",
+                 f"<span style='color:#9CA3AF'>{' and '.join(counts)} that day</span>", ""]
+        if g["sells"]:
+            lines += _side_lines(g["sells"], SELL_COLOR, "▼  SOLD / REDUCED")
+            if g["buys"]:
+                lines.append("")
+        if g["buys"]:
+            lines += _side_lines(g["buys"], BUY_COLOR, "▲  BOUGHT / REINFORCED")
+        return "<br>".join(lines)
+
+    placed = []
+    for g in group_moves_by_date(moves):
+        on_or_after = port_index[port_index.index >= pd.Timestamp(g["date"])]
+        if on_or_after.empty:
+            continue
+        placed.append((on_or_after.index[0], float(on_or_after.iloc[0]), g))
+
+    # Days with one side only: a plain disc, green or red, in the legend.
+    for kind, color, label in ((BUY, BUY_COLOR, "Buy / reinforce"),
+                               (SELL, SELL_COLOR, "Sell / reduce")):
+        pts = [v for v in placed if v[2]["kind"] == kind]
         if not pts:
             continue
-        style = SIDE_STYLE[side]
         fig.add_trace(go.Scatter(
-            x=[p[0] for p in pts], y=[p[1] for p in pts],
-            mode="markers+text", name=SIDE_LABELS[side],
-            marker=dict(color=style["color"], size=[min(12 + 2 * (p[3] - 1), 22) for p in pts],
-                        symbol=style["symbol"], line=dict(color=BG, width=1.5)),
-            text=[f"×{p[3]}" if p[3] > 1 else "" for p in pts],
-            textposition=style["pos"], textfont=dict(size=11, color=style["color"]),
-            hovertext=[p[2] for p in pts], hovertemplate="%{hovertext}<extra></extra>",
+            x=[v[0] for v in pts], y=[v[1] for v in pts], mode="markers", name=label,
+            marker=dict(color=color, size=[_diameter(v[2]["n"]) for v in pts],
+                        symbol="circle", line=dict(color=BG, width=2)),
+            hovertext=[_tooltip(v[2]) for v in pts], hovertemplate="%{hovertext}<extra></extra>",
+        ))
+
+    # Days that sold AND bought: one disc cut in two, red on top, green below.
+    # Plotly has no two-tone marker and its pixel-sized path shapes do not
+    # render, so the glyph is a pair of font characters drawn at the same point
+    # — the green lower half first, the red upper half over it — with a
+    # transparent marker on top to carry the tooltip.
+    both = [v for v in placed if v[2]["kind"] == BOTH]
+    if both:
+        _x = [v[0] for v in both]
+        _y = [v[1] for v in both]
+        _sizes = [_diameter(v[2]["n"]) / GLYPH_RATIO for v in both]
+        for glyph, color in ((LOWER_HALF, BUY_COLOR), (UPPER_HALF, SELL_COLOR)):
+            fig.add_trace(go.Scatter(
+                x=_x, y=_y, mode="text", text=[glyph] * len(both), textposition="middle center",
+                textfont=dict(size=_sizes, color=color), showlegend=False, hoverinfo="skip",
+            ))
+        fig.add_trace(go.Scatter(
+            x=_x, y=_y, mode="markers", showlegend=False,
+            marker=dict(color="rgba(0,0,0,0)", size=[_diameter(v[2]["n"]) for v in both],
+                        symbol="circle", line=dict(width=0)),
+            hovertext=[_tooltip(v[2]) for v in both], hovertemplate="%{hovertext}<extra></extra>",
         ))
     layout = chart_layout()
     layout["height"] = 420
     layout["legend"] = dict(orientation="h", yanchor="top", y=-0.16, xanchor="center", x=0.5, font=dict(size=10), bgcolor="rgba(0,0,0,0)")
     layout["margin"]["b"] = 60
     layout["yaxis"]["title"] = "Base 100"
+    layout["hoverlabel"] = dict(bgcolor="#0B0F16", bordercolor="#334155", align="left",
+                                font=dict(size=13, color="#E5E7EB"))
+    layout["hovermode"] = "closest"
     fig.update_layout(**layout)
     st.plotly_chart(fig, width="stretch")
+    st.caption("Each marker is one trading day: a green disc when the day only bought or reinforced, "
+               "a red disc when it only sold or reduced, and a disc split red-over-green when it did both. "
+               "The bigger the disc, the more trades that day — hover it for the list.")
 
 # ── Trade log ────────────────────────────────────────────────────────────────
 st.markdown("#### Trade log")

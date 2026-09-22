@@ -5,17 +5,18 @@ Drawn one by one they land on the same point of the NAV curve and hide each
 other — Le Visionnaire's 13 trades happen on 4 dates, so the chart showed 4
 dots and looked wrong.
 
-The page therefore draws, per date, at most two markers: one for the buy side
-and one for the sell side, offset below and above the curve so a rebalance
-that both sells and buys stays readable. Corporate actions (splits) are not
-trades and never appear as markers. Pure functions, no Streamlit, unit-tested.
+The page therefore draws ONE marker per trade date, whose glyph says what
+happened that day: a green disc (bought only), a red disc (sold only), or a
+disc split in two — red on top, green at the bottom — when the day did both.
+Corporate actions (splits) are not trades and never appear on the chart.
+Pure functions, no Streamlit, unit-tested.
 """
 
 BUY = "BUY"
 SELL = "SELL"
+BOTH = "BOTH"
 
-# A SWITCH row carries both legs; its cash-out leg is the position being sold,
-# but the row is recorded from the buy side, so it counts as a buy here.
+# A SWITCH row carries both legs but is recorded from the buy side.
 _SIDE = {"IN": BUY, "SWITCH": BUY, "TRIM": SELL, "OUT": SELL}
 
 SIDE_LABELS = {BUY: "Buy / reinforce", SELL: "Sell / reduce"}
@@ -30,21 +31,31 @@ def side_of(t) -> str | None:
     return _SIDE.get(action_of(t))
 
 
-def group_moves_by_date_and_side(moves) -> list[dict]:
-    """[{date, side, trades, n}] sorted by date then side (buys first).
+def _ticker(t) -> str:
+    return t.get("ticker_in") or t.get("ticker_out") or ""
 
-    One entry = one marker on the chart. Non-trades are dropped.
+
+def group_moves_by_date(moves) -> list[dict]:
+    """[{date, buys, sells, n, kind}] sorted by date ascending.
+
+    One entry = one marker. `kind` is BUY, SELL or BOTH. Each side's trades are
+    sorted by ticker so the tooltip always reads the same way.
     """
-    batches: dict[tuple[str, str], list] = {}
+    batches: dict[str, dict] = {}
     for t in moves:
         side = side_of(t)
         if side is None:
             continue
-        batches.setdefault((str(t.get("date")), side), []).append(t)
+        b = batches.setdefault(str(t.get("date")), {"buys": [], "sells": []})
+        b["buys" if side == BUY else "sells"].append(t)
+
     out = []
-    for (d, side) in sorted(batches, key=lambda k: (k[0], k[1] != BUY)):
-        trades = batches[(d, side)]
-        out.append({"date": d, "side": side, "trades": trades, "n": len(trades)})
+    for d in sorted(batches):
+        buys = sorted(batches[d]["buys"], key=_ticker)
+        sells = sorted(batches[d]["sells"], key=_ticker)
+        kind = BOTH if (buys and sells) else (BUY if buys else SELL)
+        out.append({"date": d, "buys": buys, "sells": sells,
+                    "n": len(buys) + len(sells), "kind": kind})
     return out
 
 

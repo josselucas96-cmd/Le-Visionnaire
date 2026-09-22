@@ -3,9 +3,10 @@
 Regression: trades of the same rebalance were drawn one by one, landing on the
 same point of the NAV curve and hiding each other — Le Visionnaire's 13 trades
 sit on 4 dates, so the chart showed 4 dots for 13 trades (reported 2026-09-22).
-The page now draws at most two markers per date, one per side.
+The page now draws exactly one marker per trading day, whose glyph says whether
+the day bought, sold, or did both.
 """
-from utils.moves import BUY, SELL, batch_numbers, count_trades, group_moves_by_date_and_side, side_of
+from utils.moves import BOTH, BUY, SELL, batch_numbers, count_trades, group_moves_by_date, side_of
 
 
 def _t(date, action, ticker):
@@ -24,22 +25,30 @@ VISIONNAIRE = [
 ]
 
 
-def test_every_trade_belongs_to_exactly_one_marker():
-    groups = group_moves_by_date_and_side(VISIONNAIRE)
-    assert sum(g["n"] for g in groups) == len(VISIONNAIRE)     # all 13 trades plotted
-    assert len(groups) == 6                                     # 4 dates, 2 of them two-sided
+def test_one_marker_per_day_and_no_trade_left_behind():
+    groups = group_moves_by_date(VISIONNAIRE)
+    assert len(groups) == 4                                    # 4 markers
+    assert sum(g["n"] for g in groups) == len(VISIONNAIRE)     # covering all 13 trades
 
 
-def test_a_rebalance_that_sells_and_buys_yields_one_marker_per_side():
-    may14 = [g for g in group_moves_by_date_and_side(VISIONNAIRE) if g["date"] == "2026-05-14"]
-    assert [(g["side"], g["n"]) for g in may14] == [(BUY, 2), (SELL, 3)]   # buys first
-    jun12 = [g for g in group_moves_by_date_and_side(VISIONNAIRE) if g["date"] == "2026-06-12"]
-    assert [(g["side"], g["n"]) for g in jun12] == [(BUY, 2)]             # buy-only day
+def test_kind_says_what_the_day_did():
+    kinds = {g["date"]: g["kind"] for g in group_moves_by_date(VISIONNAIRE)}
+    assert kinds["2026-05-14"] == BOTH      # 3 trims + 2 buys -> split disc
+    assert kinds["2026-05-26"] == BUY       # 4 buys -> green disc
+    assert kinds["2026-06-01"] == BOTH      # a close and a buy
+    assert kinds["2026-06-12"] == BUY
+
+
+def test_each_side_is_sorted_by_ticker_for_a_stable_tooltip():
+    may14 = next(g for g in group_moves_by_date(VISIONNAIRE) if g["date"] == "2026-05-14")
+    assert [t.get("ticker_in") for t in may14["buys"]] == ["CELH", "HIMS"]
+    assert [t.get("ticker_out") for t in may14["sells"]] == ["AMD", "RKLB", "TSLA"]
+    assert may14["n"] == 5
 
 
 def test_groups_are_chronological():
-    assert [g["date"] for g in group_moves_by_date_and_side(VISIONNAIRE)] == [
-        "2026-05-14", "2026-05-14", "2026-05-26", "2026-06-01", "2026-06-01", "2026-06-12"]
+    assert [g["date"] for g in group_moves_by_date(VISIONNAIRE)] == [
+        "2026-05-14", "2026-05-26", "2026-06-01", "2026-06-12"]
 
 
 def test_sides():
@@ -47,12 +56,18 @@ def test_sides():
     assert side_of(_t("2026-01-01", "SWITCH", "X")) == BUY
     assert side_of(_t("2026-01-01", "TRIM", "X")) == SELL
     assert side_of(_t("2026-01-01", "OUT", "X")) == SELL
+    assert side_of(_t("2026-01-01", "SPLIT", "X")) is None
+
+
+def test_a_sell_only_day():
+    groups = group_moves_by_date([_t("2026-07-01", "OUT", "AAA"), _t("2026-07-01", "TRIM", "BBB")])
+    assert [(g["kind"], g["n"]) for g in groups] == [(SELL, 2)]
+    assert groups[0]["buys"] == []
 
 
 def test_corporate_actions_are_never_plotted():
     moves = VISIONNAIRE + [_t("2026-09-08", "SPLIT", "ALCPB.PA")]
-    assert side_of(_t("2026-09-08", "SPLIT", "ALCPB.PA")) is None
-    assert sum(g["n"] for g in group_moves_by_date_and_side(moves)) == 13   # split excluded
+    assert sum(g["n"] for g in group_moves_by_date(moves)) == 13      # split excluded
     assert count_trades(moves) == (13, 1)
     assert count_trades([]) == (0, 0)
 
@@ -63,4 +78,4 @@ def test_batch_numbers_are_oldest_first():
 
 
 def test_empty_book():
-    assert group_moves_by_date_and_side([]) == []
+    assert group_moves_by_date([]) == []
