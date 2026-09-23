@@ -1,12 +1,12 @@
 market_comment = [
-  "US indices were mixed in July. The Dow gained 0.32% and the equal-weighted S&P 500 1.1%, while the S&P 500 lost 0.13% and the Nasdaq Composite 3.20%. Capital rotated out of the largest technology names into other parts of the market, and the equal-weighted index moved about 3% ahead of the cap-weighted index year to date.",
-  "Energy was the strongest sector at about +12.5%, as the ceasefire in Iran collapsed and oil prices rose. Financials gained about 6%. Technology (-3.5%) and Industrials (-3.1%) were the weakest sectors.",
+  "US indices were mixed in July. The Dow gained 0.32% and the equal-weighted S&P 500 1.1%, while the S&P 500 lost 0.13% and the Nasdaq Composite 3.20%. Capital rotated out of technology into other parts of the market, and the equal-weighted index moved about 3% ahead of the cap-weighted index year to date.",
+  "Energy was the strongest sector at about +12%, as the ceasefire in Iran collapsed and oil prices rose. Financials gained about 6%. Technology fell about 8% and Industrials about 3%.",
   "Second-quarter earnings growth for the S&P 500 was 37.9%, the highest since the third quarter of 2021.",
 ]
 
 mgmt_comment = [
   "Le Bâtisseur returned {pf_mtd_pct}% in July against {bench_mtd_pct}% for the {bench_pri_lbl}, a difference of {alpha_mtd_pct} percentage points. The portfolio was fully invested at month-end.",
   "No transactions were made during the month.",
-  "Constellation Software was the main contributor at 1.08 percentage points; consensus estimates for the company's 2026 revenue and earnings were revised upwards during the month. Microsoft added 0.94 points, Alibaba 0.83, Amazon 0.77 and MercadoLibre 0.52. Intuitive Surgical was the largest detractor at 0.31 points and Eli Lilly cost 0.27.",
-  "The portfolio's beta for the month was 0.21. The outperformance against the index reflects the rotation away from the largest technology names towards companies with more stable cash generation, which is where most of the portfolio is invested.",
+  "The holdings that caused June's underperformance recovered in July. Alibaba rose 27%, including 11% on 8 July on reports that profits had been steady in the June quarter, with further support from a settlement with the US Department of Justice and approval for its Qwen models to power Apple Intelligence in China. Microsoft rose 25%, most of it on 30 July after reporting 43% growth in Azure revenue, the fastest since early 2022. Amazon rose 14%, Constellation Software 14% and MercadoLibre 11%. The consumer discretionary and technology holdings together added about 5.2 points against the index.",
+  "The technology sector of the index fell about 8% in the month, while the portfolio's technology holdings rose, led by Microsoft and Constellation Software. The portfolio has no energy holdings, the strongest sector of the month. Intuitive Surgical (-11%) and Eli Lilly (-4%) were the main detractors.",
 ]

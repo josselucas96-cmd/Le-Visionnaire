@@ -6,6 +6,6 @@ market_comment = [
 mgmt_comment = [
   "Le Nakamoto returned {pf_mtd_pct}% in August against {bench_mtd_pct}% for {bench_pri_lbl}, a difference of {alpha_mtd_pct} percentage points. The portfolio holds no cash.",
   "No transactions were made during the month.",
-  "Strive was the main contributor at 18.86 percentage points. The company bought 3,156 bitcoin during August, including 1,800 between 24 and 28 August at an average price of $79,431, bringing its holdings to 23,156 bitcoin and making it the fifth-largest public holder; the shares more than doubled over the month and TD Cowen raised its price target. Metaplanet added 9.45 points, Strategy 8.71 and H100 3.79. All positions ended the month higher.",
-  "The portfolio's beta to bitcoin was 0.93 for the month. The outperformance against bitcoin came from Strive and, to a lesser extent, from the other companies that continued to add to their holdings during the recovery. Over the four months since inception the portfolio remains below its opening capital, at -4.93%, against -2.04% for bitcoin over the same period.",
+  "Most of the outperformance came from Strive, which rose 118% and added about 15 points against bitcoin. The company bought 3,156 bitcoin during the month, including 1,800 between 24 and 28 August, bringing its holdings to 23,156 bitcoin and making it the fifth-largest public holder, and TD Cowen raised its price target. Metaplanet and Strategy both rose about 43%, adding a further 7.5 points, and H100 rose 56%.",
+  "OranjeBTC (+8%), the Strategy preferred shares (+9%) and Capital B (+16%) rose less than bitcoin. Over the four months since inception the portfolio has returned -4.93%, against -2.04% for bitcoin over the same period.",
 ]

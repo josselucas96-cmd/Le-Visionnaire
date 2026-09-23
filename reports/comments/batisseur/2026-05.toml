@@ -5,8 +5,8 @@ market_comment = [
 ]
 
 mgmt_comment = [
-  "Le Bâtisseur was funded on 6 May and returned 0.96% between that date and the end of the month. Cash at month-end was {cash_pct}%.",
+  "Le Bâtisseur was funded on 6 May and returned 0.96% between that date and the end of the month, against 4.52% for the S&P 500 over the same period. Cash at month-end was {cash_pct}%.",
   "No transactions were made after the initial investment.",
-  "Constellation Software was the main contributor at 1.09 percentage points, followed by Eli Lilly at 0.60 and Fair Isaac at 0.52. Boston Scientific was the largest detractor at 0.55 points, Alibaba cost 0.52 and MercadoLibre 0.40.",
-  "The portfolio's beta to the S&P 500 was 0.25 over the period, and it did not participate fully in a rise led by the largest technology stocks.",
+  "The index's rise over the period was concentrated in technology, which gained about 15% as a sector. The portfolio's technology holdings are mainly software companies and rose less, although Constellation Software (+16%), Fair Isaac (+17%) and Microsoft (+9%) all contributed positively.",
+  "The gap came mainly from the consumer and healthcare holdings. Alibaba fell 12% and MercadoLibre 8%, costing 0.9 points together. Boston Scientific fell 14%, including 10% on 27 May after management lowered its 2026 organic growth guidance, citing competition in electrophysiology and slower Watchman procedure volumes. JPMorgan fell 5%. The cash position of about 5% also held back the portfolio in a rising market.",
 ]

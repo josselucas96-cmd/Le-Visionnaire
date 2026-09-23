@@ -1,12 +1,12 @@
 market_comment = [
   "US equities rose in August. The S&P 500 gained 2.7% and the Nasdaq 100 4.2%, the latter's best August since 2021. The S&P 500, the Dow, the Russell 2000 and the equal-weighted S&P 500 all reached record highs during the month.",
-  "Technology gained 6.25% and accounted for more than three-quarters of the S&P 500's return. Energy rose 7.0% and is up 44.2% year to date.",
-  "Treasury yields rose through the month, with the 10-year above 4.75%, its highest since January 2025, and the 30-year close to 5.30%. Bitcoin rose more than 20% from its low for the year.",
+  "Technology gained about 6% and accounted for more than three-quarters of the S&P 500's return. Energy rose about 7% and is up 44% year to date.",
+  "Treasury yields rose through the month, with the 10-year above 4.75%, its highest since January 2025, and the 30-year close to 5.30%. Bitcoin rose about 25% over the month.",
 ]
 
 mgmt_comment = [
   "Le Visionnaire returned {pf_mtd_pct}% in August against {bench_mtd_pct}% for the {bench_pri_lbl}, a difference of {alpha_mtd_pct} percentage points. Cash at month-end was {cash_pct}%.",
   "No transactions were made during the month.",
-  "Zeta Global was the main contributor at 2.65 percentage points. The company reported second-quarter revenue of $443 million on 4 August, up 44% year on year, with adjusted EBITDA up 56% and a first GAAP profit, and the shares rose 16% on the day to a 52-week high. Metaplanet added 1.91 points as bitcoin recovered. Tesla contributed 1.36 points and NVIDIA 1.19.",
-  "Nineteen of the twenty positions ended the month higher. The largest detractor, NIO, cost 0.13 points. Beta for the month was 1.44, and the outperformance against the index came mainly from Zeta and Metaplanet, the two positions increased in June.",
+  "Most of the outperformance came from four holdings. Zeta Global rose 43% after reporting second-quarter revenue of $443 million on 4 August, up 44% year on year, with adjusted EBITDA up 56% and a first GAAP profit, adding 2.4 points against the index. Metaplanet rose 43% and Bitmine 47% as bitcoin recovered, adding 2.4 points together. Tesla rose 18% on regulatory approval for up to 5,000 robotaxis in Las Vegas and ahead of its Cybercab event, and NVIDIA 10%.",
+  "Some large index constituents that the portfolio does not hold declined during the month, including Amazon, Alphabet and Broadcom, each down about 4 to 5%. Nineteen of the twenty positions ended the month higher, and the largest detractor, NIO, cost 0.1 points.",
 ]

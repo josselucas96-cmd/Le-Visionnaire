@@ -1,10 +1,10 @@
 market_comment = [
   "Bitcoin lost 3.69% in May and ended the month near $73,500. US spot bitcoin ETFs recorded $2.30 billion of net outflows, the largest monthly figure of 2026 and the largest since November 2025.",
-  "Bitcoin treasury companies declined considerably more than bitcoin itself. The premium of their market value to the value of their bitcoin holdings, which had allowed them to issue equity and buy more bitcoin, began to compress across the sector.",
+  "Bitcoin treasury companies declined more than bitcoin itself. The premium of their market value to the value of their bitcoin holdings, which had allowed them to issue equity and buy more bitcoin, began to compress across the sector.",
 ]
 
 mgmt_comment = [
-  "Le Nakamoto was funded on 11 May and returned -9.52% between that date and the end of the month. Bitcoin fell 3.69% over the same period. The portfolio holds no cash.",
+  "Le Nakamoto was funded on 11 May and returned -9.52% between that date and the end of the month, against -8.24% for Bitcoin over the same period. The portfolio holds no cash.",
   "No transactions were made after the initial investment.",
-  "Strategy was the largest detractor at 5.30 percentage points, followed by Metaplanet at 4.27 and Capital B at 2.24. All positions except Méliuz ended the period lower. The decline exceeded that of bitcoin because the premiums at which treasury companies trade to their holdings compressed during the month, which affected every position in the same direction.",
+  "The three largest positions fell more than bitcoin as their premiums compressed: Strategy lost 19%, Metaplanet 19% and Capital B 22% from their first closing price. The smaller positions held up better, with Strive, H100 and the Strategy preferred shares down 1 to 2% and Méliuz slightly higher, which limited the difference with bitcoin to about 1.3 points.",
 ]

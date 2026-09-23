@@ -6,5 +6,5 @@ market_comment = [
 mgmt_comment = [
   "Le Nakamoto returned {pf_mtd_pct}% in July against {bench_mtd_pct}% for {bench_pri_lbl}, a difference of {alpha_mtd_pct} percentage points. The portfolio holds no cash.",
   "No transactions were made during the month.",
-  "Metaplanet was the main contributor at 2.69 percentage points, followed by Capital B at 1.57 and Strategy at 1.49. H100 was the only significant detractor at 1.57 points. The portfolio's beta to bitcoin was 0.96 for the month, compared with 1.22 in June, and it captured most of bitcoin's recovery.",
+  "Metaplanet rose 13%, Capital B 16% and Méliuz 16%, ahead of bitcoin, while Strategy rose in line with it. H100 fell 18% and Strive was nearly flat, which offset these gains and left the portfolio slightly behind bitcoin.",
 ]

@@ -1,12 +1,12 @@
 market_comment = [
   "Bitcoin fell about 20% in June, from roughly $73,000 to the low $60,000s, with a low for the year near $58,190. US spot ETFs recorded $3.4 billion of outflows in a single week, the largest since their launch in January 2024, followed by thirteen consecutive days of redemptions.",
-  "The premium of treasury companies to their net asset value disappeared for most of the sector. Strategy, which had traded at up to seven times the value of its holdings, ended the month at a discount of around 21%. Metaplanet was down 42% year to date and 85% over twelve months.",
+  "The premium of treasury companies to their net asset value disappeared for most of the sector. Strategy's market value fell below the value of its bitcoin holdings for part of the month, and Metaplanet was down 42% year to date and 85% over twelve months.",
   "Below a ratio of one, issuing equity to buy bitcoin dilutes existing shareholders rather than increasing bitcoin per share, and the financing model that supported the sector's growth no longer functions.",
 ]
 
 mgmt_comment = [
   "Le Nakamoto returned {pf_mtd_pct}% in June against {bench_mtd_pct}% for {bench_pri_lbl}, a difference of {alpha_mtd_pct} percentage points. The portfolio holds no cash.",
   "No transactions were made during the month.",
-  "Strategy was the largest detractor at 11.48 percentage points, Strive cost 7.04, Metaplanet 6.57, Capital B 2.40 and H100 1.74. All positions ended the month lower. The portfolio's beta to bitcoin was 1.22 for the month and realised volatility was 66% annualised.",
-  "The underperformance against bitcoin came from the compression of premiums across the sector, which affected all holdings regardless of their individual characteristics. The portfolio has no cash or defensive allocation by construction, so there was no offsetting position during the decline.",
+  "The difference with bitcoin came from the three largest positions, which represented about 64% of the portfolio at the start of the month. Strategy fell 45% as its market value moved below the value of its bitcoin, and the company sold a small amount of bitcoin on 1 June to fund dividends on its preferred shares. Strive fell 38% and Metaplanet 32%. Against a 20% decline in bitcoin, these three positions account for about 12 points of relative underperformance, which is the whole of the gap.",
+  "The other positions fell between 12% and 27%, broadly in line with bitcoin.",
 ]
