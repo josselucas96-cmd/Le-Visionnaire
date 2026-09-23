@@ -85,7 +85,7 @@ sum of those rows. Rows are written after the US close by a scheduled job (22:07
 The chart and the headline return are indexed to <strong>100 on the last trading day before inception</strong>
 (the "T-1 anchor": capital deposited the evening before, invested at the next open). The headline
 figure is <em>NAV on the latest ledger day ÷ 1,000,000 − 1</em>. Benchmarks are indexed to 100 on the
-same anchor day, and alpha is the difference between the two on the <strong>same date</strong>.
+same anchor day, and the <em>excess return</em> is the difference between the two on the <strong>same date</strong>. It is not risk-adjusted: Jensen's alpha, shown with the risk statistics, removes the part of the difference explained by the portfolio's beta.
 </p>
 <div class="kv">
 <b>Le Visionnaire</b><span>Nasdaq 100 (QQQ), secondary S&amp;P 500 (SPY)</span>
@@ -111,7 +111,8 @@ from the daily NAV series, and are shown once 60 trading days are available.
 <b>Sharpe ratio</b><span>Annualised mean excess return ÷ annualised volatility, risk-free rate 5%.</span>
 <b>Max drawdown</b><span>Largest peak-to-trough decline of the NAV series.</span>
 <b>VaR 95% (1-day)</b><span>Historical: the 5th percentile of daily returns.</span>
-<b>Beta</b><span>Regression slope of portfolio daily returns on the secondary benchmark's daily returns.</span>
+<b>Beta</b><span>Regression slope of portfolio daily returns on the benchmark's daily returns, measured over the same intervals (for Bitcoin, the level on each trading day of the portfolio).</span>
+<b>Jensen's alpha</b><span>Portfolio return minus [risk-free + beta × (benchmark return − risk-free)] since inception, risk-free 5% as for the Sharpe ratio. Indicative with less than a year of history.</span>
 <b>Correlation</b><span>Pairwise correlation of the constituents' daily returns over the trailing 12 months (or since inception).</span>
 </div>
 

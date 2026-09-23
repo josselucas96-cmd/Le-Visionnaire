@@ -256,7 +256,7 @@ with st.expander("Performance", expanded=False):
                       f"{s}{_primary_perf:.2f}%" if _primary_perf is not None else "—")
         with pc3:
             s = "+" if _alpha >= 0 else ""
-            st.metric("Alpha", f"{s}{_alpha:.2f}%")
+            st.metric("Excess Return", f"{s}{_alpha:.2f}%")
         with pc4:
             if _today is not None:
                 s = "+" if _today >= 0 else ""

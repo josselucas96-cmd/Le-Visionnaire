@@ -83,3 +83,43 @@ def test_monthly_returns_partial_inception_month_and_incomplete_month():
     cur = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][today.month - 1]
     if today.day < 28:
         assert pd.isna(t.loc[2026, cur])                                       # incomplete month hidden
+
+
+# ── Beta and Jensen's alpha against the portfolio's own benchmark ────────────
+# 2026-09-23, from a reader: the site showed beta against the secondary index
+# (Le Visionnaire 2.04 vs the S&P 500 while its benchmark is the Nasdaq 100) and
+# called the plain difference with the benchmark "alpha".
+import pandas as pd
+import pytest
+
+from utils.metrics import aligned_returns, beta_vs_spy, jensen_alpha
+
+
+def test_a_24_7_benchmark_is_read_on_the_portfolio_s_trading_days():
+    """Monday's Bitcoin return must cover Friday to Monday, like the portfolio's."""
+    port = pd.Series([100.0, 101.0, 102.0],
+                     index=pd.to_datetime(["2026-09-18", "2026-09-21", "2026-09-22"]))   # Fri, Mon, Tue
+    btc = pd.Series([100.0, 150.0, 90.0, 110.0, 121.0],
+                    index=pd.to_datetime(["2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21", "2026-09-22"]))
+    pr, br = aligned_returns(port, btc)
+    assert list(br.round(4)) == [0.10, 0.10]           # Fri->Mon 100->110, Mon->Tue 110->121
+    assert len(pr) == len(br) == 2
+
+
+def test_beta_of_a_portfolio_that_moves_twice_its_benchmark():
+    days = pd.bdate_range("2026-01-01", periods=40)
+    bench = pd.Series([100 * (1.01 if i % 2 else 0.995) ** i for i in range(40)], index=days)
+    rets = bench.pct_change().fillna(0)
+    port = 100 * (1 + 2 * rets).cumprod()
+    pr, br = aligned_returns(port, bench)
+    assert beta_vs_spy(pr, br) == pytest.approx(2.0, abs=0.01)
+
+
+def test_jensen_alpha_removes_what_beta_explains():
+    """Up 30% when the benchmark is up 20% with a beta of 1.5 and no risk-free
+    rate: all of the excess return is explained by beta, alpha is zero."""
+    idx = pd.to_datetime(["2026-01-02", "2026-07-02"])
+    port = pd.Series([100.0, 130.0], index=idx)
+    bench = pd.Series([100.0, 120.0], index=idx)
+    assert jensen_alpha(port, bench, 1.5, risk_free_annual=0.0) == pytest.approx(0.0, abs=1e-9)
+    assert jensen_alpha(port, bench, 1.0, risk_free_annual=0.0) == pytest.approx(10.0)

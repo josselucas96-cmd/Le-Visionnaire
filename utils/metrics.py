@@ -98,6 +98,49 @@ def beta_vs_spy(port_returns: pd.Series, spy_returns: pd.Series) -> float | None
     return round(cov[0][1] / cov[1][1], 2)
 
 
+def aligned_returns(port_index: pd.Series, bench_index: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Daily returns of a portfolio and its benchmark over the same intervals.
+
+    The benchmark level is read on each date the portfolio has (last value on
+    or before it), and only then are both series turned into returns. For an
+    equity benchmark the dates already match. For Bitcoin, which trades every
+    day, it makes Monday's figure cover Friday to Monday on both sides, instead
+    of pairing the portfolio's Friday-to-Monday move with Bitcoin's
+    Sunday-to-Monday one.
+    """
+    empty = pd.Series(dtype=float)
+    if port_index is None or bench_index is None or port_index.empty or bench_index.empty:
+        return empty, empty
+    bench = bench_index.sort_index()
+    bench = bench[~bench.index.duplicated(keep="last")].reindex(port_index.index, method="ffill")
+    both = pd.concat([port_index, bench], axis=1).dropna()
+    rets = both.pct_change().dropna()
+    return rets.iloc[:, 0], rets.iloc[:, 1]
+
+
+def jensen_alpha(port_index: pd.Series, bench_index: pd.Series, beta: float | None,
+                 risk_free_annual: float = 0.05) -> float | None:
+    """Return not explained by market exposure over the whole period, in %.
+
+    portfolio return - [risk-free + beta x (benchmark return - risk-free)],
+    using the same risk-free rate as the Sharpe ratio. "Excess return" is the
+    plain difference with the benchmark; a portfolio with a beta above 1 beats a
+    rising benchmark without any alpha, which is the distinction this measures.
+    """
+    if beta is None or port_index is None or bench_index is None:
+        return None
+    bench = bench_index.sort_index()
+    bench = bench[~bench.index.duplicated(keep="last")].reindex(port_index.index, method="ffill")
+    both = pd.concat([port_index, bench], axis=1).dropna()
+    if len(both) < 2:
+        return None
+    rp = both.iloc[-1, 0] / both.iloc[0, 0] - 1
+    rm = both.iloc[-1, 1] / both.iloc[0, 1] - 1
+    years = (both.index[-1] - both.index[0]).days / 365.25
+    rf = (1 + risk_free_annual) ** years - 1
+    return round(float(rp - (rf + beta * (rm - rf))) * 100, 2)
+
+
 def monthly_returns_table(port_index: pd.Series,
                           inception_date: str | None = None) -> pd.DataFrame:
     """Monthly returns pivoted: years as rows, months Jan-Dec as columns.

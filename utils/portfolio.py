@@ -20,7 +20,7 @@ from utils.market import (
 )
 from utils.metrics import (
     daily_returns,
-    sharpe_ratio, max_drawdown, beta_vs_spy,
+    sharpe_ratio, max_drawdown, beta_vs_spy, aligned_returns, jensen_alpha,
     annualized_volatility, var_95, correlation_matrix, avg_pairwise_correlation,
     monthly_returns_table,
 )
@@ -311,11 +311,16 @@ def render_performance_chart_section(
     ])
     st.plotly_chart(fig, width="stretch")
 
-    # ── Sharpe / Max Drawdown / Beta ──
+    # ── Sharpe / Max Drawdown / Beta / Jensen's alpha ──
+    # Beta and alpha are measured against the portfolio's own benchmark (the
+    # primary one). Until 2026-09-23 beta used the secondary benchmark: the
+    # Visionnaire showed 2.04 against the S&P 500 while its benchmark is the
+    # Nasdaq 100 (1.17), Le Bâtisseur its beta against the Nasdaq 100, Le
+    # Nakamoto against Strategy instead of Bitcoin. Reported by a reader.
     port_ret = daily_returns(port_index)
-    secondary_ret = daily_returns(secondary_index) if (secondary_index is not None and not secondary_index.empty) else pd.Series()
+    _pr, _br = aligned_returns(port_index, primary_index)
 
-    r1, r2, r3 = st.columns(3)
+    r1, r2, r3, r4 = st.columns(4)
     with r1:
         if stats_ready:
             s = sharpe_ratio(port_ret)
@@ -327,13 +332,23 @@ def render_performance_chart_section(
     with r2:
         md = max_drawdown(port_index)
         st.metric("Max Drawdown", f"{md:.2f}%" if md is not None else "—")
+    _beta = beta_vs_spy(_pr, _br) if stats_ready else None
     with r3:
-        beta_label = f"Beta vs {bench_sec_lbl}" if bench_sec_lbl else "Beta"
+        beta_label = f"Beta vs {bench_pri_lbl}" if bench_pri_lbl else "Beta"
         if stats_ready:
-            b = beta_vs_spy(port_ret, secondary_ret)
-            st.metric(beta_label, f"{b:.2f}" if b is not None else "—")
+            st.metric(beta_label, f"{_beta:.2f}" if _beta is not None else "—",
+                      help=f"Sensitivity of the portfolio's daily returns to the {bench_pri_lbl or 'benchmark'}'s")
         else:
             st.metric(beta_label, "—", help=stats_help)
+    with r4:
+        if stats_ready:
+            ja = jensen_alpha(port_index, primary_index, _beta)
+            st.metric("Jensen's Alpha", f"{ja:+.2f}%" if ja is not None else "—",
+                      help=("Return not explained by market exposure since inception: portfolio return "
+                            "minus [risk-free + beta x (benchmark return - risk-free)], risk-free 5% as "
+                            "for the Sharpe ratio. Indicative only with less than a year of history."))
+        else:
+            st.metric("Jensen's Alpha", "—", help=stats_help)
 
     # ── Monthly returns table ──
     st.write("")
@@ -759,7 +774,7 @@ Always conduct your own due diligence before making any investment decision.
     if bench_error:
         st.warning(
             f"Benchmark data unavailable right now ({bench_error}). "
-            f"The benchmark and alpha are hidden rather than shown against the "
+            f"The benchmark and excess return are hidden rather than shown against the "
             f"wrong base date; the portfolio figures are unaffected.",
             icon="⚠️",
         )
@@ -781,10 +796,12 @@ Always conduct your own due diligence before making any investment decision.
                   f"{s}{primary_perf:.2f}%" if primary_perf is not None else "—")
     with metric_cols[2]:
         if alpha is None:
-            st.metric("Alpha", "—")
+            st.metric("Excess Return", "—")
         else:
             a = "+" if alpha >= 0 else ""
-            st.metric("Alpha", f"{a}{alpha:.2f}%")
+            st.metric("Excess Return", f"{a}{alpha:.2f}%",
+                      help=f"Portfolio return minus the {bench_pri_lbl} return since inception. "
+                           f"Not risk-adjusted: see Jensen's alpha in the Performance section.")
     with metric_cols[3]:
         today_valid = [p for p in positions if p["change_today"] is not None]
         if today_valid:
@@ -997,7 +1014,9 @@ Always conduct your own due diligence before making any investment decision.
                 # here understated vol by ~15% next to a Sharpe on trading days).
                 _port_index_td = align_to_equity_calendar(port_index, primary_index, secondary_index)
                 port_ret = daily_returns(_port_index_td)
-                secondary_ret = daily_returns(secondary_index) if secondary_index is not None else pd.Series()
+                # Benchmark volatility for the portfolio's own benchmark, over the
+                # same intervals (was the secondary benchmark until 2026-09-23).
+                _, bench_ret = aligned_returns(_port_index_td, primary_index)
 
                 ra1, ra2, ra3, ra4 = st.columns(4)
                 _stats_ready = _n_returns >= _MIN_DAYS_STATS
@@ -1011,9 +1030,9 @@ Always conduct your own due diligence before making any investment decision.
                     else:
                         st.metric("Portfolio Volatility (ann.)", "—", help=_stats_help)
                 with ra2:
-                    sec_vol_label = f"{bench_sec_lbl} Volatility (ann.)" if bench_sec_lbl else "Benchmark Volatility (ann.)"
+                    sec_vol_label = f"{bench_pri_lbl} Volatility (ann.)" if bench_pri_lbl else "Benchmark Volatility (ann.)"
                     if _stats_ready:
-                        sv = annualized_volatility(secondary_ret)
+                        sv = annualized_volatility(bench_ret)
                         st.metric(sec_vol_label,
                                   f"{sv:.1f}%" if sv is not None else "—")
                     else:
