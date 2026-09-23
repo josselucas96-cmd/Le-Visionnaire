@@ -1,13 +1,12 @@
 market_comment = [
-  "May was an exceptional month for US equities. The S&P 500 gained 5.3% and closed a run of nine consecutive weekly gains, something that has happened only four other times in forty years. The Nasdaq 100 added 10.6% and the Dow crossed 51,000 for the first time.",
-  "Earnings did the work. With roughly 97% of the S&P 500 reported, about 85% beat estimates against a five-year average of 78%, and AI-linked revenue became a visible driver of index-level profit growth rather than a story about a handful of companies.",
-  "Rates moved the other way. Following the month's inflation prints the market began assigning better-than-even odds to a Fed hike at the December meeting, the 30-year Treasury yield rose above 5% for the first time since 2007 and the 10-year set a 52-week high. A melt-up in equities and a repricing of policy risk happened in the same four weeks.",
+  "US equities rose strongly in May. The S&P 500 gained 5.3%, its ninth consecutive weekly gain, and the Nasdaq 100 10.6%. The Dow closed above 51,000 for the first time.",
+  "About 85% of S&P 500 companies beat earnings estimates for the first quarter, against a five-year average of 78%. AI-related revenue was a significant contributor to index-level earnings growth.",
+  "Following the month's inflation data, markets priced a greater than 50% probability of a Federal Reserve rate increase at the December meeting. The 30-year Treasury yield rose above 5% for the first time since 2007.",
 ]
 
 mgmt_comment = [
-  "Le Bâtisseur was funded on 6 May and closes its first, partial month at <strong>+0.96%</strong> from the opening capital, with net asset value at $1,009,613. Cash at month-end: <strong>{cash_pct}%</strong>. Twenty-six days is not a performance record and nothing here should be read as one.",
-  "<strong>No trades.</strong> The book was built in a single operation at inception and left alone. The Investment Policy Statement calls for quality compounders and disciplined capital allocators held across full cycles; trading in the first three weeks would contradict the mandate before it has been tested.",
-  "<strong>Attribution.</strong> Constellation Software added 1.09pp, Eli Lilly 0.60pp and Fair Isaac 0.52pp. Boston Scientific cost 0.55pp, Alibaba 0.52pp and MercadoLibre 0.40pp. No single name moved the portfolio by more than about one point, which is the intended behaviour of a twenty-eight-line book.",
-  "<strong>Positioning.</strong> Realised volatility was 12.1% annualised and beta to the S&P 500 was 0.25. In a month where the index rose 5.3% on the back of its largest technology weights, a low-beta quality book was always going to lag, and it did. The construction is doing what it was designed to do; whether that is the right design is a question for several years, not for May.",
-  "Note on attribution: Le Bâtisseur started mid-month, so contributions are measured from the closing prices of 6 May. The difference with the month's return is the move between the prices at which positions were opened and that first close.",
+  "Le Bâtisseur was funded on 6 May and returned 0.96% between that date and the end of the month. Cash at month-end was {cash_pct}%.",
+  "No transactions were made after the initial investment.",
+  "Constellation Software was the main contributor at 1.09 percentage points, followed by Eli Lilly at 0.60 and Fair Isaac at 0.52. Boston Scientific was the largest detractor at 0.55 points, Alibaba cost 0.52 and MercadoLibre 0.40.",
+  "The portfolio's beta to the S&P 500 was 0.25 over the period, and it did not participate fully in a rise led by the largest technology stocks.",
 ]
