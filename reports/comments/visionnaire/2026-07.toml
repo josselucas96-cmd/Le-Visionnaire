@@ -1,0 +1,12 @@
+market_comment = [
+  "July was a rotation, not a sell-off. The Dow added 0.32% and the equal-weighted S&P 500 gained 1.1%, while the cap-weighted index slipped 0.13% and the Nasdaq Composite lost 3.20%. Money left the largest technology weights and spread across the rest of the market.",
+  "Energy led by a distance (+12.5%) as another Iran ceasefire collapsed and oil rose, with Financials up around 6%. Technology (-3.5%) and Industrials (-3.1%) were the weakest sectors — the exact opposite of the leadership that carried the first half of the year.",
+  "The fundamental backdrop did not deteriorate: second-quarter earnings growth for the S&P 500 came in at 37.9%, the highest since the third quarter of 2021. What changed was the price investors were willing to pay for growth that is still ahead, not the growth itself.",
+]
+
+mgmt_comment = [
+  "Le Visionnaire closes July at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>. This is the portfolio's worst month since inception and the second consecutive month behind the benchmark.",
+  "<strong>No trades.</strong> Nothing was bought and nothing was sold. A month in which the market re-rates growth downwards is not, by itself, new information about the businesses held, and reacting to a de-rating by selling into it would convert a paper drawdown into a permanent one. The discipline being tested here is inaction.",
+  "<strong>Attribution.</strong> The damage was broad rather than concentrated: Hims &amp; Hers cost 2.68pp, Nebius 2.50pp, Tesla 2.37pp, Rocket Lab 1.38pp and AMD 1.12pp. On the other side, Zeta added 0.49pp, Duolingo 0.37pp and Bitmine 0.32pp. Nothing in the month contradicts a position thesis; everything in it repriced the same factor at once.",
+  "<strong>Risk.</strong> Realised volatility was 38.3% annualised with a beta of 1.44 to the Nasdaq 100. The portfolio is explicitly high-beta and concentrated, so a market that falls on long-duration growth will take it down further and faster. That is the stated cost of the mandate, and July is what it looks like.",
+]

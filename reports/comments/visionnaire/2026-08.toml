@@ -1,0 +1,12 @@
+market_comment = [
+  "August was the strongest month of the year so far. The S&P 500 gained 2.7% and the Nasdaq 100 4.2%, its best August since 2021 after two consecutive losing months. The S&P 500, the Dow, the Russell 2000 and the equal-weighted S&P 500 all set records during the month, which is a rare breadth of participation.",
+  "Technology returned to leadership, up 6.25% and generating more than three-quarters of the index's monthly return, while Energy added 7.0% and extended a year-to-date advance of 44.2%. The rotation of July reversed without the sectors that benefited from it giving much back.",
+  "The bond market did not cooperate. The 10-year Treasury yield pushed above 4.75%, its highest since January 2025, and the 30-year approached 5.30%. Equities rose against a rising discount rate, which is a combination that historically does not persist indefinitely.",
+]
+
+mgmt_comment = [
+  "Le Visionnaire closes August at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>, the portfolio's best month since inception. Cash at month-end: <strong>{cash_pct}%</strong>.",
+  "<strong>No trades.</strong> A third consecutive month without activity. The book's composition has been unchanged since the 12 June reinforcements, and August is the month in which the decision not to sell through July's drawdown was rewarded rather than the month in which any new decision was taken.",
+  "<strong>Attribution.</strong> The recovery was led by the two lines added to in June: Zeta contributed 2.65pp and Metaplanet 1.91pp, ahead of Tesla at 1.36pp, NVIDIA at 1.19pp and Celsius at 0.85pp. Detractors were negligible — the worst, NIO, cost 0.13pp. Nineteen of twenty positions finished the month higher.",
+  "<strong>Risk and construction.</strong> Realised volatility was 36.1% annualised with a beta of 1.44: the same profile that produced July's shortfall produced August's gain, symmetrically. Concentration in the top three names is 35.4%, near the upper end of what I am prepared to run, and is the position the book will be judged on from here.",
+]

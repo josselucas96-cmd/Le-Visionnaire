@@ -1,0 +1,13 @@
+market_comment = [
+  "Bitcoin itself was resilient in May, losing 3.69% and ending the month near $73,500. The flows underneath it were not: US spot bitcoin ETFs closed May with $2.30 billion of net outflows, the largest monthly redemption of 2026 and the steepest since November 2025, with whales and long-term holders distributing alongside.",
+  "Digital asset treasury equities fell considerably more than the asset they hold. The premium to net asset value that had financed the sector's growth began compressing in earnest, and a treasury company whose shares trade at a discount can no longer issue equity to buy more bitcoin — the mechanism that justified the premium in the first place stops working.",
+  "This is the distinction the strategy exists to exploit and to survive: a DAT is a leveraged, operationally managed claim on bitcoin, not a proxy for it. May was the first month in which that leverage worked in reverse across the whole sector.",
+]
+
+mgmt_comment = [
+  "Le Nakamoto was funded on 11 May and closes its first, partial month at <strong>-9.52%</strong> from the opening capital, with net asset value at $904,827. Cash at month-end: <strong>{cash_pct}%</strong>. Bitcoin fell 3.69% over the same period: the portfolio delivered roughly two and a half times the drawdown of the asset it is built on.",
+  "<strong>No trades.</strong> The book was built in a single operation at inception. The Investment Policy Statement rotates on signals from the mNAV cycle, not on the calendar and not on three weeks of price action.",
+  "<strong>Attribution.</strong> Strategy cost 5.30pp, Metaplanet 4.27pp and Capital B 2.24pp. Only Méliuz finished positive, and marginally so. There is no diversification to speak of inside this portfolio — nine positions on one underlying asset, all of them geared to it — and the first month made that explicit rather than theoretical.",
+  "<strong>Risk.</strong> Realised volatility was 35.3% annualised with a beta of 0.87 to bitcoin. The mandate targets amplified bitcoin exposure over three-to-five-year horizons and states that drawdowns will exceed the asset's own. Twenty days of history is far too short to judge the selection framework; it is long enough to confirm the risk profile.",
+  "Note on attribution: Le Nakamoto started mid-month, so contributions are measured from the closing prices of 11 May. The difference with the month's return is the move between the prices at which positions were opened and that first close.",
+]

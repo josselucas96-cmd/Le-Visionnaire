@@ -1,0 +1,12 @@
+market_comment = [
+  "US equities gave ground in June while breadth improved. The S&P 500 lost 1.0% and the Nasdaq Composite 2.8%, but the Russell 2000 gained 3.7%: the month punished the largest index weights and rewarded most of what sits below them.",
+  "Inflation re-accelerated and the Fed's tone hardened with it. June was spent repricing the path of policy rather than the earnings outlook, which weighs most on long-duration growth names — the part of the market this portfolio is built from.",
+  "Dispersion between sectors was unusually wide: Industrials (+7.2%) and Health Care (+6.5%) led, Communication Services (-7.9%) and Energy (-5.1%) lagged. Bitcoin fell roughly 20% on record spot-ETF outflows, which matters directly to the two crypto-linked lines the book carries.",
+]
+
+mgmt_comment = [
+  "Le Visionnaire closes June at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>. Realised volatility was 36.8% annualised with a beta of 0.90 to the benchmark: the shortfall came from single-name risk, not from index exposure.",
+  "<strong>Rotation #3 (1 June).</strong> Amazon was closed in full at $265.23, an 8% position, and the proceeds opened Zeta Global at $24.52 (4.9% of NAV). Capital moved from a mega-cap whose weight had grown faster than the thesis behind it, into a smaller marketing-data name where, on my thesis, the operating leverage is still ahead rather than behind.",
+  "<strong>Reinforcements (12 June).</strong> Zeta was added to at $19.57, three weeks after the opening purchase, and Metaplanet at $1.53. Both were additions into price weakness with the underlying thesis unchanged, and both concentrate the book further into its two most recent convictions — a deliberate choice, and the one that will be judged first if either thesis is wrong.",
+  "<strong>Attribution.</strong> Hims &amp; Hers added 3.21pp on its own and Nebius 1.28pp. Against them, Rocket Lab cost 1.53pp, Celsius 1.33pp, Metaplanet 1.13pp, Zeta 0.95pp and Meta 0.89pp. Twenty concentrated positions behave this way: two strong contributors do not always cover five detractors, and the month is the cost of that construction rather than an accident of it.",
+]

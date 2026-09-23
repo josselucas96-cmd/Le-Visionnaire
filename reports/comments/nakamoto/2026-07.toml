@@ -1,0 +1,12 @@
+market_comment = [
+  "Bitcoin recovered 9.8% in July, climbing from below $58,000 to the mid-$60,000s before giving part of it back. The outflow streaks that defined June stopped; nothing yet replaced them with sustained buying.",
+  "The treasury sector spent the month adjusting rather than recovering. Several companies sold bitcoin to repay debt and some announced pivots towards AI infrastructure as their share prices fell — the capital-markets engine having stalled, the balance sheet becomes a source of funds instead of a reason to raise them.",
+  "That divergence is the whole question for this strategy. Selling the asset to service the liabilities incurred to buy it is the opposite of compounding bitcoin per share, and it separates the companies that merely accumulated from those with an operating business underneath.",
+]
+
+mgmt_comment = [
+  "Le Nakamoto closes July at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>. The portfolio captured most but not all of bitcoin's rebound, after amplifying its fall in June: the asymmetry ran the wrong way this quarter.",
+  "<strong>No trades.</strong> A third month without activity. Having taken a 32% drawdown in June without selling, selling into the first recovery would have been the worst of both decisions.",
+  "<strong>Attribution.</strong> Metaplanet added 2.69pp, Capital B 1.57pp, Strategy 1.49pp and OranjeBTC 0.84pp. H100 was the only meaningful detractor at 1.57pp. Realised volatility fell to 39.7% annualised from 66.4% in June, with a beta of 0.96 to bitcoin.",
+  "<strong>Reading the month.</strong> A beta near 1.0 to bitcoin on the way up, after a beta above 1.2 on the way down, is not what a leveraged claim on the asset is supposed to do. One month proves nothing, but if the pattern repeats across a full cycle it is an argument against the structure rather than against any individual holding, and it is the thing I will be watching.",
+]

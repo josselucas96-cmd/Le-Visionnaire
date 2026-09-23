@@ -1,0 +1,12 @@
+market_comment = [
+  "June reversed May. The S&P 500 lost 1.0% and the Nasdaq Composite 2.8%, while the Russell 2000 gained 3.7% — the largest index weights led the market down and the smaller end of it held up.",
+  "Inflation re-accelerated and the Federal Reserve's tone hardened. The month was a repricing of policy expectations rather than of company fundamentals, and it fell hardest on the long-duration end of the equity market.",
+  "Leadership rotated sharply: Industrials (+7.2%) and Health Care (+6.5%) led while Communication Services (-7.9%) and Energy (-5.1%) lagged. A quality book with mega-cap technology and consumer-internet weights sat on the wrong side of that rotation.",
+]
+
+mgmt_comment = [
+  "Le Bâtisseur closes June at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>. The first full month of the portfolio's life is also its worst relative month, and the explanation is composition rather than any single event.",
+  "<strong>Rebalance #1 (4 June).</strong> Ferrari was closed at $349.91 and the proceeds opened three positions: Broadcom at $411.73, ServiceNow at $121.41 and Mastercard at $477.67. The exit was a capital-allocation judgement rather than a view on the business: the same capital, on my thesis, compounds faster in the three names that replaced it.",
+  "<strong>Rebalance #2 and #3 (10 and 12 June).</strong> VICI Properties was sold at $28.45 to open CoStar at $34.63, moving a rate-sensitive income holding into a data franchise. ServiceNow was then added to at $98.80, eight days after opening it at $121.41 — a reinforcement into a 19% fall, on an unchanged thesis, which is the kind of decision that either compounds a mistake or compounds a conviction.",
+  "<strong>Attribution.</strong> Eli Lilly added 0.47pp and JPMorgan 0.40pp. Against them, Circle cost 0.87pp, Alibaba 0.85pp, Microsoft 0.74pp, Amazon 0.70pp and Meta 0.68pp. Realised volatility was 17.8% annualised with a beta of 0.38 — a low-beta book lost more than its benchmark, which means the shortfall came from stock selection and not from market exposure. That is the honest reading and it is the one to hold the portfolio to.",
+]

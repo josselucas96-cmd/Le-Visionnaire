@@ -1,0 +1,12 @@
+market_comment = [
+  "July broadened the market. The Dow added 0.32% and the equal-weighted S&P 500 1.1%, while the cap-weighted index slipped 0.13% and the Nasdaq Composite fell 3.20%. Capital left the largest technology weights and spread into the rest of the index.",
+  "Energy led with about 12.5% as another Iran ceasefire collapsed and oil rose; Financials added roughly 6%. Technology (-3.5%) and Industrials (-3.1%) were the weakest. For the first time this year the average company beat the index, and the equal-weighted S&P moved about 3% ahead of the cap-weighted one year-to-date.",
+  "Second-quarter earnings growth for the S&P 500 reached 37.9%, the highest since the third quarter of 2021. The de-rating of growth in July happened against improving, not deteriorating, fundamentals.",
+]
+
+mgmt_comment = [
+  "Le Bâtisseur closes July at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>, the portfolio's best month since inception. Cash at month-end: <strong>{cash_pct}%</strong>.",
+  "<strong>No trades.</strong> The book has been unchanged since the June rebalances. July required nothing: a market that pays for cash generation and capital discipline rather than for duration is the environment this portfolio was constructed for, and the right response to it was to hold.",
+  "<strong>Attribution.</strong> Constellation Software added 1.08pp, Microsoft 0.94pp, Alibaba 0.83pp, Amazon 0.77pp and MercadoLibre 0.52pp. The detractors were small: Intuitive Surgical cost 0.31pp and Eli Lilly 0.27pp. Amazon and Microsoft moved from June's largest detractors to July's contributors without anything being traded in between, which is the argument for leaving a quality book alone.",
+  "<strong>Risk.</strong> Realised volatility was 16.5% annualised and beta to the S&P 500 was 0.21. The portfolio produced its outperformance while taking materially less market risk than the index — the pattern the mandate is supposed to deliver, observed over one month and therefore not yet evidence of anything.",
+]

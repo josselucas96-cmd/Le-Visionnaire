@@ -1,0 +1,12 @@
+market_comment = [
+  "August was the strongest month of the year. The S&P 500 gained 2.7% and the Nasdaq 100 4.2%, its best August since 2021, and the S&P 500, the Dow, the Russell 2000 and the equal-weighted S&P 500 all set all-time highs during the month.",
+  "Technology led again, up 6.25% and responsible for more than three-quarters of the index's monthly return, while Energy added 7.0% and took its year-to-date advance to 44.2%. July's broadening did not reverse so much as make room for the largest weights to rejoin.",
+  "Yields rose throughout. The 10-year Treasury pushed above 4.75%, the highest since January 2025, and the 30-year approached 5.30%. Equity records were set against a rising discount rate, which is a tension that resolves one way or the other rather than persisting.",
+]
+
+mgmt_comment = [
+  "Le Bâtisseur closes August at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>. A second consecutive month ahead of the benchmark, by a narrower margin than July.",
+  "<strong>No trades.</strong> Nothing has been bought or sold since 12 June. Two and a half months of inactivity is the intended cadence for this mandate, not a lapse of attention.",
+  "<strong>Attribution.</strong> ServiceNow was the largest contributor at 0.89pp — the position opened on 4 June at $121.41 and added to on 12 June at $98.80. NVIDIA added 0.81pp, Circle 0.57pp and Constellation Software 0.44pp. Detractors stayed small: Amazon cost 0.26pp and Alibaba 0.25pp.",
+  "<strong>Risk.</strong> Realised volatility was 14.7% annualised with a beta of 0.83, noticeably higher than July's 0.21 — in a month led by the largest technology weights, a book that holds several of them will track the index more closely. The outperformance in August came with market risk attached, where July's did not, and that distinction matters more than the two headline numbers being both positive.",
+]

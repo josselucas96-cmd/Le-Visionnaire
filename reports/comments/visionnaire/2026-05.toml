@@ -1,0 +1,22 @@
+# Archive of the commentary published on 2026-06-08, copied verbatim from the
+# CONFIGS defaults so the May report regenerates identically instead of
+# rendering as a DRAFT. Do not edit to "improve" it: this is what was published.
+# Open point flagged 2026-09-23 — the second market bullet describes the May FOMC
+# tone as turning dovish with one cut priced into year-end. Contemporary sources
+# have the market moving the other way after the May inflation prints, to better
+# than even odds of a HIKE at the December meeting, with the 30-year above 5%.
+# If that is confirmed it is a correction to log in errata.toml, which is the
+# author's call and not a silent rewrite.
+
+market_comment = [
+  "May 2026 delivered a strong tape for US equities. The Nasdaq 100 led the rally on renewed enthusiasm for the AI capex cycle and a broadening of the Magnificent 7 outperformance into the second tier of large-cap tech.",
+  "The Fed kept rates unchanged but the tone of the May minutes turned slightly more dovish, with the median Committee member now signaling one cut into year-end and softer-than-expected core PCE giving markets confidence to reprice the long end lower.",
+  "Q1 earnings season closed with a positive-surprise ratio above historical averages. Guidance dispersion remains wide: AI infrastructure names lifted prints, while consumer discretionary continued to flag a more discerning end-customer.",
+]
+
+mgmt_comment = [
+  "Le Visionnaire closes May at <strong>+23.68% since inception</strong> (April 13), with a monthly performance of <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for the {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong> for the month. The portfolio's high-Beta exposure to the AI and consumer-growth themes captured the broad market tailwind. Cash at month-end: <strong>{cash_pct}%</strong>.",
+  "<strong>Rebalance #1 (May 14) — profit-taking on winners.</strong> Partial trims on TSLA (12% &rarr; 10%), AMD (7.6% &rarr; 5%), and RKLB (8% &rarr; 5%) to recycle capital into Celsius (CELH 7.2% &rarr; 10%) and Hims (HIMS 8.4% &rarr; 10%), both reinforced on unchanged fundamentals after price weakness. Cash rose to 14.2%.",
+  "<strong>Rebalance #2 (May 26) — cash deployment.</strong> Four pure additions on validated theses: Nu Holdings (4%, LatAm fintech), SoFi (4%, US neo-bank, GAAP-profitable since 2024), NIO (1%, tactical EV China), and Super Micro (1%, AI hardware sized small given the risk). Cash drawn down from 14.5% to 4.5%.",
+  "<strong>Construction discipline.</strong> The portfolio operates at the top of its position-count range (20 names including Moonshots) with no hard caps reached on any individual line. Conviction-driven sizing is being respected: NVDA, CELH, and HIMS sit at the largest weights, expressing the highest-confidence theses.",
+]

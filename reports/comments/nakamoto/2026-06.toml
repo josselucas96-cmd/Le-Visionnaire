@@ -1,0 +1,12 @@
+market_comment = [
+  "June was the month the digital asset treasury model broke down in public. US spot bitcoin ETFs lost $3.4 billion in a single week, the largest weekly redemption since the products launched in January 2024, followed by a thirteen-day outflow streak draining a further $4.4 billion.",
+  "Bitcoin fell from roughly $73,000 to the low $60,000s and touched a year-to-date low near $58,190, leaving it down about 30% on the year and roughly 50% below its October 2025 peak near $126,000. The month's decline of about 20% was its worst in four years.",
+  "The premium to net asset value disappeared for most of the sector. Strategy, which once traded at seven times the value of its holdings, ended the month at a discount of around 21%, and Metaplanet was down 42% year-to-date and 85% over twelve months. Once the ratio falls below one, issuing equity dilutes shareholders instead of adding bitcoin per share, and the engine that built these companies runs backwards.",
+]
+
+mgmt_comment = [
+  "Le Nakamoto closes June at <strong>{pf_mtd_pct}%</strong> versus <strong>{bench_mtd_pct}%</strong> for {bench_pri_lbl} — alpha of <strong>{alpha_mtd_pct}pp</strong>. Cash at month-end: <strong>{cash_pct}%</strong>. This is by a wide margin the worst month of any portfolio I run, and it needs to be stated plainly rather than contextualised away.",
+  "<strong>No trades.</strong> Nothing was sold. The portfolio holds no cash and no income overlay was activated, so there was nothing to redeploy and no defensive sleeve to rotate into — a structural choice made at inception that this month exposed.",
+  "<strong>Attribution.</strong> Strategy cost 11.48pp, Strive 7.04pp, Metaplanet 6.57pp, Capital B 2.40pp and H100 1.74pp. Every position finished the month lower. Realised volatility was 66.4% annualised with a beta of 1.22 to bitcoin.",
+  "<strong>What this month tests.</strong> The thesis is that operationally serious treasury companies compound bitcoin per share through a full cycle and that the market will eventually pay for that rather than for the premium mechanism alone. June is the cycle turning against every name at once, with no discrimination between the operators and the passive accumulators. If the selection framework has value, it has to show up in the recovery and not in the drawdown — and I am recording that expectation here, in advance, so it can be checked later.",
+]
