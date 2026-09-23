@@ -59,6 +59,19 @@ def wake_if_asleep(page) -> bool:
     return False
 
 
+def _remote_shas(n: int = 20) -> list:
+    """The last `n` commit hashes of origin/main, fetched fresh."""
+    import subprocess
+    try:
+        subprocess.run(["git", "fetch", "-q", "origin", "main"], check=True, timeout=60)
+        out = subprocess.run(["git", "rev-list", "-n", str(n), "origin/main"],
+                             check=True, capture_output=True, text=True, timeout=60)
+        return out.stdout.split()
+    except Exception as e:
+        print(f"(could not re-check origin/main: {e})", flush=True)
+        return []
+
+
 def main() -> int:
     print(f"visiting {APP_URL}", flush=True)
     with sync_playwright() as p:
@@ -83,6 +96,12 @@ def main() -> int:
             # (RECENT_SHAS is set by the workflow). A deploy lags a push by a few
             # minutes, never by ten commits — unless Streamlit stopped pulling.
             recent = os.environ.get("RECENT_SHAS", "").split()
+            if build and recent and not any(r.startswith(build) for r in recent):
+                # The checkout is a snapshot taken when the job started. A push
+                # landing in between deploys within a minute and then looks like
+                # drift (false alarm on 2026-09-23). Ask the remote before
+                # crying wolf: a red run nobody trusts is worse than no run.
+                recent = _remote_shas() or recent
             if build and recent and not any(r.startswith(build) for r in recent):
                 print(f"DEPLOY DRIFT: site runs build {build}, not among the last {len(recent)} commits of main "
                       f"-> Streamlit Cloud stopped following pushes. Fix: touch requirements.txt or Reboot app.", flush=True)
