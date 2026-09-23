@@ -29,9 +29,23 @@ def _sessions(start, n):
     return list(pd.bdate_range(start, periods=n))
 
 
+class _FakeTicker:
+    """Stands in for yf.Ticker: benchmarks are fetched with Ticker(t).history."""
+    answer = None
+
+    def __init__(self, ticker):
+        self.ticker = ticker
+
+    def history(self, **kwargs):
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
 def _patch(monkeypatch, frame):
     get_benchmark_index.clear()
-    monkeypatch.setattr(market.yf, "download", lambda *a, **k: frame)
+    monkeypatch.setattr(_FakeTicker, "answer", frame)
+    monkeypatch.setattr(market.yf, "Ticker", _FakeTicker)
 
 
 def test_normalises_on_the_anchor_close(monkeypatch):
@@ -85,12 +99,18 @@ def test_an_empty_answer_is_refused(monkeypatch):
 
 
 def test_a_download_that_raises_is_refused_not_swallowed(monkeypatch):
-    get_benchmark_index.clear()
-
-    def boom(*a, **k):
-        raise RuntimeError("429 Too Many Requests")
-
-    monkeypatch.setattr(market.yf, "download", boom)
+    _patch(monkeypatch, RuntimeError("429 Too Many Requests"))
     with pytest.raises(BenchmarkUnavailable) as e:
         get_benchmark_index("QQQ", ANCHOR)
     assert "429" in str(e.value)
+
+
+def test_benchmarks_never_go_through_yf_download(monkeypatch):
+    """yf.download is not thread-safe (see utils.market._YF_LOCK): the
+    benchmark, the figure that matters most, must not depend on it."""
+    def forbidden(*a, **k):
+        raise AssertionError("benchmark fetched with yf.download")
+
+    monkeypatch.setattr(market.yf, "download", forbidden)
+    _patch(monkeypatch, _frame(_sessions("2026-04-10", 40), [100.0] + [105.0] * 39))
+    assert get_benchmark_index("QQQ", ANCHOR).iloc[-1] - 100 == pytest.approx(5.0)

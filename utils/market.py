@@ -312,6 +312,18 @@ def get_fx_to_usd(currencies: tuple) -> dict:
 # Longest a page will wait for Yahoo on one call.
 YF_DEADLINE_S = 20
 
+# yf.download is not thread-safe: it gathers each call's results in
+# module-level dicts (yfinance.shared._DFS / _ERRORS) that the next call
+# resets. Streamlit serves every visitor from its own thread of one process,
+# so two pages loading at the same moment overwrite each other's downloads.
+# Measured on 2026-09-23: a 'SPY' download run alongside Le Bâtisseur's
+# holdings came back as Circle in six trials out of six, and the live page
+# published "S&P 500 -17.64%, alpha +19.00%" (Circle's return) where the
+# truth was +7.41% and -6.05%. The same collision produced the morning's
+# Nasdaq 100 anchored on 5 May, Le Bâtisseur's start date. Every download
+# made by the app goes through yf_download and therefore through this lock.
+_YF_LOCK = threading.Lock()
+
 
 def yf_download(*args, deadline: float | None = None, **kwargs):
     """yf.download with a hard deadline. Raises TimeoutError past it.
@@ -326,17 +338,43 @@ def yf_download(*args, deadline: float | None = None, **kwargs):
     the page moves on without that data (and the stray thread dies on its own
     request timeout, without blocking anything).
     """
-    deadline = YF_DEADLINE_S if deadline is None else deadline
     kwargs.setdefault("timeout", 10)
+    # yf.download collects its results in module-level dicts
+    # (yfinance.shared._DFS) with no lock: two calls running at the same time
+    # in one process overwrite each other's results. See _YF_LOCK.
+    return _with_deadline(lambda: yf.download(*args, **kwargs), deadline, lock=_YF_LOCK)
+
+
+def yf_ticker_history(ticker: str, deadline: float | None = None, **kwargs):
+    """Ticker(t).history(...) with the same hard deadline, and no lock.
+
+    Used for single instruments such as benchmarks. Unlike yf.download it does
+    not go through the shared module-level dicts: measured on 2026-09-23, it
+    returned the right series six times out of six while a 28-ticker
+    yf.download ran alongside. Keeping it off _YF_LOCK also means a stuck
+    holdings download can never hold up the benchmark, which is the figure
+    that matters most on the page.
+    """
+    return _with_deadline(lambda: yf.Ticker(ticker).history(**kwargs), deadline)
+
+
+def _with_deadline(fn, deadline: float | None, lock: "threading.Lock | None" = None):
+    deadline = YF_DEADLINE_S if deadline is None else deadline
     box: dict = {}
 
     def _run():
+        if lock is not None and not lock.acquire(timeout=deadline):
+            box["err"] = TimeoutError("another Yahoo download is still running")
+            return
         try:
-            box["df"] = yf.download(*args, **kwargs)
+            box["df"] = fn()
         except Exception as exc:          # surfaced to the caller below
             box["err"] = exc
+        finally:
+            if lock is not None:
+                lock.release()
 
-    worker = threading.Thread(target=_run, daemon=True, name="yf-download")
+    worker = threading.Thread(target=_run, daemon=True, name="yf-call")
     worker.start()
     worker.join(deadline)
     if worker.is_alive():
@@ -392,8 +430,7 @@ def get_benchmark_index(ticker: str, anchor: str, end: str | None = None):
     last_error = None
     for attempt in range(2):
         try:
-            raw = yf_download(ticker, start=start, end=end,
-                              auto_adjust=True, progress=False)
+            raw = yf_ticker_history(ticker, start=start, end=end, auto_adjust=True)
         except TimeoutError as exc:       # Yahoo is not answering: do not wait twice
             last_error = f"{ticker}: {exc}"
             break
@@ -405,8 +442,14 @@ def get_benchmark_index(ticker: str, anchor: str, end: str | None = None):
             continue
 
         s = raw["Close"]
-        if isinstance(s, pd.DataFrame):   # MultiIndex columns on a single ticker
-            s = s.iloc[:, 0]
+        if isinstance(s, pd.DataFrame):
+            # Take the column by name, never "the first one": a response that
+            # does not carry the requested ticker is someone else's data.
+            if ticker not in s.columns:
+                last_error = (f"{ticker}: response carried {list(s.columns)[:3]} "
+                              f"instead of the requested ticker")
+                continue
+            s = s[ticker]
         s = s.dropna()
         if s.empty:
             last_error = f"{ticker}: no close in response"
@@ -452,6 +495,9 @@ def _get_history_cached(tickers: tuple, start: str, benchmarks: tuple) -> pd.Dat
     # yfinance returns MultiIndex columns when multiple tickers
     if isinstance(raw.columns, pd.MultiIndex):
         raw = raw["Close"]
+        foreign = [c for c in raw.columns if c not in all_tickers]
+        if foreign:                       # another call's data: refuse it
+            raise RuntimeError(f"response carried unrequested tickers {foreign[:3]}")
     else:
         # Single ticker: raw is a DataFrame with OHLCV columns
         raw = raw[["Close"]].rename(columns={"Close": all_tickers[0]})
@@ -581,7 +627,7 @@ def get_total_return_factor(tickers: tuple, entry_dates: tuple, prices_at_entry:
                     result[ticker] = {"shares_factor": 1.0, "div_return_pct": 0.0}
                     continue
                 # Need price history for STRC on payment dates
-                hist = yf.download("STRC", start=entry_str, end=today_str,
+                hist = yf_download("STRC", start=entry_str, end=today_str,
                                    auto_adjust=True, progress=False)
                 if isinstance(hist.columns, pd.MultiIndex):
                     hist = hist["Close"]["STRC"]
@@ -618,7 +664,7 @@ def get_total_return_factor(tickers: tuple, entry_dates: tuple, prices_at_entry:
                 continue
 
             # Get price history for reinvestment pricing
-            hist = yf.download(ticker, start=entry_str, end=today_str,
+            hist = yf_download(ticker, start=entry_str, end=today_str,
                                auto_adjust=True, progress=False)
             if isinstance(hist.columns, pd.MultiIndex):
                 hist = hist["Close"][ticker]
