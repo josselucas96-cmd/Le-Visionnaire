@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 
 @st.cache_data(ttl=600)  # 10 min — cron writes daily, no need to refresh more often
@@ -305,6 +305,95 @@ def get_fx_to_usd(currencies: tuple) -> dict:
         except Exception:
             result[ccy] = None
     return result
+
+
+class BenchmarkUnavailable(RuntimeError):
+    """The benchmark price series does not cover the portfolio's base date.
+
+    Raised instead of returning a series that would be normalised on the wrong
+    day. See `get_benchmark_index`.
+    """
+
+
+# How far before the anchor we ask for data, so that a market holiday on the
+# anchor day still leaves a close to normalise on.
+BENCH_ANCHOR_BUFFER_DAYS = 12
+# Share of the business days between the first and last point a healthy series
+# must contain (holidays cost ~4%, a throttled response costs far more).
+BENCH_MIN_COVERAGE = 0.80
+
+
+@st.cache_data(ttl=3600)
+def get_benchmark_index(ticker: str, anchor: str, end: str | None = None):
+    """Base-100 index of one benchmark, anchored on the close of `anchor` (T-1).
+
+    Fetched on its own, NOT as a column of the holdings batch, and validated
+    before it is returned:
+
+      * the series must reach back to the anchor day (or the last close before
+        it, for a holiday);
+      * it must contain at least BENCH_MIN_COVERAGE of the business days it
+        spans.
+
+    Why this is not paranoia. Until 2026-09-23 the benchmark was read from the
+    same 20+ ticker `yf.download` as the holdings and normalised on whatever
+    row came first (`raw.iloc[0]`). Yahoo throttles those batches from cloud
+    IPs and answers with a truncated column; nothing said so. On that day the
+    live site anchored Le Visionnaire's Nasdaq 100 on 2026-05-05 instead of
+    2026-04-10 and published "Nasdaq 100 +9.02%, alpha +11.31%" where the truth
+    was +21.60% and -1.27%. A silently wrong alpha is the single worst number
+    this site can print, so an incomplete answer now raises and the page shows
+    no benchmark at all. st.cache_data does not memoise exceptions, so the
+    fetch is simply retried on the next run.
+    """
+    anchor_ts = pd.Timestamp(anchor)
+    start = (anchor_ts - pd.Timedelta(days=BENCH_ANCHOR_BUFFER_DAYS)).date().isoformat()
+    end = end or (date.today() + timedelta(days=1)).isoformat()
+
+    last_error = None
+    for attempt in range(2):
+        try:
+            raw = yf.download(ticker, start=start, end=end,
+                              auto_adjust=True, progress=False)
+        except Exception as exc:          # network / parsing failure
+            last_error = f"{ticker}: download failed ({exc})"
+            continue
+        if raw is None or raw.empty or "Close" not in raw:
+            last_error = f"{ticker}: empty response"
+            continue
+
+        s = raw["Close"]
+        if isinstance(s, pd.DataFrame):   # MultiIndex columns on a single ticker
+            s = s.iloc[:, 0]
+        s = s.dropna()
+        if s.empty:
+            last_error = f"{ticker}: no close in response"
+            continue
+        if getattr(s.index, "tz", None) is not None:
+            s.index = s.index.tz_localize(None)
+        s.index = pd.to_datetime(s.index.date)
+
+        at_or_before = s[s.index <= anchor_ts]
+        if at_or_before.empty:
+            last_error = (f"{ticker}: series starts {s.index[0].date()}, after the "
+                          f"base date {anchor_ts.date()}")
+            continue
+
+        base_date = at_or_before.index[-1]
+        base = float(at_or_before.iloc[-1])
+        if not base > 0:
+            last_error = f"{ticker}: non-positive close on {base_date.date()}"
+            continue
+
+        idx = s[s.index >= base_date] / base * 100.0
+        expected = len(pd.bdate_range(idx.index[0], idx.index[-1]))
+        if expected and len(idx) < BENCH_MIN_COVERAGE * expected:
+            last_error = (f"{ticker}: only {len(idx)} of ~{expected} sessions "
+                          f"returned between {idx.index[0].date()} and {idx.index[-1].date()}")
+            continue
+        return idx
+
+    raise BenchmarkUnavailable(last_error or f"{ticker}: unavailable")
 
 
 @st.cache_data(ttl=3600)  # Refresh every hour

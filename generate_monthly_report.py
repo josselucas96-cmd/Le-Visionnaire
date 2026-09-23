@@ -427,7 +427,17 @@ def generate_chart_b64(history, port_index, portfolio_name, benchmarks: list[tup
         s = history[ticker].dropna()
         if s.empty:
             continue
-        idx = s / s.iloc[0] * 100
+        # Anchor the benchmark on the portfolio's own base date. Normalising on
+        # s.iloc[0] silently rebased the line whenever Yahoo answered the batch
+        # download with a truncated column (see utils.market.get_benchmark_index
+        # and the 2026-09-23 incident): the PDF then showed a benchmark starting
+        # mid-chart at 100 and an inception return that was simply false.
+        base_slice = s[s.index <= port_index.index[0]]
+        if base_slice.empty:
+            print(f"  WARN: {ticker} has no close on or before {port_index.index[0].date()} "
+                  f"— benchmark line dropped from the chart rather than rebased.")
+            continue
+        idx = s[s.index >= base_slice.index[-1]] / float(base_slice.iloc[-1]) * 100
         ax.plot(idx.index, idx.values, color=grey_shades[i % 2], linewidth=1.3,
                 linestyle=style, label=label, zorder=2 - i)
 

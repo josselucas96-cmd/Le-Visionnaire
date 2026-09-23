@@ -4,6 +4,15 @@
 #         impact (what changed in published figures), status.
 
 [[entry]]
+date   = "2026-09-23"
+scope  = "Le Visionnaire"
+title  = "Benchmark compared from the wrong start date — alpha overstated by 12.6 points"
+what   = "The benchmark was read as one column of the same price download as the twenty holdings and rebased on the first row that download returned. When the data provider answered that batch with a truncated column — nothing in the response says so — the Nasdaq 100 was rebased on 5 May instead of 10 April, the portfolio's own start date. The page then showed 'Nasdaq 100 +9.02%, Alpha +11.31%' where the correct figures at the same date were +21.60% and -1.27%. Le Bâtisseur and Le Nakamoto were not affected."
+fix    = "Each benchmark is now downloaded on its own and validated before use: it must reach back to the portfolio's start date (or the last close before it, for a market holiday) and contain at least 80% of the sessions it spans. A benchmark that fails those checks is not displayed at all, and no alpha is shown, rather than a figure measured from the wrong day. Covered by regression tests."
+impact = "No change to any portfolio figure: NAV, returns, drawdown and volatility were unaffected. The published benchmark and alpha of Le Visionnaire were wrong on 23 September; correct values at 21 September are Nasdaq 100 +21.60% and alpha -1.27%."
+status = "closed"
+
+[[entry]]
 date   = "2026-09-21"
 scope  = "Le Bâtisseur"
 title  = "Two more rows rebuilt with a later book (9 and 11 June)"

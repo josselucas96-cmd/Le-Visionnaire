@@ -14,6 +14,8 @@ from utils.data import get_positions, get_setting, get_portfolio, get_cash_amoun
 from utils.market import (
     get_prices_from_db as get_prices,
     get_history,
+    get_benchmark_index,
+    BenchmarkUnavailable,
     get_total_return_factor_from_db as get_total_return_factor,
 )
 from utils.metrics import (
@@ -623,8 +625,7 @@ Always conduct your own due diligence before making any investment decision.
         return c.date().isoformat()
 
     chart_start = _previous_trading_day(inception_date)
-    benchmarks  = tuple(b for b in [bench_pri, bench_sec] if b)
-    history     = get_history(tickers, chart_start, benchmarks=benchmarks)
+    history     = get_history(tickers, chart_start, benchmarks=())
 
     # 1-year history for correlation (no benchmarks needed)
     corr_start   = (date.today() - timedelta(days=365)).isoformat()
@@ -641,19 +642,30 @@ Always conduct your own due diligence before making any investment decision.
         # ends yesterday: yf.download's `end` is exclusive) and, had it fired,
         # would have frozen intraday quotes into an immutable row whenever the
         # cron failed afterwards. Removed 2026-09-19.
-        if bench_pri and bench_pri in history.columns:
-            raw = history[bench_pri].dropna()
-            if not raw.empty:
-                primary_index = raw / raw.iloc[0] * 100
-                primary_perf  = round(primary_index.iloc[-1] - 100, 2)
-        if bench_sec and bench_sec in history.columns:
-            raw = history[bench_sec].dropna()
-            if not raw.empty:
-                secondary_index = raw / raw.iloc[0] * 100
-                secondary_perf  = round(secondary_index.iloc[-1] - 100, 2)
         last_updated = history.index[-1].strftime("%b %d, %Y")
     else:
         last_updated = "—"
+
+    # Benchmarks are fetched one by one and validated against the T-1 anchor
+    # (see get_benchmark_index). They are deliberately NOT read out of the
+    # holdings batch any more: Yahoo answers a throttled 20-ticker download
+    # with a silently truncated column, and normalising on its first row is
+    # what published "Nasdaq 100 +9.02%, alpha +11.31%" on 2026-09-23 when the
+    # truth was +21.60% and -1.27%. When a benchmark cannot be trusted the page
+    # now shows no benchmark and no alpha rather than a wrong one.
+    bench_error = None
+    if bench_pri:
+        try:
+            primary_index = get_benchmark_index(bench_pri, chart_start)
+            primary_perf  = round(float(primary_index.iloc[-1] - 100), 2)
+        except BenchmarkUnavailable as exc:
+            bench_error = str(exc)
+    if bench_sec:
+        try:
+            secondary_index = get_benchmark_index(bench_sec, chart_start)
+            secondary_perf  = round(float(secondary_index.iloc[-1] - 100), 2)
+        except BenchmarkUnavailable as exc:
+            bench_error = bench_error or str(exc)
 
     # Read NAV series from daily_holdings (real fund accounting).
     # The series naturally starts at 100 on T-1 (the CASH anchor row in DB).
@@ -697,7 +709,9 @@ Always conduct your own due diligence before making any investment decision.
         last_updated   = _port_last.strftime("%b %d, %Y")
         _data_age_days = (date.today() - _port_last.date()).days
 
-    alpha = round(portfolio_perf - (primary_perf or 0), 2)
+    # No benchmark, no alpha. `portfolio_perf - 0` would have printed the
+    # portfolio's own return in the Alpha box.
+    alpha = None if primary_perf is None else round(portfolio_perf - primary_perf, 2)
 
     _n_returns = len(port_index.pct_change().dropna()) if (port_index is not None and not port_index.empty) else 0
     _MIN_DAYS_STATS = 60
@@ -736,6 +750,14 @@ Always conduct your own due diligence before making any investment decision.
     # Never let the page look current when the pipeline is behind: a weekend
     # plus Monday morning is 3 days, anything beyond means the nightly
     # refresh has not written for at least one trading day.
+    if bench_error:
+        st.warning(
+            f"Benchmark data unavailable right now ({bench_error}). "
+            f"The benchmark and alpha are hidden rather than shown against the "
+            f"wrong base date; the portfolio figures are unaffected.",
+            icon="⚠️",
+        )
+
     if _data_age_days is not None and _data_age_days > 3:
         st.warning(
             f"Data as of {last_updated} — the nightly update is {_data_age_days} days behind. "
@@ -752,8 +774,11 @@ Always conduct your own due diligence before making any investment decision.
         st.metric(f"{bench_pri_lbl} (inception)",
                   f"{s}{primary_perf:.2f}%" if primary_perf is not None else "—")
     with metric_cols[2]:
-        a = "+" if alpha >= 0 else ""
-        st.metric("Alpha", f"{a}{alpha:.2f}%")
+        if alpha is None:
+            st.metric("Alpha", "—")
+        else:
+            a = "+" if alpha >= 0 else ""
+            st.metric("Alpha", f"{a}{alpha:.2f}%")
     with metric_cols[3]:
         today_valid = [p for p in positions if p["change_today"] is not None]
         if today_valid:

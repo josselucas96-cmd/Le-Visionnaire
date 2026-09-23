@@ -14,7 +14,7 @@ import streamlit as st
 
 from utils import SPECULA_ICON
 from utils.data import get_portfolios, get_positions, get_transactions
-from utils.market import get_history
+from utils.market import get_benchmark_index, BenchmarkUnavailable
 from utils.nav import render_nav
 from utils.moves import BOTH, BUY, SELL, batch_numbers, count_trades, group_moves_by_date
 from utils.nav_history import get_nav_from_holdings
@@ -116,14 +116,14 @@ st.markdown(f'<div class="mv-sub">{_head}{_body}</div>', unsafe_allow_html=True)
 port_index = get_nav_from_holdings(pid)
 bench = pf.get("benchmark_primary")
 bench_lbl = pf.get("benchmark_primary_label") or bench or ""
-history = pd.DataFrame()
-if bench and port_index is not None and not port_index.empty:
-    history = get_history((), port_index.index[0].strftime("%Y-%m-%d"), benchmarks=(bench,))
 bench_index = None
-if not history.empty and bench in history.columns:
-    raw = history[bench].dropna()
-    if not raw.empty:
-        bench_index = raw / raw.iloc[0] * 100
+if bench and port_index is not None and not port_index.empty:
+    # Anchored and validated against the portfolio's base date — never
+    # normalised on whatever row a throttled Yahoo answer happens to start on.
+    try:
+        bench_index = get_benchmark_index(bench, port_index.index[0].strftime("%Y-%m-%d"))
+    except BenchmarkUnavailable:
+        bench_index = None
 if port_index is not None and not port_index.empty:
     port_index = align_to_equity_calendar(port_index, bench_index, None)
     if bench_index is not None:

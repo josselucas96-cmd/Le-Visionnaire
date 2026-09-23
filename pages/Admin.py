@@ -166,7 +166,8 @@ st.divider()
 # ── Performance snapshot (uses the same render fn as the public pages) ────────
 with st.expander("Performance", expanded=False):
     from utils.portfolio import render_performance_chart_section
-    from utils.market import get_history, get_prices_from_db as _get_prices
+    from utils.market import (get_history, get_benchmark_index, BenchmarkUnavailable,
+                              get_prices_from_db as _get_prices)
     from utils.theme import PORTFOLIO_LINE
 
     _positions_perf = get_positions(portfolio_id=_pid)
@@ -195,22 +196,21 @@ with st.expander("Performance", expanded=False):
                 c -= pd.Timedelta(days=1)
             return c.date().isoformat()
         _chart_start = _prev_trading_day(_inception)
-        _bench_tickers = tuple(b for b in (_bench_pri, _bench_sec) if b)
-        _history = get_history(_tickers_perf + _bench_tickers, _chart_start)
-
         _primary_index = None
         _primary_perf = None
         _secondary_index = None
-        if not _history.empty:
-            if _bench_pri and _bench_pri in _history.columns:
-                _raw = _history[_bench_pri].dropna()
-                if not _raw.empty:
-                    _primary_index = _raw / _raw.iloc[0] * 100
-                    _primary_perf = round(_primary_index.iloc[-1] - 100, 2)
-            if _bench_sec and _bench_sec in _history.columns:
-                _raw = _history[_bench_sec].dropna()
-                if not _raw.empty:
-                    _secondary_index = _raw / _raw.iloc[0] * 100
+        # Same validated anchor as the public pages (utils.market).
+        if _bench_pri:
+            try:
+                _primary_index = get_benchmark_index(_bench_pri, _chart_start)
+                _primary_perf = round(float(_primary_index.iloc[-1] - 100), 2)
+            except BenchmarkUnavailable as _exc:
+                st.warning(f"Benchmark unavailable: {_exc}", icon="⚠️")
+        if _bench_sec:
+            try:
+                _secondary_index = get_benchmark_index(_bench_sec, _chart_start)
+            except BenchmarkUnavailable:
+                _secondary_index = None
 
         _port_index = get_nav_from_holdings(_pid)
         # Trim port_index to benchmark end date (same as public)
