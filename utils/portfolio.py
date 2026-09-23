@@ -25,6 +25,7 @@ from utils.metrics import (
     monthly_returns_table,
 )
 from utils.nav_history import get_nav_from_holdings
+from utils.line_returns import adjusted_returns
 from utils.research import get_research
 from utils.nav import render_nav
 from utils.theme import (
@@ -587,6 +588,12 @@ Always conduct your own due diligence before making any investment decision.
             p["price_return"] = None
             p["div_return"]   = None
 
+    # Return including what was realised on partial sales ("—" for lines that
+    # were only ever bought: their figure equals Return %). See utils.line_returns.
+    _adj = adjusted_returns(portfolio_id, positions)
+    for p in positions:
+        p["adj_return"] = _adj.get(p["ticker"])
+
     valid   = [p for p in positions if p["perf_pct"] is not None]
     total_w = sum(p["weight"] for p in valid) or 1
     portfolio_perf = sum(p["weight"] * p["perf_pct"] / total_w for p in valid)
@@ -812,7 +819,7 @@ Always conduct your own due diligence before making any investment decision.
         df = df.sort_values("current_weight", ascending=False)
         _display_cols = [
             "ticker", "name", "layer", "current_weight", "entry_price", "current_price",
-            "perf_pct", "change_today",
+            "perf_pct", "adj_return", "change_today",
             "sector", "geography", "thematic", "thesis_short",
         ]
         if not show_layer_column:
@@ -825,6 +832,7 @@ Always conduct your own due diligence before making any investment decision.
             "entry_price":    "PRU",
             "current_price":  "Price",
             "perf_pct":       "Return %",
+            "adj_return":     "Adj. Return %",
             "change_today":   "Today %",
             "sector":         "Sector",
             "geography":      "Geography",
@@ -843,24 +851,19 @@ Always conduct your own due diligence before making any investment decision.
                 else "" for v in col
             ]
 
-        _numeric_cols = {"Alloc.", "PRU", "Price", "Return %", "Today %"}
-        empty_row = pd.DataFrame([{
-            c: None if c in _numeric_cols else "" for c in display.columns
-        }])
-        _cash_row = {
-            "Ticker": "CASH", "Name": "Cash USD",
-            "Alloc.": current_cash_pct,
-            "PRU": None, "Price": None,
-            "Return %": None, "Today %": None,
-            "Sector": "—", "Geography": "USD", "Thematic": "—",
-        }
-        if show_layer_column:
-            _cash_row["Layer"] = "Cash"
-        cash_row_table = pd.DataFrame([_cash_row])
-        display_full = pd.concat([display, empty_row, cash_row_table], ignore_index=True)
+        # The spacer and CASH rows are no longer part of the table: st.dataframe
+        # prints "None" in every empty numeric cell, and a visitor sorting a
+        # column sent CASH into the middle of the positions. Cash is stated in
+        # the caption right below the table.
+        display_full = display.reset_index(drop=True)
 
-        # na_rep: pandas skips the formatter on None/NaN cells, so without it the
-        # spacer row and the CASH row rendered a literal "None" on the public page.
+        # st.dataframe prints any missing number as a literal "None", whatever
+        # the Styler's na_rep says. Adj. Return % is empty for most lines by
+        # design, so it is rendered as text: "—" where there is nothing to add.
+        if "Adj. Return %" in display_full.columns:
+            display_full["Adj. Return %"] = display_full["Adj. Return %"].map(
+                lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) and v == v else "—")
+
         styled = display_full.style.format({
             "Alloc.":       lambda v: f"{v:.2f}%" if isinstance(v, (int, float)) else "",
             "PRU":          lambda v: f"{v:.2f}" if isinstance(v, (int, float)) else "—",
@@ -868,10 +871,27 @@ Always conduct your own due diligence before making any investment decision.
             "Return %": lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
             "Today %":      lambda v: f"{v:+.2f}%" if isinstance(v, (int, float)) else "—",
         }, na_rep="—").apply(color_signed, subset=["Return %", "Today %"])
+        if "Adj. Return %" in display_full.columns:
+            styled = styled.apply(lambda col: [
+                f"color: {POSITIVE}" if str(v).startswith("+")
+                else f"color: {NEGATIVE}" if str(v).startswith("-")
+                else "" for v in col], subset=["Adj. Return %"])
 
-        table_height = 38 + (len(display) + 3) * 35
-        st.dataframe(styled, width="stretch", hide_index=True, height=table_height)
+        table_height = 38 + len(display) * 35 + 4
+        _col_cfg = {}
+        try:   # right-align the text column like the numbers; skip on older Streamlit
+            import inspect as _inspect
+            if "alignment" in _inspect.signature(st.column_config.TextColumn).parameters:
+                _col_cfg["Adj. Return %"] = st.column_config.TextColumn(alignment="right")
+        except Exception:
+            pass
+        st.dataframe(styled, width="stretch", hide_index=True, height=table_height,
+                     column_config=_col_cfg or None)
         st.caption(f"Cash / Equivalent — Current: {current_cash_pct:.1f}%")
+        if display["Adj. Return %"].notna().any() if "Adj. Return %" in display.columns else False:
+            st.caption("Adj. Return %: return on all the capital invested in the position, "
+                       "including gains or losses realised on partial sales. Shown only for "
+                       "positions that were reduced; for the others it equals Return %.")
 
         # Research teaser (optional)
         if show_research_teaser:
