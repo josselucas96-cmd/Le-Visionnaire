@@ -362,6 +362,28 @@ def fetch_holdings_window(portfolio_id: str, start_date: str, end_date: str) -> 
         offset += PAGE
 
 
+# Share-count ratios a corporate action produces. A trade lands on these only
+# by coincidence, and the value test below separates the two cases anyway.
+SPLIT_RATIOS = (2, 3, 4, 5, 6, 8, 10, 20, 25, 50, 100)
+
+
+def _looks_like_split(share_ratio: float, value_ratio: float) -> bool:
+    """True when the share count changed by a whole factor and the position's
+    value did not: a corporate action, not money moving in or out.
+
+    Both conditions are needed. Doubling a position is also a share ratio of 2,
+    but it doubles the value, so the value test rejects it. And testing only
+    that value is preserved is not enough either: Capital B's 10-for-1 reverse
+    split landed on a day the stock fell 7.2%, which a tolerance tight enough to
+    be safe would have read as a sale of 117,614 shares — it credited the line
+    with +112pp of a +45% month in the first run of the August report.
+    """
+    if abs(value_ratio - 1.0) > 0.30:        # a day's move on a volatile name
+        return False
+    return any(abs(share_ratio - r) / r < 0.02 or abs(share_ratio - 1.0 / r) * r < 0.02
+               for r in SPLIT_RATIOS)
+
+
 def compute_mtd_attribution(positions: list, portfolio_id: str, report_date: str) -> None:
     """Adds p['perf_mtd_pct'] and p['contribution_mtd'] (in pp of NAV start) to
     each position in-place, read from the ledger and nothing else.
@@ -401,6 +423,24 @@ def compute_mtd_attribution(positions: list, portfolio_id: str, report_date: str
             continue
         by_ticker.setdefault(r["ticker"], []).append(r)
 
+    def line_pnl(series: list) -> tuple[float, float]:
+        """(P&L in dollars, cumulative split factor) for one line over the window."""
+        flow = 0.0            # money put into (or taken out of) the line
+        split_factor = 1.0    # cumulative share multiplier from corporate actions
+        for prev, cur in zip(series, series[1:]):
+            s0, s1 = float(prev["shares"] or 0), float(cur["shares"] or 0)
+            p0, p1 = float(prev["price"] or 0), float(cur["price"] or 0)
+            if s0 <= 0 or p0 <= 0 or abs(s1 - s0) < 1e-9:
+                continue
+            if _looks_like_split(s1 / s0, (s1 * p1) / (s0 * p0)):
+                split_factor *= s1 / s0
+            else:
+                flow += (s1 - s0) * p1
+        v_end = float(series[-1]["value"]) if series[-1]["date"] == report_date else 0.0
+        if series[-1]["date"] != report_date:
+            flow -= float(series[-1]["value"])        # the line was sold out
+        return v_end - float(series[0]["value"]) - flow, split_factor
+
     for p in positions:
         series = sorted(by_ticker.get(p["ticker"], []), key=lambda r: r["date"])
         if len(series) < 2 or series[-1]["date"] != report_date:
@@ -408,26 +448,30 @@ def compute_mtd_attribution(positions: list, portfolio_id: str, report_date: str
             p["contribution_mtd"] = None
             continue
 
-        flow = 0.0            # cash put into (or taken out of) the line this month
-        split_factor = 1.0    # cumulative share multiplier from corporate actions
-        for prev, cur in zip(series, series[1:]):
-            s0, s1 = float(prev["shares"] or 0), float(cur["shares"] or 0)
-            p0, p1 = float(prev["price"] or 0), float(cur["price"] or 0)
-            if s0 <= 0 or p0 <= 0 or abs(s1 - s0) < 1e-9:
-                continue
-            if abs((s1 / s0) * (p1 / p0) - 1.0) < 0.05:
-                split_factor *= s1 / s0          # shares up, price down: no money moved
-            else:
-                flow += (s1 - s0) * p1
-
-        v_start, v_end = float(series[0]["value"]), float(series[-1]["value"])
-        p["contribution_mtd"] = round((v_end - v_start - flow) / nav_start * 100, 3)
+        pnl, split_factor = line_pnl(series)
+        p["contribution_mtd"] = round(pnl / nav_start * 100, 3)
 
         # A 1:10 split multiplies the share count and divides the price, so the
         # month-start price has to be put on the post-split basis to compare.
         p_start = float(series[0]["price"]) / split_factor
         p_end = float(series[-1]["price"])
         p["perf_mtd_pct"] = round((p_end / p_start - 1) * 100, 2) if p_start > 0 else None
+
+    # Reconciliation. Summed over every line the book held during the month —
+    # including the ones sold out, which no longer appear in the table — the
+    # contributions must add up to the NAV's own move. Both attribution bugs
+    # found on 2026-09-23 would have failed this check loudly instead of
+    # printing a plausible-looking table.
+    nav_by_date: dict[str, float] = {}
+    for r in rows:
+        nav_by_date[r["date"]] = nav_by_date.get(r["date"], 0.0) + float(r["value"] or 0)
+    if month_start in nav_by_date and report_date in nav_by_date:
+        moved = (nav_by_date[report_date] - nav_by_date[month_start]) / nav_start * 100
+        total = sum(line_pnl(sorted(s, key=lambda r: r["date"]))[0]
+                    for s in by_ticker.values() if len(s) >= 2) / nav_start * 100
+        if abs(total - moved) > 1.0:
+            print(f"  WARN: contributions add up to {total:+.2f}pp but the NAV moved "
+                  f"{moved:+.2f}pp — attribution does not reconcile.", flush=True)
 
 
 def aggregate_alloc(positions: list, key: str, cash_pct: float) -> list[tuple[str, float]]:
