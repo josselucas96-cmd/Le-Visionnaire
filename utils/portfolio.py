@@ -625,26 +625,25 @@ Always conduct your own due diligence before making any investment decision.
         return c.date().isoformat()
 
     chart_start = _previous_trading_day(inception_date)
-    history     = get_history(tickers, chart_start, benchmarks=())
 
-    # 1-year history for correlation (no benchmarks needed)
+    # One live download per page, for the correlation matrix only: prices,
+    # NAV and returns come from the ledger, benchmarks from get_benchmark_index.
+    # The "since inception" view is a slice of the same frame. (Until
+    # 2026-09-23 a second 28-ticker download from inception ran here as well;
+    # it was only still used for that slice, and it is the call that left Le
+    # Bâtisseur's page spinning for minutes on Streamlit Cloud.)
     corr_start   = (date.today() - timedelta(days=365)).isoformat()
     history_corr = get_history(tickers, corr_start, benchmarks=())
+    history = (history_corr[history_corr.index >= pd.Timestamp(chart_start)]
+               if not history_corr.empty else history_corr)
 
     # Build portfolio index + benchmark indices (parameterized)
     primary_perf   = None
     primary_index  = None
     secondary_perf = None
     secondary_index = None
-    if not history.empty:
-        # daily_holdings is written ONLY by the nightly cron (daily_refresh.py).
-        # The former visitor-triggered lazy_write_holdings never fired (history
-        # ends yesterday: yf.download's `end` is exclusive) and, had it fired,
-        # would have frozen intraday quotes into an immutable row whenever the
-        # cron failed afterwards. Removed 2026-09-19.
-        last_updated = history.index[-1].strftime("%b %d, %Y")
-    else:
-        last_updated = "—"
+    # "Last updated" is the date of the ledger's last row, set further down.
+    last_updated = "—"
 
     # Benchmarks are fetched one by one and validated against the T-1 anchor
     # (see get_benchmark_index). They are deliberately NOT read out of the

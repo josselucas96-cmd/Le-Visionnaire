@@ -1,3 +1,5 @@
+import threading
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -307,6 +309,43 @@ def get_fx_to_usd(currencies: tuple) -> dict:
     return result
 
 
+# Longest a page will wait for Yahoo on one call.
+YF_DEADLINE_S = 20
+
+
+def yf_download(*args, deadline: float | None = None, **kwargs):
+    """yf.download with a hard deadline. Raises TimeoutError past it.
+
+    A public page must never wait on Yahoo without limit. On 2026-09-23 Le
+    Bâtisseur's page sat on "Running get_history(...)" for more than five
+    minutes on Streamlit Cloud, while the same 28-ticker download took about a
+    second from any other machine: Yahoo throttles the shared cloud IP and
+    yfinance keeps retrying. Worse, st.cache_data serialises concurrent calls
+    with the same arguments, so one stuck download kept every visitor waiting
+    behind it. The call now runs in its own daemon thread; past the deadline
+    the page moves on without that data (and the stray thread dies on its own
+    request timeout, without blocking anything).
+    """
+    deadline = YF_DEADLINE_S if deadline is None else deadline
+    kwargs.setdefault("timeout", 10)
+    box: dict = {}
+
+    def _run():
+        try:
+            box["df"] = yf.download(*args, **kwargs)
+        except Exception as exc:          # surfaced to the caller below
+            box["err"] = exc
+
+    worker = threading.Thread(target=_run, daemon=True, name="yf-download")
+    worker.start()
+    worker.join(deadline)
+    if worker.is_alive():
+        raise TimeoutError(f"no answer from Yahoo within {deadline:.0f}s")
+    if "err" in box:
+        raise box["err"]
+    return box.get("df")
+
+
 class BenchmarkUnavailable(RuntimeError):
     """The benchmark price series does not cover the portfolio's base date.
 
@@ -353,8 +392,11 @@ def get_benchmark_index(ticker: str, anchor: str, end: str | None = None):
     last_error = None
     for attempt in range(2):
         try:
-            raw = yf.download(ticker, start=start, end=end,
+            raw = yf_download(ticker, start=start, end=end,
                               auto_adjust=True, progress=False)
+        except TimeoutError as exc:       # Yahoo is not answering: do not wait twice
+            last_error = f"{ticker}: {exc}"
+            break
         except Exception as exc:          # network / parsing failure
             last_error = f"{ticker}: download failed ({exc})"
             continue
@@ -397,36 +439,47 @@ def get_benchmark_index(ticker: str, anchor: str, end: str | None = None):
 
 
 @st.cache_data(ttl=3600)  # Refresh every hour
+def _get_history_cached(tickers: tuple, start: str, benchmarks: tuple) -> pd.DataFrame:
+    """The download itself. Raises on failure so that st.cache_data does not
+    memoise an empty frame for an hour (see get_history)."""
+    end = datetime.today().strftime("%Y-%m-%d")
+    all_tickers = list(set(list(tickers) + list(benchmarks)))
+
+    raw = yf_download(all_tickers, start=start, end=end, auto_adjust=True, progress=False)
+    if raw is None or raw.empty:
+        raise RuntimeError("empty response")
+
+    # yfinance returns MultiIndex columns when multiple tickers
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw = raw["Close"]
+    else:
+        # Single ticker: raw is a DataFrame with OHLCV columns
+        raw = raw[["Close"]].rename(columns={"Close": all_tickers[0]})
+
+    # Normalize index to date-only (strip timezone + time component)
+    if raw.index.tz is not None:
+        raw.index = raw.index.tz_localize(None)
+    raw.index = pd.to_datetime(raw.index.date)
+    return raw.dropna(how="all")
+
+
 def get_history(tickers: tuple, start: str, benchmarks: tuple = ("SPY", "QQQ")) -> pd.DataFrame:
     """
     Daily closing prices for tickers + benchmarks from start to today.
-    Returns a DataFrame with tickers as columns, date as index.
-    Missing tickers are silently dropped.
+    Returns a DataFrame with tickers as columns, date as index, or an empty
+    DataFrame when Yahoo does not answer in time. Missing tickers are silently
+    dropped.
 
     `benchmarks` defaults to ('SPY', 'QQQ') for backwards compat (Visionnaire).
     Pass ('BTC-USD', 'MSTR') for Le Nakamoto, etc.
     """
-    end = datetime.today().strftime("%Y-%m-%d")
-    all_tickers = list(set(list(tickers) + list(benchmarks)))
-
     try:
-        raw = yf.download(all_tickers, start=start, end=end,
-                          auto_adjust=True, progress=False)
-
-        # yfinance returns MultiIndex columns when multiple tickers
-        if isinstance(raw.columns, pd.MultiIndex):
-            raw = raw["Close"]
-        else:
-            # Single ticker: raw is a DataFrame with OHLCV columns
-            raw = raw[["Close"]].rename(columns={"Close": all_tickers[0]})
-
-        # Normalize index to date-only (strip timezone + time component)
-        if raw.index.tz is not None:
-            raw.index = raw.index.tz_localize(None)
-        raw.index = pd.to_datetime(raw.index.date)
-        return raw.dropna(how="all")
+        return _get_history_cached(tickers, start, benchmarks)
     except Exception:
         return pd.DataFrame()
+
+
+get_history.clear = _get_history_cached.clear   # callers used to clear the cache directly
 
 
 # STRC monthly dividend schedule: ~$0.9583/share on the last business day of each month
