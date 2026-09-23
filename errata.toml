@@ -14,11 +14,11 @@ status = "open"
 
 [[entry]]
 date   = "2026-09-23"
-scope  = "Le Visionnaire"
-title  = "Benchmark compared from the wrong start date — alpha overstated by 12.6 points"
-what   = "The benchmark was read as one column of the same price download as the twenty holdings and rebased on the first row that download returned. When the data provider answered that batch with a truncated column — nothing in the response says so — the Nasdaq 100 was rebased on 5 May instead of 10 April, the portfolio's own start date. The page then showed 'Nasdaq 100 +9.02%, Alpha +11.31%' where the correct figures at the same date were +21.60% and -1.27%. The same flaw applied to every page; the error was observed on Le Visionnaire, whose benchmark and alpha were the ones published wrong."
-fix    = "Each benchmark is now downloaded on its own and validated before use: it must reach back to the portfolio's start date (or the last close before it, for a market holiday) and contain at least 80% of the sessions it spans. A benchmark that fails those checks is not displayed at all, and no alpha is shown, rather than a figure measured from the wrong day. Covered by regression tests."
-impact = "No change to any portfolio figure: NAV, returns, drawdown and volatility were unaffected. The published benchmark and alpha of Le Visionnaire were wrong on 23 September; correct values at 21 September are Nasdaq 100 +21.60% and alpha -1.27%."
+scope  = "All portfolios"
+title  = "Benchmark data swapped between pages loading at the same time"
+what   = "The library used to download market prices stores the results of each download in a place shared by the whole application, without protection. When two pages were opened at the same moment, one of them could receive the other's data. On 23 September this produced three wrong benchmarks. In the morning, the Nasdaq 100 on Le Visionnaire was measured from 5 May, which is Le Bâtisseur's start date, instead of 10 April, and the page showed an alpha of +11.31%. In the afternoon, Le Bâtisseur displayed the return of Circle, one of its holdings, as the return of the S&P 500 (-17.64%, alpha +19.00%), and Le Nakamoto displayed the return of one of its holdings as the return of Bitcoin (-29.96%, alpha +41.70%). The flaw had existed since launch but only appears when two pages load simultaneously. It was initially attributed to an incomplete response from the data provider; that diagnosis was wrong."
+fix    = "Benchmarks are now fetched with a method that does not use the shared storage, checked under concurrent load. All other downloads run one at a time, and any response that contains a security that was not requested is rejected. A benchmark must also reach back to the portfolio's start date and cover at least 80% of the trading sessions in the period, otherwise the page shows no benchmark and no alpha. Covered by regression tests."
+impact = "No portfolio figure was affected: net asset value, returns, drawdown and volatility were correct throughout. Only the displayed benchmark return and alpha were wrong, for part of 23 September. Correct values at 21 September: Le Visionnaire +25.10% against +21.60% for the Nasdaq 100 (alpha +3.50%), Le Bâtisseur +1.36% against +7.41% for the S&P 500 (alpha -6.05%), Le Nakamoto +11.74% against +8.00% for Bitcoin (alpha +3.74%)."
 status = "closed"
 
 [[entry]]
