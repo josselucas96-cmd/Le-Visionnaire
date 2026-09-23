@@ -256,3 +256,62 @@ def test_an_old_weekday_without_a_close_is_a_holiday(monkeypatch):
     monkeypatch.setattr(dr, "fetch_close_price", _probe("2026-11-25"))
     published, _ = dr.session_close_published("2026-11-26", _at("2026-11-30T00:11"))
     assert published is False
+
+
+# ── Filling holes is not enough: a wrong row must be found again ─────────────
+def _holdings(rows):
+    return {"daily_holdings": [
+        {"portfolio_id": p, "date": d, "ticker": t, "price": px, "value": v}
+        for p, d, t, px, v in rows]}
+
+
+def _yahoo(closes):
+    """A yfinance daily frame: {date: close}."""
+    import pandas as pd
+    idx = pd.to_datetime(list(closes))
+    return pd.DataFrame({"Close": list(closes.values())}, index=idx)
+
+
+def test_a_row_priced_on_another_session_is_found(monkeypatch, fake_sb):
+    """21 Sept written with 18 Sept's closes — the shape of the real incident."""
+    sb = fake_sb(_holdings([
+        ("visionnaire", "2026-09-21", "NVDA", 222.27, 143377.0),
+        ("visionnaire", "2026-09-21", "CASH", 1.0, 54456.0),
+    ]))
+    monkeypatch.setattr(dr, "session_close_published", lambda d, *a: (True, d))
+    monkeypatch.setattr(dr.yf, "download", lambda *a, **k: _yahoo({"2026-09-21": 227.38}))
+
+    stale = dr.find_stale_rows(sb, ["visionnaire"], "2026-09-22", lookback_days=1)
+
+    assert [(s["portfolio"], s["date"], s["probe"]) for s in stale] == [
+        ("visionnaire", "2026-09-21", "NVDA")]
+    assert stale[0]["written"] == 222.27 and stale[0]["actual"] == 227.38
+
+
+def test_a_correctly_priced_row_is_left_alone(monkeypatch, fake_sb):
+    sb = fake_sb(_holdings([("visionnaire", "2026-09-21", "NVDA", 227.38, 146673.0)]))
+    monkeypatch.setattr(dr, "session_close_published", lambda d, *a: (True, d))
+    monkeypatch.setattr(dr.yf, "download", lambda *a, **k: _yahoo({"2026-09-21": 227.38}))
+
+    assert dr.find_stale_rows(sb, ["visionnaire"], "2026-09-22", lookback_days=1) == []
+
+
+def test_a_day_whose_close_is_unpublished_is_not_repriced(monkeypatch, fake_sb):
+    """No second-guessing a session the provider has not closed yet."""
+    sb = fake_sb(_holdings([("visionnaire", "2026-09-22", "NVDA", 227.38, 146673.0)]))
+    monkeypatch.setattr(dr, "session_close_published", lambda d, *a: (None, "2026-09-21"))
+
+    def no_call(*a, **k):
+        raise AssertionError("should not have downloaded anything")
+
+    monkeypatch.setattr(dr.yf, "download", no_call)
+    assert dr.find_stale_rows(sb, ["visionnaire"], "2026-09-23", lookback_days=1) == []
+
+
+def test_weekend_rows_are_never_flagged(monkeypatch, fake_sb):
+    """Saturday legitimately carries Friday's close."""
+    sb = fake_sb(_holdings([("visionnaire", "2026-09-19", "NVDA", 222.27, 143377.0)]))
+    monkeypatch.setattr(dr, "session_close_published", lambda d, *a: (True, d))
+    monkeypatch.setattr(dr.yf, "download", lambda *a, **k: _yahoo({"2026-09-19": 999.0}))
+
+    assert dr.find_stale_rows(sb, ["visionnaire"], "2026-09-20", lookback_days=1) == []

@@ -606,6 +606,91 @@ def session_close_published(target_date_str: str, now_utc=None) -> tuple[bool, s
     return None, ref_date                           # trading day, data not in yet
 
 
+def find_stale_rows(sb, portfolio_ids: list[str], target_date_str: str,
+                    lookback_days: int = 3) -> list[dict]:
+    """Recent rows whose prices do not belong to their own session.
+
+    `backfill_recent_gaps` only fills holes; it never re-reads a row that
+    exists. That is why the 21 and 22 September rows, written with the previous
+    session's closes while the provider was publishing late, would have stayed
+    wrong for ever — nothing ever looked at them again.
+
+    So each run re-prices the last `lookback_days` rows of every portfolio
+    against the actual close of their own session. Deliberately narrow:
+
+      * weekends are skipped — they legitimately carry Friday forward;
+      * a day whose close is still unpublished is left alone;
+      * only the largest US-listed position is probed, one download per
+        portfolio, so the check costs about four requests a night.
+
+    Returns the (portfolio, date) pairs that need rewriting.
+    """
+    from datetime import datetime, timedelta
+    import pandas as pd
+
+    target = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    dates = [(target - timedelta(days=k)).isoformat() for k in range(lookback_days, 0, -1)]
+    dates = [d for d in dates if datetime.strptime(d, "%Y-%m-%d").weekday() < 5]
+    dates = [d for d in dates if session_close_published(d)[0] is True]
+    if not dates:
+        return []
+
+    stale = []
+    for pid in portfolio_ids:
+        rows = (sb.table("daily_holdings").select("date,ticker,price,value")
+                .eq("portfolio_id", pid).gte("date", dates[0]).lte("date", dates[-1])
+                .execute().data)
+        usable = [r for r in rows
+                  if r["ticker"] != "CASH" and "." not in r["ticker"] and r.get("price")]
+        if not usable:
+            continue
+        probe = max(usable, key=lambda r: float(r["value"]))["ticker"]
+        end = (datetime.strptime(dates[-1], "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        try:
+            hist = yf.download(probe, start=dates[0], end=end, progress=False, auto_adjust=False)
+            close = hist["Close"]
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            close = close.dropna()
+            close.index = pd.to_datetime(close.index.date)
+        except Exception as e:
+            print(f"  [{pid}] could not re-price {probe}: {e}", flush=True)
+            continue
+
+        written = {r["date"]: float(r["price"]) for r in rows if r["ticker"] == probe}
+        for d in dates:
+            ts = pd.Timestamp(d)
+            if d not in written or ts not in close.index:
+                continue
+            actual = float(close.loc[ts])
+            if actual <= 0 or abs(actual - written[d]) / actual <= 0.005:
+                continue
+            stale.append({"portfolio": pid, "date": d, "probe": probe,
+                          "written": written[d], "actual": actual})
+    return stale
+
+
+def repair_stale_rows(sb, portfolio_ids: list[str], target_date_str: str,
+                      lookback_days: int = 3) -> list[dict]:
+    """Rewrite the rows `find_stale_rows` flags.
+
+    Share counts, cash and the trade log are never touched: this corrects
+    prices that were stamped from the wrong session. The rewrite goes through
+    refresh_portfolio, so the book is reconstructed as of that date and the
+    usual jump guard still applies.
+    """
+    repaired = []
+    for s in find_stale_rows(sb, portfolio_ids, target_date_str, lookback_days):
+        print(f"  [{s['portfolio']}] {s['date']}: {s['probe']} written at {s['written']:.2f}, "
+              f"that session closed at {s['actual']:.2f} -> rewriting the day.", flush=True)
+        try:
+            r = refresh_portfolio(sb, s["portfolio"], s["date"])
+            repaired.append({**s, "rows": r["rows_written"]})
+        except Exception as e:
+            print(f"  [{s['portfolio']}] {s['date']}: repair refused ({e})", flush=True)
+    return repaired
+
+
 def backfill_recent_gaps(sb, portfolio_ids: list[str], target_date_str: str,
                          lookback_days: int = 7) -> list[dict]:
     """Self-heal: fill any missing (portfolio, date) rows in the last N days.
@@ -1027,6 +1112,16 @@ def main():
             print(f"[daily_refresh] backfilled {len(healed)} missing (portfolio, date) rows.", flush=True)
         else:
             print(f"[daily_refresh] no gaps found.", flush=True)
+
+        # Filling holes is not enough: a row written with the wrong session's
+        # closes exists, so nothing ever went back to look at it (21-22 Sept).
+        print(f"\n[daily_refresh] re-pricing the last 3 days against their own closes...", flush=True)
+        repaired = repair_stale_rows(sb, portfolio_ids, target, lookback_days=3)
+        if repaired:
+            print("[daily_refresh] repaired {} stale (portfolio, date) rows: {}".format(
+                len(repaired), ", ".join(f"{r['portfolio']}/{r['date']}" for r in repaired)), flush=True)
+        else:
+            print(f"[daily_refresh] no stale rows.", flush=True)
 
     results = []
     for pid in portfolio_ids:
