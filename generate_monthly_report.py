@@ -343,50 +343,91 @@ def compute_position_metrics(positions: list, prices: dict) -> tuple[list, float
     return positions, cash_pct
 
 
+def fetch_holdings_window(portfolio_id: str, start_date: str, end_date: str) -> list:
+    """Every daily_holdings row of one portfolio between two dates, paginated."""
+    rows, offset, PAGE = [], 0, 1000
+    while True:
+        chunk = (
+            sb.table("daily_holdings")
+            .select("date, ticker, shares, price, value")
+            .eq("portfolio_id", portfolio_id)
+            .gte("date", start_date).lte("date", end_date)
+            .order("date").order("ticker")
+            .range(offset, offset + PAGE - 1)
+            .execute().data
+        )
+        rows += chunk
+        if len(chunk) < PAGE:
+            return rows
+        offset += PAGE
+
+
 def compute_mtd_attribution(positions: list, portfolio_id: str, report_date: str) -> None:
     """Adds p['perf_mtd_pct'] and p['contribution_mtd'] (in pp of NAV start) to
-    each position in-place. MTD = month-to-date for the month of report_date.
+    each position in-place, read from the ledger and nothing else.
 
-    Approximation: uses the position's CURRENT share count for the whole month
-    (over- or under-states contribution for positions reinforced/trimmed mid-month).
-    For positions added during the month, uses entry_price as the basis.
+    Contribution = (value at month-end - value at month-start - money put in
+    during the month) / NAV at month-start. Every term comes from
+    daily_holdings, which carries shares AND price on one consistent basis for
+    every day, so the figure reconciles with the NAV series by construction.
+
+    The previous version multiplied the position's CURRENT share count by the
+    move from `entry_price`, which broke in two ways that both showed up when
+    the retroactive reports were first generated (2026-09-23):
+
+      * in a portfolio's inception month there is no month-start price, so the
+        basis fell back to `entry_price` while the share count came from the
+        as-of reconstruction — Le Nakamoto's May report credited Capital B with
+        -9.19pp when the ledger says the position cost 2.2pp;
+      * after a corporate action the two are on different bases entirely: a 1:10
+        split multiplies the share count and divides the price, so the product
+        is off by an order of magnitude.
+
+    A split is recognised here rather than assumed away: when the share count
+    changes but shares x price does not, no money moved, so it is not a flow.
     """
     rd = pd.Timestamp(report_date)
     month_start = (rd - pd.offsets.MonthEnd(1)).strftime("%Y-%m-%d")
+
     nav_start, _ = fetch_nav_and_cash_at(portfolio_id, month_start)
     if nav_start <= 0:
-        # Inception was after month_start: fall back to inception NAV (paper = initial capital)
-        nav_start = 1_000_000.0  # default; truthful for our paper portfolios
+        # Inception month: the portfolio starts at its initial capital.
+        nav_start = 1_000_000.0
 
-    tickers = tuple(p["ticker"] for p in positions)
-    prices_start = fetch_prices_as_of(tickers, month_start, portfolio_id)
-    prices_end   = fetch_prices_as_of(tickers, report_date, portfolio_id)
+    rows = fetch_holdings_window(portfolio_id, month_start, report_date)
+    by_ticker: dict[str, list] = {}
+    for r in rows:
+        if r["ticker"] == "CASH" or not r.get("price"):
+            continue
+        by_ticker.setdefault(r["ticker"], []).append(r)
 
     for p in positions:
-        t = p["ticker"]
-        shares = float(p.get("shares") or 0)
-        entry_date = pd.Timestamp(p["entry_date"])
-        end_price = prices_end.get(t)
-        if not end_price or shares <= 0:
-            p["perf_mtd_pct"]     = None
+        series = sorted(by_ticker.get(p["ticker"], []), key=lambda r: r["date"])
+        if len(series) < 2 or series[-1]["date"] != report_date:
+            p["perf_mtd_pct"] = None
             p["contribution_mtd"] = None
             continue
 
-        if entry_date.strftime("%Y-%m-%d") > month_start:
-            # Added during the month: basis = entry_price
-            basis_price = float(p["entry_price"])
-        else:
-            # Existed before month start: basis = price at month_start
-            basis_price = prices_start.get(t) or float(p["entry_price"])
+        flow = 0.0            # cash put into (or taken out of) the line this month
+        split_factor = 1.0    # cumulative share multiplier from corporate actions
+        for prev, cur in zip(series, series[1:]):
+            s0, s1 = float(prev["shares"] or 0), float(cur["shares"] or 0)
+            p0, p1 = float(prev["price"] or 0), float(cur["price"] or 0)
+            if s0 <= 0 or p0 <= 0 or abs(s1 - s0) < 1e-9:
+                continue
+            if abs((s1 / s0) * (p1 / p0) - 1.0) < 0.05:
+                split_factor *= s1 / s0          # shares up, price down: no money moved
+            else:
+                flow += (s1 - s0) * p1
 
-        if basis_price <= 0:
-            p["perf_mtd_pct"]     = None
-            p["contribution_mtd"] = None
-            continue
+        v_start, v_end = float(series[0]["value"]), float(series[-1]["value"])
+        p["contribution_mtd"] = round((v_end - v_start - flow) / nav_start * 100, 3)
 
-        pnl_dollar = shares * (end_price - basis_price)
-        p["perf_mtd_pct"]     = round((end_price / basis_price - 1) * 100, 2)
-        p["contribution_mtd"] = round(pnl_dollar / nav_start * 100, 3)
+        # A 1:10 split multiplies the share count and divides the price, so the
+        # month-start price has to be put on the post-split basis to compare.
+        p_start = float(series[0]["price"]) / split_factor
+        p_end = float(series[-1]["price"])
+        p["perf_mtd_pct"] = round((p_end / p_start - 1) * 100, 2) if p_start > 0 else None
 
 
 def aggregate_alloc(positions: list, key: str, cash_pct: float) -> list[tuple[str, float]]:

@@ -58,3 +58,79 @@ def test_empty_commentary_lists_still_draft(tmp_path, monkeypatch):
     (tmp_path / "nakamoto").mkdir()
     (tmp_path / "nakamoto" / "2026-06.toml").write_text('market_comment = []\nmgmt_comment = ["x"]\n', encoding="utf-8")
     assert gmr.load_comments("nakamoto", "2026-06-30")[2] is True
+
+
+# ── Monthly attribution must be read from the ledger ─────────────────────────
+# Before 2026-09-23 the contribution of a position was its CURRENT share count
+# times the move from `entry_price`. That broke whenever the two were on
+# different bases: Le Nakamoto's May report credited Capital B with -9.19pp of a
+# -9.52% month when the ledger says the line cost 2.24pp, because the month
+# began before the portfolio existed and a 1:10 split had since multiplied the
+# share count. The figure now comes from daily_holdings alone.
+def _rows(pid, recs):
+    return {"daily_holdings": [
+        {"portfolio_id": pid, "date": d, "ticker": t, "shares": s, "price": p, "value": s * p}
+        for d, t, s, p in recs]}
+
+
+def _setup(monkeypatch, sb, nav_start):
+    monkeypatch.setattr(gmr, "sb", sb)
+    monkeypatch.setattr(gmr, "fetch_nav_and_cash_at", lambda pid, d: (nav_start, 0.0))
+
+
+def test_contribution_is_value_change_net_of_money_put_in(fake_sb, monkeypatch):
+    """A line reinforced mid-month: the cash added is not performance."""
+    sb = fake_sb(_rows("p", [
+        ("2026-05-31", "AAA", 100.0, 10.0),     # 1,000 at month start
+        ("2026-06-15", "AAA", 200.0, 10.0),     # +100 shares bought at 10 -> +1,000 in
+        ("2026-06-30", "AAA", 200.0, 11.0),     # 2,200 at month end
+    ]))
+    _setup(monkeypatch, sb, 100_000.0)
+    positions = [{"ticker": "AAA", "entry_date": "2026-01-01", "entry_price": 5.0, "shares": 200.0}]
+
+    gmr.compute_mtd_attribution(positions, "p", "2026-06-30")
+
+    # 2,200 - 1,000 - 1,000 = 200 of P&L on a 100,000 NAV
+    assert positions[0]["contribution_mtd"] == pytest.approx(0.2)
+    assert positions[0]["perf_mtd_pct"] == pytest.approx(10.0)
+
+
+def test_a_split_is_not_a_purchase(fake_sb, monkeypatch):
+    """1:10 split: ten times the shares at a tenth of the price. No money moved,
+    no contribution, and the price return is still read correctly."""
+    sb = fake_sb(_rows("p", [
+        ("2026-08-31", "BBB", 100.0, 50.0),     # 5,000
+        ("2026-09-08", "BBB", 1000.0, 5.0),     # 5,000, split
+        ("2026-09-30", "BBB", 1000.0, 6.0),     # 6,000
+    ]))
+    _setup(monkeypatch, sb, 100_000.0)
+    positions = [{"ticker": "BBB", "entry_date": "2026-01-01", "entry_price": 40.0, "shares": 1000.0}]
+
+    gmr.compute_mtd_attribution(positions, "p", "2026-09-30")
+
+    assert positions[0]["contribution_mtd"] == pytest.approx(1.0)    # 1,000 / 100,000
+    assert positions[0]["perf_mtd_pct"] == pytest.approx(20.0)       # 50 -> 60 post-split
+
+
+def test_a_position_opened_during_the_month_is_not_credited_with_its_purchase(fake_sb, monkeypatch):
+    sb = fake_sb(_rows("p", [
+        ("2026-06-10", "CCC", 100.0, 20.0),     # bought, first appearance
+        ("2026-06-30", "CCC", 100.0, 22.0),
+    ]))
+    _setup(monkeypatch, sb, 100_000.0)
+    positions = [{"ticker": "CCC", "entry_date": "2026-06-10", "entry_price": 20.0, "shares": 100.0}]
+
+    gmr.compute_mtd_attribution(positions, "p", "2026-06-30")
+
+    assert positions[0]["contribution_mtd"] == pytest.approx(0.2)    # 200 of gain, not 2,200
+    assert positions[0]["perf_mtd_pct"] == pytest.approx(10.0)
+
+
+def test_a_position_closed_before_month_end_reports_nothing(fake_sb, monkeypatch):
+    sb = fake_sb(_rows("p", [("2026-05-31", "DDD", 100.0, 10.0), ("2026-06-05", "DDD", 100.0, 11.0)]))
+    _setup(monkeypatch, sb, 100_000.0)
+    positions = [{"ticker": "DDD", "entry_date": "2026-01-01", "entry_price": 5.0, "shares": 0.0}]
+
+    gmr.compute_mtd_attribution(positions, "p", "2026-06-30")
+
+    assert positions[0]["contribution_mtd"] is None
