@@ -5,6 +5,15 @@
 
 [[entry]]
 date   = "2026-09-23"
+scope  = "All portfolios"
+title  = "Ledger a full session behind on 21 and 22 September"
+what   = "The data provider published its daily closing bars several hours later than usual (intraday prices were available, the daily bar was not). The nightly job, which GitHub had drifted to just after midnight UTC, found no close for its target day and carried the previous session forward — the behaviour that is correct for a weekend, wrong for a trading day. The row dated 21 September carries the closes of 18 September, and the row dated 22 September carries those of 21 September. Figures shown on 22 and 23 September are correct for one session earlier, and understate the portfolios by roughly 3-4%."
+fix    = "The job now tells the two cases apart: a weekday whose close is not yet published leaves the day unwritten (a visible gap that the self-healing backfill closes on a later run) instead of stamping stale prices on a real session. The morning watchdog additionally re-prices the newest ledger row against that session's actual close and fails if they differ. Rebuilding the two affected rows is pending."
+impact = "No trade, share count or cash balance is affected; only the closing prices of two days. Corrected values will be restated here once written."
+status = "open"
+
+[[entry]]
+date   = "2026-09-23"
 scope  = "Le Visionnaire"
 title  = "Benchmark compared from the wrong start date — alpha overstated by 12.6 points"
 what   = "The benchmark was read as one column of the same price download as the twenty holdings and rebased on the first row that download returned. When the data provider answered that batch with a truncated column — nothing in the response says so — the Nasdaq 100 was rebased on 5 May instead of 10 April, the portfolio's own start date. The page then showed 'Nasdaq 100 +9.02%, Alpha +11.31%' where the correct figures at the same date were +21.60% and -1.27%. The same flaw applied to every page; the error was observed on Le Visionnaire, whose benchmark and alpha were the ones published wrong."

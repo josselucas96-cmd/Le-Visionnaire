@@ -567,6 +567,45 @@ def refresh_portfolio(sb, portfolio_id: str, target_date_str: str) -> dict:
     }
 
 
+def session_close_published(target_date_str: str, now_utc=None) -> tuple[bool, str | None]:
+    """Has the provider published the official close of `target_date_str` yet?
+
+    Returns (published, reference_close_date). SPY is the reference session.
+
+    This exists because "no close for that date" has two very different causes
+    and the cron used to treat them alike:
+
+      * the date is not a trading day (weekend, US holiday) -> the previous
+        close must be carried forward, which is what the 7/7 ledger wants;
+      * the date IS a trading day but the provider has not written its daily
+        bar yet -> carrying the previous close forward stamps a stale price on
+        a real session.
+
+    The second case is what happened on 2026-09-21 and 2026-09-22: Yahoo was
+    still publishing the daily bar more than four hours after the close (the
+    intraday bars were there, the daily bar was NaN), the cron ran just after
+    midnight UTC because GitHub had drifted the schedule, and both rows were
+    written with the previous session's closes. The ledger — and the public
+    site — ran a full session behind while looking current.
+
+    A weekday whose close is still missing less than ~36h after the fact is
+    read as "not published yet", not as a holiday: the row is left unwritten
+    and `backfill_recent_gaps` fills it on a later run. A hole is visible and
+    self-heals; a stale row is invisible and permanent.
+    """
+    from datetime import datetime, timezone, timedelta
+    now_utc = now_utc or datetime.now(timezone.utc)
+    _, ref_date = fetch_close_price("SPY", target_date_str)
+    if ref_date == target_date_str:
+        return True, ref_date
+    target = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    if target.weekday() >= 5:                       # weekend: nothing to wait for
+        return False, ref_date
+    if (now_utc.date() - target) > timedelta(days=1):
+        return False, ref_date                      # old enough to be a real holiday
+    return None, ref_date                           # trading day, data not in yet
+
+
 def backfill_recent_gaps(sb, portfolio_ids: list[str], target_date_str: str,
                          lookback_days: int = 7) -> list[dict]:
     """Self-heal: fill any missing (portfolio, date) rows in the last N days.
@@ -605,6 +644,9 @@ def backfill_recent_gaps(sb, portfolio_ids: list[str], target_date_str: str,
         present = {r["date"] for r in existing}
         missing = [d for d in candidates if d not in present]
         for d in missing:
+            if session_close_published(d)[0] is None:
+                print(f"  [{pid}] {d}: close not published yet, leaving the gap open.", flush=True)
+                continue
             try:
                 r = refresh_portfolio(sb, pid, d)
                 healed.append({"portfolio": pid, "date": d, "rows": r["rows_written"]})
@@ -953,9 +995,16 @@ def main():
               f"Likely yfinance is down or target is before 1993. Exiting.", flush=True)
         sys.exit(0)
     if probe_date != target:
+        published, _ = session_close_published(target, now_utc)
+        if published is None:
+            print(f"[daily_refresh] {target} is a trading day but its official close is not "
+                  f"published yet (latest available: {probe_date}). Writing nothing rather than "
+                  f"stamping {probe_date}'s prices on {target}; the gap self-heals on a later run.",
+                  flush=True)
+            sys.exit(0)
         from datetime import datetime
         weekday = datetime.strptime(target, "%Y-%m-%d").weekday()
-        label = "weekend" if weekday >= 5 else "US holiday or pre-market"
+        label = "weekend" if weekday >= 5 else "US holiday"
         print(f"[daily_refresh] {target} is not a trading day ({label}). "
               f"Will propagate the latest close from {probe_date} for all equity tickers.", flush=True)
 

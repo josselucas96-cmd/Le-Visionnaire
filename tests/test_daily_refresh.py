@@ -211,3 +211,48 @@ def test_apply_split_db_is_idempotent(fake_sb):
     assert dr.apply_split_db(sb, "nakamoto", "ALCPB.PA", 0.1, "2026-09-08") is True
     assert dr.apply_split_db(sb, "nakamoto", "ALCPB.PA", 0.1, "2026-09-08") is False   # second call: no-op
     assert next(p for p in sb.tables["positions"] if p["ticker"] == "ALCPB.PA")["shares"] == pytest.approx(13_068.28665)
+
+
+# ── A trading day whose close is not published yet must not be written ───────
+# Incident 2026-09-21/22: Yahoo was still publishing SPY's daily bar more than
+# four hours after the close (intraday bars present, daily bar NaN), GitHub had
+# drifted the cron past midnight UTC, and the job wrote both sessions with the
+# PREVIOUS session's closes. The ledger ran a full session behind while the site
+# announced itself current.
+from datetime import datetime, timezone
+
+import daily_refresh as dr
+
+
+def _probe(ref_date):
+    return lambda ticker, target, **k: (100.0, ref_date)
+
+
+def _at(iso):
+    return datetime.fromisoformat(iso).replace(tzinfo=timezone.utc)
+
+
+def test_close_published_on_a_normal_trading_day(monkeypatch):
+    monkeypatch.setattr(dr, "fetch_close_price", _probe("2026-09-22"))
+    assert dr.session_close_published("2026-09-22", _at("2026-09-23T00:11")) == (True, "2026-09-22")
+
+
+def test_weekend_carries_friday_forward(monkeypatch):
+    monkeypatch.setattr(dr, "fetch_close_price", _probe("2026-09-18"))
+    published, ref = dr.session_close_published("2026-09-19", _at("2026-09-20T00:11"))
+    assert published is False and ref == "2026-09-18"       # propagate, as designed
+
+
+def test_a_trading_day_still_missing_its_close_is_held_open(monkeypatch):
+    """The exact failure: 22 Sept, run at 00:11 UTC on the 23rd, only the 21st
+    available. Neither True (write it) nor False (propagate) — hold the gap."""
+    monkeypatch.setattr(dr, "fetch_close_price", _probe("2026-09-21"))
+    published, ref = dr.session_close_published("2026-09-22", _at("2026-09-23T00:11"))
+    assert published is None and ref == "2026-09-21"
+
+
+def test_an_old_weekday_without_a_close_is_a_holiday(monkeypatch):
+    """Thanksgiving: a weekday with no close, long past. Propagate, don't stall."""
+    monkeypatch.setattr(dr, "fetch_close_price", _probe("2026-11-25"))
+    published, _ = dr.session_close_published("2026-11-26", _at("2026-11-30T00:11"))
+    assert published is False

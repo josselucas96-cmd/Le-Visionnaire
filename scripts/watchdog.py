@@ -8,6 +8,7 @@ the watcher: the cron had been switched off by GitHub and the site kept saying
   1. any portfolio is missing yesterday's daily_holdings row
      (the cron writes 7/7, so by 06:40 UTC yesterday must be there);
   2. current_prices has not been refreshed in the last 36 hours;
+  2b. the newest ledger row carries another session's closes (2026-09-21/22);
   3. the daily-refresh workflow is not `active` (GitHub disables scheduled
      workflows after 60 idle days — exactly what happened on 2026-09-01);
   4. the public app URL does not serve the app (e.g. the subdomain 404s).
@@ -167,10 +168,63 @@ def check_app():
         problems.append(f"app URL {APP_URL} unreachable: {e}")
 
 
+def check_ledger_is_priced_on_its_own_day(sb):
+    """Every ledger row must carry the closes of ITS OWN session.
+
+    `check_holdings` only asks whether a row exists for yesterday. On
+    2026-09-21 and 22 the rows existed, dated correctly, and carried the
+    previous session's closes: the provider had not published the daily bar
+    when the cron ran, and the job propagated the last close it could find. The
+    site was a full session behind while announcing itself current, and nothing
+    said so. So: take the last row of each portfolio and check one liquid US
+    holding against that date's actual close.
+    """
+    import pandas as pd
+    import yfinance as yf
+
+    pids = [r["id"] for r in sb.table("portfolios").select("id").eq("is_active", True).execute().data]
+    for pid in pids:
+        last = (sb.table("daily_holdings").select("date").eq("portfolio_id", pid)
+                .order("date", desc=True).limit(1).execute().data)
+        if not last:
+            continue
+        d = last[0]["date"]
+        if datetime.strptime(d, "%Y-%m-%d").weekday() >= 5:
+            continue                      # weekend rows legitimately carry Friday
+        rows = (sb.table("daily_holdings").select("ticker,price,value")
+                .eq("portfolio_id", pid).eq("date", d).execute().data)
+        candidates = [r for r in rows
+                      if r["ticker"] != "CASH" and "." not in r["ticker"] and r.get("price")]
+        if not candidates:
+            continue
+        tk = max(candidates, key=lambda r: float(r["value"]))["ticker"]
+        try:
+            hist = yf.download(tk, start=d, end=(datetime.strptime(d, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"),
+                               progress=False, auto_adjust=False)
+            close = hist["Close"]
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            close = close.dropna()
+        except Exception as e:
+            notes.append(f"{pid}: could not verify {tk} close on {d} ({e})")
+            continue
+        if close.empty:
+            problems.append(f"{pid}: ledger has a row for {d} but {tk} has no published close for "
+                            f"that session — the row was written before the data existed")
+            continue
+        actual, written = float(close.iloc[-1]), float(next(r for r in rows if r["ticker"] == tk)["price"])
+        if abs(actual - written) / actual > 0.005:
+            problems.append(f"{pid}: {d} row prices {tk} at {written:.2f}, that session closed at "
+                            f"{actual:.2f} — the row carries another day's closes")
+        else:
+            notes.append(f"{pid}: {d} priced on its own session ({tk} {written:.2f})")
+
+
 def main() -> int:
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
     check_holdings(sb)
     check_prices(sb)
+    check_ledger_is_priced_on_its_own_day(sb)
     check_workflow()
     check_app()
     check_drawdowns(sb)
