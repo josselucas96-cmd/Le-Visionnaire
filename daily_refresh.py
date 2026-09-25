@@ -1079,19 +1079,27 @@ def main():
         print(f"[daily_refresh] yfinance has no SPY close at all near {target}. "
               f"Likely yfinance is down or target is before 1993. Exiting.", flush=True)
         sys.exit(0)
+    # Whether today's target row gets written. A trading day whose close is not
+    # published yet is skipped, but ONLY that day: the backfill and repair
+    # below still run for the previous days. Until 2026-09-25 this case called
+    # sys.exit(0) before the backfill; Yahoo publishes after the cron's usual
+    # start time, so every night stopped early and no row was written after
+    # 22 September while each run reported success.
+    write_target = True
     if probe_date != target:
         published, _ = session_close_published(target, now_utc)
         if published is None:
+            write_target = False
             print(f"[daily_refresh] {target} is a trading day but its official close is not "
-                  f"published yet (latest available: {probe_date}). Writing nothing rather than "
-                  f"stamping {probe_date}'s prices on {target}; the gap self-heals on a later run.",
-                  flush=True)
-            sys.exit(0)
-        from datetime import datetime
-        weekday = datetime.strptime(target, "%Y-%m-%d").weekday()
-        label = "weekend" if weekday >= 5 else "US holiday"
-        print(f"[daily_refresh] {target} is not a trading day ({label}). "
-              f"Will propagate the latest close from {probe_date} for all equity tickers.", flush=True)
+                  f"published yet (latest available: {probe_date}). Not writing {target} rather "
+                  f"than stamping {probe_date}'s prices on it; earlier days are still filled and "
+                  f"checked below, and {target} is filled on a later run.", flush=True)
+        else:
+            from datetime import datetime
+            weekday = datetime.strptime(target, "%Y-%m-%d").weekday()
+            label = "weekend" if weekday >= 5 else "US holiday"
+            print(f"[daily_refresh] {target} is not a trading day ({label}). "
+                  f"Will propagate the latest close from {probe_date} for all equity tickers.", flush=True)
 
     if args.dry_run:
         print("[daily_refresh] DRY RUN — no DB writes will happen.", flush=True)
@@ -1124,7 +1132,9 @@ def main():
             print(f"[daily_refresh] no stale rows.", flush=True)
 
     results = []
-    for pid in portfolio_ids:
+    if not write_target:
+        print(f"\n[daily_refresh] {target} left unwritten (close not published yet).", flush=True)
+    for pid in (portfolio_ids if write_target else []):
         print(f"\n[{pid}] refreshing {target}...", flush=True)
         try:
             r = refresh_portfolio(sb, pid, target)

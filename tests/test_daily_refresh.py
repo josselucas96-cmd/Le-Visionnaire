@@ -2,6 +2,8 @@
 yfinance and the DB are replaced by fakes."""
 from datetime import datetime, timezone
 
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -315,3 +317,40 @@ def test_weekend_rows_are_never_flagged(monkeypatch, fake_sb):
     monkeypatch.setattr(dr.yf, "download", lambda *a, **k: _yahoo({"2026-09-19": 999.0}))
 
     assert dr.find_stale_rows(sb, ["visionnaire"], "2026-09-20", lookback_days=1) == []
+
+
+# ── An unpublished close must not stop the whole run ─────────────────────────
+# 23-25 Sept 2026: the evening run starts around 00:20 UTC, Yahoo had not
+# published the day's close yet, and main() called sys.exit(0) BEFORE the
+# backfill. Every night stopped early, reported success, and no row was
+# written after 22 September.
+def _run_main(monkeypatch, published):
+    calls = {"backfill": 0, "repair": 0, "written": []}
+    monkeypatch.setattr(sys, "argv", ["daily_refresh.py", "--date", "2026-09-24"])
+    monkeypatch.setenv("SUPABASE_URL", "http://x"); monkeypatch.setenv("SUPABASE_KEY", "k")
+    monkeypatch.setattr(dr, "create_client", lambda *a: object())
+    monkeypatch.setattr(dr, "fetch_close_price", lambda t, d, **k: (100.0, "2026-09-23"))
+    monkeypatch.setattr(dr, "session_close_published", lambda d, *a: (published, "2026-09-23"))
+    monkeypatch.setattr(dr, "get_all_portfolio_ids", lambda sb: ["visionnaire"])
+    monkeypatch.setattr(dr, "backfill_recent_gaps", lambda *a, **k: calls.__setitem__("backfill", calls["backfill"] + 1) or [])
+    monkeypatch.setattr(dr, "repair_stale_rows", lambda *a, **k: calls.__setitem__("repair", calls["repair"] + 1) or [])
+    monkeypatch.setattr(dr, "refresh_portfolio", lambda sb, pid, d: calls["written"].append((pid, d)) or
+                        {"portfolio": pid, "rows_written": 1, "nav": 1.0, "cash": 0.0, "skipped_tickers": []})
+    for name in ("refresh_current_prices", "refresh_dividend_factors", "refresh_fundamentals"):
+        monkeypatch.setattr(dr, name, lambda *a, **k: {"ok": 0, "failed": []})
+    try:
+        dr.main()
+    except SystemExit as e:
+        assert not e.code, f"main exited with {e.code}"
+    return calls
+
+
+def test_an_unpublished_close_still_fills_the_previous_days(monkeypatch):
+    calls = _run_main(monkeypatch, published=None)
+    assert calls["backfill"] == 1 and calls["repair"] == 1     # earlier days handled
+    assert calls["written"] == []                               # the target itself is not
+
+
+def test_a_holiday_is_still_written_with_the_previous_close(monkeypatch):
+    calls = _run_main(monkeypatch, published=False)
+    assert calls["written"] == [("visionnaire", "2026-09-24")]

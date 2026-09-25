@@ -13,6 +13,11 @@ on:
     # stays aligned with the BTC line on the chart.
     # Minute 07 is off-peak to avoid GitHub Actions queue delays.
     - cron: '7 22 * * *'
+    # Second pass the next morning. GitHub starts the evening run around
+    # 00:20 UTC and Yahoo has often not published the day's closes by then;
+    # that day is left unwritten and this run writes it once the closes are
+    # out. Idempotent: rows already written are not rewritten.
+    - cron: '30 9 * * *'
 
   # Allow manual trigger from the GitHub UI (Actions tab → Run workflow).
   # Useful to test or to manually catch up after a failed run.
@@ -82,7 +87,7 @@ jobs:
       # 2026-07-02). An empty commit on the 1st of each month resets that
       # clock. `if: always()` so a failing refresh step can't starve it.
       - name: Monthly keepalive commit (resets GitHub's 60-day inactivity timer)
-        if: always() && github.event_name == 'schedule'
+        if: always() && github.event_name == 'schedule' && github.event.schedule == '7 22 * * *'
         run: |
           if [ "$(date -u +%d)" = "01" ]; then
             git config user.name  "specula-bot"
