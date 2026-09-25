@@ -1,5 +1,9 @@
 # Public corrections & mistake log — rendered on /Methodology.
-# One [[entry]]
+# One [[entry]] per correction, newest first. Never delete an entry.
+# Fields: date, scope, title, what (what was wrong), fix (what was done),
+#         impact (what changed in published figures), status.
+
+[[entry]]
 date   = "2026-09-25"
 scope  = "All portfolios"
 title  = "No ledger rows written on 23 and 24 September"
@@ -7,10 +11,6 @@ what   = "The safeguard added on 23 September, which refuses to write a trading 
 fix    = "An unpublished day is now skipped on its own and earlier days are still filled and checked. A second daily pass at 09:30 UTC writes the previous day once its closes are out. The rows for 23 and 24 September were written on 25 September from their own closing prices. Covered by regression tests."
 impact = "No figure was wrong; the site was two days behind. Moves executed on 23 September appear from that date as intended."
 status = "closed"
-
-[[entry]] per correction, newest first. Never delete an entry.
-# Fields: date, scope, title, what (what was wrong), fix (what was done),
-#         impact (what changed in published figures), status.
 
 [[entry]]
 date   = "2026-09-23"
